@@ -1,53 +1,47 @@
+version: '3.8'
+
 services:
   db:
     image: postgres:15-alpine
-    container_name: db_container
-    restart: always
-    env_file:
-      - .env
-    ports:
-      - "5432:5432"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-crumb_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
-    build: ./api
-    container_name: api_container
-    restart: always
-    ports:
-      - "5000:5000"
-    env_file:
-      - .env
+    image: ghcr.io/skords83/crumb-app/api:latest
+    restart: unless-stopped
     environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-crumb_db}
       TZ: Europe/Berlin
+      NTFY_URL: ${NTFY_URL}
+      NTFY_TOPIC: ${NTFY_TOPIC}
+      NTFY_TOKEN: ${NTFY_TOKEN}
+      NTFY_VORLAUF: ${NTFY_VORLAUF:-5}
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      # NUR das hier bleibt für die Bilder:
-      - ./api/uploads:/usr/src/app/uploads:z
+      - api_uploads:/usr/src/app/uploads
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   ui:
-    build: ./ui
-    container_name: ui_container
-    user: "root"
-    restart: always
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./ui:/usr/src/app:z
-      - /usr/src/app/node_modules
-      - /usr/src/app/.next
-      - /etc/localtime:/etc/localtime:ro
-      - ./public:/usr/src/app/public:z
-    env_file:
-      - .env
+    image: ghcr.io/skords83/crumb-app/ui:latest
+    restart: unless-stopped
     environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       TZ: Europe/Berlin
-    command: npm run dev
     depends_on:
       - api
 
 volumes:
   postgres_data:
+  api_uploads:
