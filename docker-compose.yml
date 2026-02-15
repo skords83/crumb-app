@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: db_container
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+
+  api:
+    build: ./api
+    container_name: api_container
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      TZ: Europe/Berlin
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      # NUR das hier bleibt für die Bilder:
+      - ./api/uploads:/usr/src/app/uploads:z
+    depends_on:
+      - db
+
+  ui:
+    build: ./ui
+    container_name: ui_container
+    user: "root"
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./ui:/usr/src/app:z
+      - /usr/src/app/node_modules
+      - /usr/src/app/.next
+      - /etc/localtime:/etc/localtime:ro
+      - ./public:/usr/src/app/public:z
+    env_file:
+      - .env
+    environment:
+      TZ: Europe/Berlin
+    command: npm run dev
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
