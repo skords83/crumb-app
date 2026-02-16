@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from 'react';
+import { getApiUrl } from "@/lib/api-config";
 import { 
   Save, 
   Trash2, 
@@ -150,7 +151,7 @@ export default function RecipeForm({
           formData.append('file', file);
 
           try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
+            const response = await fetch(`${getApiUrl()}/upload`, {
               method: 'POST',
               body: formData,
             });

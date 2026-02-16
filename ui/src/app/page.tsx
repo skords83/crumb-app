@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { getApiUrl } from "@/lib/api-config";
 import Link from 'next/link';
 import { Plus, BookOpen, Search } from 'lucide-react';
 import PlanModal from "@/components/PlanModal";
@@ -31,7 +32,7 @@ export default function HomePage() {
 
   // 2. Daten vom Server laden
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes`)
+    fetch(`${getApiUrl()}/api/recipes`)
       .then(res => res.json())
       .then(data => {
         const sortedData = Array.isArray(data) ? data : [];
@@ -48,7 +49,7 @@ export default function HomePage() {
   // 3. Favorit umschalten (PATCH an API und lokaler State)
   const toggleFavorite = async (id: number, status: boolean) => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${id}`, {
+      const res = await fetch(`${getApiUrl()}/api/recipes/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_favorite: status })
@@ -172,7 +173,7 @@ export default function HomePage() {
         onConfirm={async (plannedAt) => {
           if (!selectedRecipe) return;
           try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${selectedRecipe.id}`, {
+            const res = await fetch(`${getApiUrl()}/api/recipes/${selectedRecipe.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planned_at: plannedAt }),

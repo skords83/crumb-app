@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, use } from 'react';
+import { getApiUrl } from "@/lib/api-config";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Icons from 'lucide-react';
@@ -21,7 +22,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   // 1. Daten laden
   useEffect(() => {
     if (!id) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${id}`)
+    fetch(`${getApiUrl()}/api/recipes/${id}`)
       .then(res => res.json())
       .then(data => {
         setRecipe(data);
@@ -68,7 +69,7 @@ const stats = useMemo(() => {
   const handleDelete = async () => {
     if (!window.confirm("Möchtest du dieses Rezept wirklich unwiderruflich löschen?")) return;
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${id}`, {
+      const res = await fetch(`${getApiUrl()}/api/recipes/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -256,7 +257,7 @@ const stats = useMemo(() => {
         recipe={recipe}
         onConfirm={async (plannedAt, multiplier, timeline) => {
           try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${id}`, {
+            const res = await fetch(`${getApiUrl()}/api/recipes/${id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planned_at: plannedAt }),

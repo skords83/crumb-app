@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { getApiUrl } from "@/lib/api-config";
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Link as LinkIcon, Edit3 } from 'lucide-react';
 import Link from 'next/link';
@@ -36,7 +37,7 @@ export default function NewRecipePage() {
     if (!importUrl) return;
     setIsImporting(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/import`, {
+      const res = await fetch(`${getApiUrl()}/api/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: importUrl }),
@@ -77,7 +78,7 @@ export default function NewRecipePage() {
 
     setIsSaving(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes`, {
+      const res = await fetch(`${getApiUrl()}/api/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
