@@ -36,6 +36,8 @@ services:
   ui:
     image: ghcr.io/skords83/crumb-app/ui:latest
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       TZ: Europe/Berlin
