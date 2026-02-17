@@ -1,10 +1,15 @@
-// context/ThemeProvider.tsx
 'use client';
 
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <NextThemesProvider
       attribute="class"
@@ -14,7 +19,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       storageKey="theme"
       themes={['light', 'dark']}
     >
-      {children}
+      {mounted ? children : <div style={{ visibility: 'hidden' }}>{children}</div>}
     </NextThemesProvider>
   );
 }
