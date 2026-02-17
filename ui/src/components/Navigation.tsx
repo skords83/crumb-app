@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getApiUrl } from "@/lib/api-config";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -12,16 +12,36 @@ export default function Navigation() {
   const pathname = usePathname();
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
-  // Direkte CSS-Klassen-Manipulation
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const toggleTheme = () => {
-    const currentTheme = resolvedTheme || theme;
+    const currentTheme = resolvedTheme || theme || 'light';
     const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
     setTheme(nextTheme);
   };
-  // Theme is managed by next-themes; avoid imperative DOM changes here
 
-  // Backplan-Status wird bei Bedarf per Effekt aktualisiert (aktuell unverändert)
+  useEffect(() => {
+    const checkActivePlans = async () => {
+      try {
+        const res = await fetch(`${getApiUrl()}/api/recipes`);
+        const data = await res.json();
+        const active = data.some((r: any) => r.planned_at !== null);
+        setHasActivePlan(active);
+      } catch (err) {
+        console.error("Nav-Check Fehler:", err);
+      }
+    };
+
+    checkActivePlans();
+    const interval = setInterval(checkActivePlans, 30000);
+    return () => clearInterval(interval);
+  }, [pathname]);
+
+  const currentTheme = mounted ? (resolvedTheme || theme) : 'light';
 
   // Basis-Items
   const navItems = [
@@ -69,7 +89,7 @@ export default function Navigation() {
               className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
               aria-label="Dark Mode umschalten"
             >
-              {(resolvedTheme || theme) === 'dark' ? (
+              {currentTheme === 'dark' ? (
                 <Sun size={20} className="text-white" />
               ) : (
                 <Moon size={20} className="text-white" />
