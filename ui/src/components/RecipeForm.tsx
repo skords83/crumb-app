@@ -111,10 +111,10 @@ export default function RecipeForm({
 
   return (
     <form id="main-recipe-form" onSubmit={onSubmit} className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="bg-white rounded-[2.5rem] border border-gray-200 shadow-sm overflow-hidden text-[#2d2d2d]">
+      <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden text-[#2d2d2d] dark:text-gray-100 transition-colors duration-200">
         
         {/* HEADER: BILD & TITEL */}
-        <div className="bg-gray-50/50 p-8 border-b border-gray-100 flex flex-col md:flex-row gap-8 items-start">
+        <div className="bg-gray-50/50 dark:bg-gray-700/50 p-8 border-b border-gray-100 dark:border-gray-600 flex flex-col md:flex-row gap-8 items-start">
          <div className="group relative w-full md:w-32 h-32 bg-white rounded-3xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0 shadow-inner hover:border-[#8B7355] transition-all">
   {isUploading ? (
     <div className="flex flex-col items-center gap-2">

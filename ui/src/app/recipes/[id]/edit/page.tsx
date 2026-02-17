@@ -107,11 +107,11 @@ export default function EditRecipePage() {
   );
 
 return (
-    <div className="min-h-screen bg-[#f8f9fa] p-4 md:p-8 pb-32"> {/* pb-32 für Platz am Ende */}
+    <div className="min-h-screen bg-[#f8f9fa] dark:bg-gray-900 p-4 md:p-8 pb-32 transition-colors duration-200"> {/* pb-32 für Platz am Ende */}
       <div className="max-w-5xl mx-auto">
         
         {/* Schlichter Zurück-Link ohne Sticky-Balken */}
-        <Link href={`/recipes/${recipeId}`} className="inline-flex items-center gap-2 text-gray-400 hover:text-[#8B4513] mb-8 text-sm font-medium transition-colors group">
+        <Link href={`/recipes/${recipeId}`} className="inline-flex items-center gap-2 text-gray-400 dark:text-gray-500 hover:text-[#8B4513] dark:hover:text-[#A08060] mb-8 text-sm font-medium transition-colors group">
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" /> 
           Abbrechen & Zurück
         </Link>

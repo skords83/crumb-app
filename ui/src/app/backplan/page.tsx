@@ -205,7 +205,7 @@ export default function BackplanPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-32">
+    <div className="min-h-screen bg-[#FDFCFB] dark:bg-gray-900 pb-32 transition-colors duration-200">
 
       {plannedRecipes.map((recipe) => {
         const timeline = calculateStepTimeline(recipe.planned_at, recipe.dough_sections);

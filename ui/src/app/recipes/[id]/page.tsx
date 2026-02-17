@@ -111,8 +111,8 @@ const stats = useMemo(() => {
   if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] py-8 px-4 text-[#2D2D2D]">
-      <div className="max-w-4xl mx-auto bg-white rounded-[2rem] shadow-xl overflow-hidden border border-gray-100">
+    <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
+      <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
         
         {/* HEADER ACTIONS */}
         <div className="flex justify-between items-center p-6 pb-2">
