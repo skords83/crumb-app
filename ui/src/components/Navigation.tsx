@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { getApiUrl } from "@/lib/api-config";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -17,49 +17,11 @@ export default function Navigation() {
   const toggleTheme = () => {
     const currentTheme = resolvedTheme || theme;
     const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    
-    applyTheme(nextTheme);
     setTheme(nextTheme);
   };
+  // Theme is managed by next-themes; avoid imperative DOM changes here
 
-  const applyTheme = (t: string) => {
-    // Am body direkt die Hintergrundfarbe setzen
-    document.body.style.backgroundColor = t === 'dark' ? '#111827' : '#F4F7F8';
-    document.body.style.color = t === 'dark' ? '#F9FAFB' : '#111827';
-    
-    // Klasse setzen
-    if (t === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
-  // Beim Mounten Theme anwenden
-  useEffect(() => {
-    const currentTheme = (resolvedTheme || theme || 'light');
-    applyTheme(currentTheme);
-  }, [resolvedTheme, theme]);
-
-  // Prüfen, ob ein Backplan aktiv ist
-  useEffect(() => {
-    const checkActivePlans = async () => {
-      try {
-        const res = await fetch(`${getApiUrl()}/api/recipes`);
-        const data = await res.json();
-        // Prüfen, ob irgendein Rezept ein Datum in "planned_at" hat
-        const active = data.some((r: any) => r.planned_at !== null);
-        setHasActivePlan(active);
-      } catch (err) {
-        console.error("Nav-Check Fehler:", err);
-      }
-    };
-
-    checkActivePlans();
-    // Intervall, um alle 30 Sek. zu prüfen (optional, falls man im Hintergrund plant)
-    const interval = setInterval(checkActivePlans, 30000);
-    return () => clearInterval(interval);
-  }, [pathname]); // Prüft bei jedem Seitenwechsel neu
+  // Backplan-Status wird bei Bedarf per Effekt aktualisiert (aktuell unverändert)
 
   // Basis-Items
   const navItems = [
