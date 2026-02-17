@@ -6,12 +6,40 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutGrid, FileDown, Clock, Sun, Moon } from 'lucide-react';
 import Image from 'next/image';
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "next-themes";
 
 export default function Navigation() {
   const pathname = usePathname();
   const [hasActivePlan, setHasActivePlan] = useState(false);
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+
+  // Direkte CSS-Klassen-Manipulation
+  const toggleTheme = () => {
+    const currentTheme = resolvedTheme || theme;
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    applyTheme(nextTheme);
+    setTheme(nextTheme);
+  };
+
+  const applyTheme = (t: string) => {
+    // Am body direkt die Hintergrundfarbe setzen
+    document.body.style.backgroundColor = t === 'dark' ? '#111827' : '#F4F7F8';
+    document.body.style.color = t === 'dark' ? '#F9FAFB' : '#111827';
+    
+    // Klasse setzen
+    if (t === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
+  // Beim Mounten Theme anwenden
+  useEffect(() => {
+    const currentTheme = (resolvedTheme || theme || 'light');
+    applyTheme(currentTheme);
+  }, [resolvedTheme, theme]);
 
   // Prüfen, ob ein Backplan aktiv ist
   useEffect(() => {
@@ -79,7 +107,7 @@ export default function Navigation() {
               className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
               aria-label="Dark Mode umschalten"
             >
-              {theme === 'dark' ? (
+              {(resolvedTheme || theme) === 'dark' ? (
                 <Sun size={20} className="text-white" />
               ) : (
                 <Moon size={20} className="text-white" />

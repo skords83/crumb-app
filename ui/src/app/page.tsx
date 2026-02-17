@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { getApiUrl } from "@/lib/api-config";
+import { useTheme } from "next-themes";
 import Link from 'next/link';
 import { Plus, BookOpen, Search } from 'lucide-react';
 import PlanModal from "@/components/PlanModal";
