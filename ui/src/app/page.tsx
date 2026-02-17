@@ -104,7 +104,7 @@ export default function HomePage() {
   }, [searchQuery, activeFilter, recipes]);
 
   return (
-    <div className="min-h-screen bg-[#F4F7F8] px-6 text-gray-900">
+    <div className="min-h-screen bg-[#F4F7F8] dark:bg-gray-900 px-6 text-gray-900 dark:text-gray-100 transition-colors duration-200">
       <div className="max-w-6xl mx-auto pt-8 pb-20">
         
         {/* Header-Bereich: Suche & Filter */}
@@ -116,7 +116,7 @@ export default function HomePage() {
               placeholder="Brot, Mehl oder Zutat suchen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border-2 border-gray-100 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 transition-all"
+              className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 transition-all dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
 
@@ -128,7 +128,7 @@ export default function HomePage() {
                 className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm border-2 transition-all whitespace-nowrap ${
                   activeFilter === filter 
                     ? 'bg-[#8B7355] text-white border-[#8B7355] shadow-md scale-105' 
-                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200 shadow-sm hover:shadow-md'
+                    : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm hover:shadow-md'
                 }`}
               >
                 {filter}
@@ -141,10 +141,10 @@ export default function HomePage() {
         {isLoading ? (
           <div className="py-40 text-center uppercase tracking-widest text-gray-400 animate-pulse font-bold">Ofen wird vorgeheizt...</div>
         ) : filteredRecipes.length === 0 ? (
-          <div className="bg-white rounded-[3rem] p-20 text-center border border-gray-100 shadow-sm">
-            <BookOpen className="text-gray-200 mx-auto mb-6" size={48} />
-            <h2 className="text-2xl font-bold text-gray-800">Kein passendes Brot gefunden</h2>
-            <p className="text-gray-400 mt-2">Versuch es mit einem anderen Filter oder Suchbegriff.</p>
+          <div className="bg-white dark:bg-gray-800 rounded-[3rem] p-20 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
+            <BookOpen className="text-gray-200 dark:text-gray-600 mx-auto mb-6" size={48} />
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Kein passendes Brot gefunden</h2>
+            <p className="text-gray-400 dark:text-gray-500 mt-2">Versuch es mit einem anderen Filter oder Suchbegriff.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

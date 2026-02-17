@@ -95,7 +95,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
   return (
     <Link 
       href={`/recipes/${recipe.id}`}
-      className="bg-white rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 group active:scale-[0.98]"
+      className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 group active:scale-[0.98]"
     >
       {/* Favorit Button */}
       <button 
@@ -104,7 +104,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           e.stopPropagation();
           onToggleFavorite(recipe.id, !recipe.is_favorite);
         }}
-        className="absolute top-4 right-4 z-20 p-2 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 transition-transform hover:scale-110"
+        className="absolute top-4 right-4 z-20 p-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-transform hover:scale-110"
       >
         <Heart 
           size={18} 
@@ -135,12 +135,12 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
 
       {/* Inhalt */}
       <div className="px-6 pb-6 pt-2 flex-1 flex flex-col">
-        <h3 className="text-xl font-bold mb-0 mt-4 text-gray-800 tracking-tight line-clamp-2 min-h-[3.5rem]">
+        <h3 className="text-xl font-bold mb-0 mt-4 text-gray-800 dark:text-gray-100 tracking-tight line-clamp-2 min-h-[3.5rem]">
           {recipe.title}
         </h3>
         
-        <div className="bg-[#F9F9F9] rounded-2xl p-3 mb-6">
-          <div className="flex flex-col gap-3 text-sm text-gray-500">
+        <div className="bg-[#F9F9F9] dark:bg-gray-700/50 rounded-2xl p-3 mb-6">
+          <div className="flex flex-col gap-3 text-sm text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-3">
               <Clock size={16} className="text-[#8B7355]" /> {stats.timeString}
             </div>

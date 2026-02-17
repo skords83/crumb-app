@@ -1,38 +1,35 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google"; // Wir nutzen jetzt nur Outfit
+import { Outfit } from "next/font/google";
 import "./globals.css";
-import Navigation from "../components/Navigation"; 
+import Navigation from "../components/Navigation";
+import { ThemeProvider } from "../context/ThemeContext";
 
-// 1. Schrift konfigurieren
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
 });
 
-// 2. Metadaten festlegen
 export const metadata: Metadata = {
   title: "Crumb - Deine Brot Bibliothek",
   description: "Brotbacken mit System",
 };
 
-// 3. Das EINE RootLayout
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" suppressHydrationWarning> 
+    <html lang="de" suppressHydrationWarning>
       <body
-        className={`${outfit.variable} font-sans antialiased bg-[#fcfcfc]`}
+        className={`${outfit.variable} font-sans antialiased bg-[#fcfcfc] dark:bg-gray-900 transition-colors duration-200`}
       >
-        {/* Die Navigation wird hier einmalig geladen */}
-        <Navigation />
-
-        {/* Content-Bereich mit Abständen für den fixierten Header */}
-        <main className="md:pt-32 pb-24 md:pb-8">
-          {children}
-        </main>
+        <ThemeProvider>
+          <Navigation />
+          <main className="md:pt-32 pb-24 md:pb-8">
+            {children}
+          </main>
+        </ThemeProvider>
       </body>
     </html>
   );

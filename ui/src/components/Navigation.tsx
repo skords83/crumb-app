@@ -4,12 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { getApiUrl } from "@/lib/api-config";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon } from 'lucide-react';
 import Image from 'next/image';
+import { useTheme } from "../context/ThemeContext";
 
 export default function Navigation() {
   const pathname = usePathname();
   const [hasActivePlan, setHasActivePlan] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   // Prüfen, ob ein Backplan aktiv ist
   useEffect(() => {
@@ -68,18 +70,33 @@ export default function Navigation() {
   </p>
 </div>
 
-        </div>
+         </div>
           
-          {/* Kleiner Indikator im Brand-Bereich, wenn ein Plan läuft */}
-          {hasActivePlan && (
-            <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/20">
-              <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-              Backvorgang läuft
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+              aria-label="Dark Mode umschalten"
+            >
+              {theme === 'dark' ? (
+                <Sun size={20} className="text-white" />
+              ) : (
+                <Moon size={20} className="text-white" />
+              )}
+            </button>
+
+            {/* Kleiner Indikator im Brand-Bereich, wenn ein Plan läuft */}
+            {hasActivePlan && (
+              <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/20">
+                <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                Backvorgang läuft
+              </div>
+            )}
+          </div>
         </div>
 
-        <nav className="bg-white border-b border-gray-200 px-8 flex">
+        <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 flex">
   {allNavItems.map((item) => {
     const isActive = pathname === item.href;
     const isSpecial = item.href === '/backplan';
@@ -91,7 +108,7 @@ export default function Navigation() {
         className={`flex items-center gap-3 px-6 py-4 text-sm font-medium transition-all relative group ${
           isActive 
           ? 'text-[#8B7355]' 
-          : isSpecial ? 'text-orange-600 hover:text-orange-700 font-bold' : 'text-gray-500 hover:text-gray-800'
+          : isSpecial ? 'text-orange-600 hover:text-orange-700 font-bold' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
         }`}
       >
         <div className="relative">
@@ -122,7 +139,7 @@ export default function Navigation() {
       </header>
 
       {/* MOBILE TAB BAR */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 z-50 flex items-center justify-around pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 z-50 flex items-center justify-around pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
         {allNavItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -130,7 +147,7 @@ export default function Navigation() {
               key={item.href} 
               href={item.href}
               className={`flex flex-col items-center gap-1 transition-colors ${
-                isActive ? 'text-[#8B7355]' : (item.href === '/backplan' ? 'text-orange-500' : 'text-gray-400')
+                isActive ? 'text-[#8B7355]' : (item.href === '/backplan' ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500')
               }`}
             >
               <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
