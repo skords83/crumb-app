@@ -19,21 +19,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-   <html lang="de" suppressHydrationWarning>
+   <html lang="de">
   <head>
     <script
       dangerouslySetInnerHTML={{
         __html: `
-          try {
-            if (localStorage.getItem('theme') === 'dark') {
-              document.documentElement.classList.add('dark')
-            }
-          } catch (e) {}
+          (function() {
+            try {
+              var t = localStorage.getItem('theme');
+              if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark')
+              }
+            } catch (e) {}
+          })();
         `,
       }}
     />
   </head>
-  <body className={`${outfit.variable} font-sans antialiased transition-colors duration-200`}>
+  <body className={`${outfit.variable} font-sans antialiased transition-colors duration-200`} suppressHydrationWarning={true}>
         <Navigation />
         <main className="md:pt-32 pb-24 md:pb-8">
           {children}

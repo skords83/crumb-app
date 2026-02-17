@@ -83,7 +83,7 @@ export default function Navigation() {
               className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
               aria-label="Dark Mode umschalten"
             >
-              {darkMode ? (
+              {mounted && darkMode ? (
                 <Sun size={20} className="text-white" />
               ) : (
                 <Moon size={20} className="text-white" />
