@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
 import Navigation from "../components/Navigation";
-import { ThemeProvider } from "../context/ThemeProvider";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -20,16 +19,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" suppressHydrationWarning>
-      <body
-        className={`${outfit.variable} font-sans antialiased bg-[#fcfcfc] dark:bg-gray-900 transition-colors duration-200`}
-      >
-        <ThemeProvider>
-          <Navigation />
-          <main className="md:pt-32 pb-24 md:pb-8">
-            {children}
-          </main>
-        </ThemeProvider>
+   <html lang="de" suppressHydrationWarning>
+  <head>
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `
+          try {
+            if (localStorage.getItem('theme') === 'dark') {
+              document.documentElement.classList.add('dark')
+            }
+          } catch (e) {}
+        `,
+      }}
+    />
+  </head>
+  <body className={`${outfit.variable} font-sans antialiased transition-colors duration-200`}>
+        <Navigation />
+        <main className="md:pt-32 pb-24 md:pb-8">
+          {children}
+        </main>
       </body>
     </html>
   );

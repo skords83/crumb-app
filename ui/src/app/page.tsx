@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getApiUrl } from "@/lib/api-config";
-import { useTheme } from "next-themes";
 import Link from 'next/link';
 import { Plus, BookOpen, Search } from 'lucide-react';
 import PlanModal from "@/components/PlanModal";
@@ -17,7 +15,6 @@ export default function HomePage() {
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
 
-  // 1. Hilfsfunktion zur Zeitberechnung für den "Heute fertig" Filter
   const getRecipeDuration = (recipe: any) => {
     let totalMinutes = 0;
     if (recipe.dough_sections) {
@@ -31,15 +28,14 @@ export default function HomePage() {
     return totalMinutes;
   };
 
-  // 2. Daten vom Server laden
   useEffect(() => {
-    fetch(`${getApiUrl()}/api/recipes`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes`)
       .then(res => res.json())
       .then(data => {
         const sortedData = Array.isArray(data) ? data : [];
         setRecipes(sortedData);
         setFilteredRecipes(sortedData);
-        setIsLoading(false);
+          setIsLoading(false);
       })
       .catch(err => {
         console.error("Ladefehler:", err);
@@ -47,10 +43,9 @@ export default function HomePage() {
       });
   }, []);
 
-  // 3. Favorit umschalten (PATCH an API und lokaler State)
   const toggleFavorite = async (id: number, status: boolean) => {
     try {
-      const res = await fetch(`${getApiUrl()}/api/recipes/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_favorite: status })
@@ -64,11 +59,8 @@ export default function HomePage() {
     }
   };
 
-  // 4. Filter-Logik (Suche + Kategorien)
   useEffect(() => {
     let result = recipes;
-
-    // Suche verarbeiten (Titel und gesamtes JSON-Objekt für Zutaten/Mehl)
     if (searchQuery) {
       result = result.filter(r => 
         r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -76,7 +68,6 @@ export default function HomePage() {
       );
     }
 
-    // Kategorien verarbeiten
     if (activeFilter !== "Alle") {
       result = result.filter(recipe => {
         const content = JSON.stringify(recipe).toLowerCase();
@@ -89,35 +80,30 @@ export default function HomePage() {
           case "Vollkorn": return content.includes("vollkorn");
           case "Heute fertig": 
             if (duration <= 0) return false;
-
-            // Aktuelle Stunde und Minute holen
             const jetzt = new Date();
             const aktuelleMinutenSeitMitternacht = jetzt.getHours() * 60 + jetzt.getMinutes();
             const minutenBisMitternacht = (24 * 60) - aktuelleMinutenSeitMitternacht;
-
-            // Das Brot ist nur "heute fertig", wenn die Dauer kleiner ist 
-            // als die verbleibenden Minuten des Tages
             return duration <= minutenBisMitternacht;
         }
       });
-    }
+    } 
     setFilteredRecipes(result);
   }, [searchQuery, activeFilter, recipes]);
 
   return (
-    <div className="min-h-screen bg-[#F4F7F8] dark:bg-gray-900 px-6 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+    <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] px-6 text-gray-900 dark:text-gray-100 transition-colors duration-200">
       <div className="max-w-6xl mx-auto pt-8 pb-20">
         
         {/* Header-Bereich: Suche & Filter */}
         <div className="space-y-6 mb-10">
           <div className="relative group">
-            <Search className="absolute inset-y-0 left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#8B7355] transition-colors" size={20} />
+            <Search className="absolute inset-y-0 left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#8B7355] dark:group-focus-within:text-[#C4A484] transition-colors" size={20} />
             <input
               type="text"
               placeholder="Brot, Mehl oder Zutat suchen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 transition-all dark:text-gray-100 dark:placeholder-gray-400"
+              className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 dark:focus:border-[#8B7355]/60 transition-all text-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
           </div>
 
@@ -140,10 +126,10 @@ export default function HomePage() {
 
         {/* Rezepte-Grid */}
         {isLoading ? (
-          <div className="py-40 text-center uppercase tracking-widest text-gray-400 animate-pulse font-bold">Ofen wird vorgeheizt...</div>
+          <div className="py-40 text-center uppercase tracking-widest text-gray-400 dark:text-gray-500 animate-pulse font-bold">Ofen wird vorgeheizt...</div>
         ) : filteredRecipes.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-[3rem] p-20 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
-            <BookOpen className="text-gray-200 dark:text-gray-600 mx-auto mb-6" size={48} />
+            <BookOpen className="text-gray-200 dark:text-gray-700 mx-auto mb-6" size={48} />
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Kein passendes Brot gefunden</h2>
             <p className="text-gray-400 dark:text-gray-500 mt-2">Versuch es mit einem anderen Filter oder Suchbegriff.</p>
           </div>
@@ -174,7 +160,7 @@ export default function HomePage() {
         onConfirm={async (plannedAt) => {
           if (!selectedRecipe) return;
           try {
-            const res = await fetch(`${getApiUrl()}/api/recipes/${selectedRecipe.id}`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${selectedRecipe.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planned_at: plannedAt }),

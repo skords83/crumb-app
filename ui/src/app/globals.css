@@ -1,45 +1,52 @@
 @import "tailwindcss";
 
-/* 🎨 Dein Design-Theme (Tailwind v4 Way) */
+/* Dark Mode aktivieren - v4 Style */
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
-  /* Hier definieren wir die weichen Abrundungen aus deinem Screenshot */
   --radius-3xl: 1.5rem;
   --radius-4xl: 2rem;
-
-  /* Optionale Akzentfarben für dein Brot-Projekt */
   --color-brand-orange: #f59e0b;
   --color-brand-dark: #111827;
 }
 
-/* 🍞 Basis-Styles für den sauberen Look */
+/* Force color-scheme */
 @layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
-    /* Sorgt für die moderne Schrift und den hellgrauen Hintergrund aus dem Design */
-    @apply antialiased text-gray-900 bg-gray-50;
+    @apply antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
-/* 🛠️ Hilfsklassen für deine Karten (optional) */
 @layer components {
   .recipe-card-shadow {
     box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
   }
-}
-
-@layer components {
+  
+  /* Dark Mode: Dunklerer Schatten */
+  .dark .recipe-card-shadow {
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
+  }
+  
   .btn-crumb-primary {
     @apply bg-[#8B7355] text-white py-3 px-6 rounded-xl font-bold 
            border-2 border-[#8B7355] transition-all duration-200
-           /* NUR FARBE UND SCHATTEN ÄNDERN - KEIN TRANSLATE */
            hover:bg-[#766248] hover:border-[#766248] hover:shadow-sm
            active:scale-95 flex items-center justify-center gap-2;
   }
-
-.btn-crumb-secondary {
-    @apply bg-white text-gray-500 py-3 px-6 rounded-xl font-bold 
-           border border-gray-200 transition-colors duration-150
-           hover:border-gray-400 hover:text-gray-700
+  
+  .btn-crumb-secondary {
+    @apply bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-300 py-3 px-6 rounded-xl font-bold 
+           border border-gray-200 dark:border-gray-600 transition-colors duration-150
+           hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-100
            flex items-center justify-center gap-2;
-}
+  }
 }
