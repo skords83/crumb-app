@@ -18,7 +18,7 @@ jobs:
 
       - name: Login to ghcr.io
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u skords83 --password-stdin
+          echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u skords83 --password-stdin
 
       - name: Build and push UI
         run: |
