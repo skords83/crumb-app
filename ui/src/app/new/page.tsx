@@ -37,7 +37,7 @@ export default function NewRecipePage() {
     if (!importUrl) return;
     setIsImporting(true);
     try {
-      const res = await fetch(`${getApiUrl()}/api/import`, {
+      const res = await fetch(`${getApiUrl()}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: importUrl }),
