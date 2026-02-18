@@ -29,7 +29,7 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`)
       .then(res => res.json())
       .then(data => {
         const sortedData = Array.isArray(data) ? data : [];
@@ -45,7 +45,7 @@ export default function HomePage() {
 
   const toggleFavorite = async (id: number, status: boolean) => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_favorite: status })
@@ -160,7 +160,7 @@ export default function HomePage() {
         onConfirm={async (plannedAt) => {
           if (!selectedRecipe) return;
           try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recipes/${selectedRecipe.id}`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${selectedRecipe.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ planned_at: plannedAt }),
