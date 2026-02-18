@@ -9,28 +9,28 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_PREFIX: ghcr.io/skords83/crumb-app
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to ghcr.io
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u skords83 --password-stdin
+
       - name: Build and push UI
-        uses: docker/build-push-action@v5
-        with:
-          context: ./ui
-          push: true
-          tags: ghcr.io/skords83/crumb-app/ui:latest
-          build-args: |
-            NEXT_PUBLIC_API_URL=https://crumb.skords.de/api
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=https://crumb.skords.de/api \
+            -t ghcr.io/skords83/crumb-app/ui:latest \
+            ./ui
+          docker push ghcr.io/skords83/crumb-app/ui:latest
+
       - name: Build and push API
-        uses: docker/build-push-action@v5
-        with:
-          context: ./api
-          push: true
-          tags: ghcr.io/skords83/crumb-app/api:latest
+        run: |
+          docker build \
+            -t ghcr.io/skords83/crumb-app/api:latest \
+            ./api
+          docker push ghcr.io/skords83/crumb-app/api:latest
