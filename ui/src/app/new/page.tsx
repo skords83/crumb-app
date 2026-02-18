@@ -78,7 +78,7 @@ export default function NewRecipePage() {
 
     setIsSaving(true);
     try {
-      const res = await fetch(`${getApiUrl()}/api/recipes`, {
+      const res = await fetch(`${getApiUrl()}/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
