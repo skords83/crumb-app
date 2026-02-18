@@ -21,7 +21,7 @@ export default function BackplanPage() {
 
   // Rezepte laden
   useEffect(() => {
-    fetch(`${getApiUrl()}/api/recipes`)
+    fetch(`${getApiUrl()}/recipes`)
       .then(res => res.json())
       .then(data => {
         const planned = data
@@ -164,7 +164,7 @@ export default function BackplanPage() {
   const finishBaking = async (recipeId: number) => {
     if (!confirm("Brot fertig?")) return;
     try {
-      const res = await fetch(`${getApiUrl()}/api/recipes/${recipeId}`, {
+      const res = await fetch(`${getApiUrl()}/recipes/${recipeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planned_at: null }),

@@ -28,7 +28,7 @@ export default function Navigation() {
   useEffect(() => {
     const checkActivePlans = async () => {
       try {
-        const res = await fetch(`${getApiUrl()}/api/recipes`);
+        const res = await fetch(`${getApiUrl()}/recipes`);
         const data = await res.json();
         const active = data.some((r: any) => r.planned_at !== null);
         setHasActivePlan(active);

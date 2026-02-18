@@ -28,7 +28,7 @@ export default function EditRecipePage() {
       if (!recipeId) return;
       try {
         setLoading(true);
-        const res = await fetch(`${getApiUrl()}/api/recipes/${recipeId}`);
+        const res = await fetch(`${getApiUrl()}/recipes/${recipeId}`);
         if (!res.ok) throw new Error("Fehler beim Laden");
         const data = await res.json();
         
@@ -76,7 +76,7 @@ export default function EditRecipePage() {
     if (e) e.preventDefault();
     setIsSaving(true);
     try {
-      const res = await fetch(`${getApiUrl()}/api/recipes/${recipeId}`, {
+      const res = await fetch(`${getApiUrl()}/recipes/${recipeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
