@@ -8,6 +8,7 @@ const fs = require('fs');
 const { Pool } = require('pg');
 const { getScraper } = require('./scrapers/index');
 const { v4: uuidv4 } = require('uuid');
+const { authenticateToken, login, register, verify } = require('./auth');
 
 const app = express();
 
@@ -56,7 +57,7 @@ const upload = multer({ storage: storage });
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const initDB = async () => {
-  const query = `
+  const createRecipesTable = `
     CREATE TABLE IF NOT EXISTS recipes (
       id SERIAL PRIMARY KEY, 
       title TEXT NOT NULL, 
@@ -73,10 +74,21 @@ const initDB = async () => {
     );
   `;
   
+  const createUsersTable = `
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  
   let retries = 10;
   while (retries > 0) {
     try { 
-      await pool.query(query); 
+      await pool.query(createRecipesTable);
+      await pool.query(createUsersTable);
       console.log("✅ Datenbank bereit"); 
       return;
     } catch (err) { 
@@ -175,8 +187,19 @@ const checkAndNotify = async () => {
 };
 
 // ============================================================
-// API ROUTES
+// AUTH ROUTES
 // ============================================================
+
+app.post('/api/auth/login', login);
+app.post('/api/auth/register', register);
+app.get('/api/auth/verify', authenticateToken, verify);
+
+// ============================================================
+// API ROUTES (Protected)
+// ============================================================
+
+// Apply authentication middleware to all routes below
+app.use(authenticateToken);
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });

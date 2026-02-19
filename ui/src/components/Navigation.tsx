@@ -4,10 +4,12 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Navigation() {
   const pathname = usePathname();
+  const { logout } = useAuth();
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -87,6 +89,15 @@ export default function Navigation() {
               ) : (
                 <Moon size={20} className="text-white" />
               )}
+            </button>
+
+            <button
+              onClick={logout}
+              className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+              aria-label="Abmelden"
+              title="Abmelden"
+            >
+              <LogOut size={20} className="text-white" />
             </button>
 
             {hasActivePlan && (

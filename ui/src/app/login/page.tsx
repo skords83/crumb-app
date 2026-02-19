@@ -1,0 +1,115 @@
+'use client';
+
+import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+  const { login, register, isLoading, error } = useAuth();
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      if (isRegister) {
+        await register(email, password);
+      } else {
+        await login(email, password);
+      }
+      router.push('/');
+    } catch (err) {
+      // Error is handled by auth context
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] flex items-center justify-center px-4">
+      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-[#8B7355] rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl font-black text-white">C</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+            {isRegister ? 'Konto erstellen' : 'Willkommen zurück'}
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">
+            {isRegister ? 'Erstelle ein neues Konto' : 'Melde dich an um fortzufahren'}
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-300 text-sm">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+              E-Mail
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
+              placeholder="deine@email.de"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+              Passwort
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
+              placeholder="••••••••"
+              required
+              minLength={6}
+            />
+            {isRegister && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Mindestens 6 Zeichen
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-3 px-4 bg-[#8B7355] hover:bg-[#766248] text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                {isRegister ? 'Konto wird erstellt...' : 'Anmeldung...'}
+              </>
+            ) : (
+              isRegister ? 'Konto erstellen' : 'Anmelden'
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setIsRegister(!isRegister)}
+            className="text-sm text-[#8B7355] hover:text-[#766248] font-medium transition-colors"
+          >
+            {isRegister 
+              ? 'Bereits ein Konto? Anmelden' 
+              : 'Noch kein Konto? Registrieren'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
