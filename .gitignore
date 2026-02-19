@@ -28,3 +28,5 @@ api/uploads/
 # OS
 .DS_Store
 Thumbs.db
+
+docker-compose.override.yaml
