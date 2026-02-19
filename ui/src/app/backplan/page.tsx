@@ -235,7 +235,7 @@ export default function BackplanPage() {
         return (
           <div key={recipe.id}>
             {/* STICKY HEADER */}
-            <div className="sticky top-[100px] z-30 bg-[#FDFCFB]/92 dark:bg-gray-900/92 backdrop-blur-xl border-b border-[#F0EBE3] dark:border-gray-700">
+            <div className="sticky top-[140px] z-30 bg-[#FDFCFB]/92 dark:bg-gray-900/92 backdrop-blur-xl border-b border-[#F0EBE3] dark:border-gray-700">
               <div className="max-w-3xl mx-auto px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

@@ -1,6 +1,7 @@
--- Rezepte-Tabelle mit JSONB-Feldern
+-- Rezepte-Tabelle mit JSONB-Feldern und Benutzer-Zuordnung
 CREATE TABLE IF NOT EXISTS recipes (
     id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     subtitle TEXT,
     description TEXT,
@@ -23,8 +24,5 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Default-Admin-User (Passwort: admin123)
--- Das Passwort muss nach dem ersten Login geändert werden!
-INSERT INTO users (email, password_hash) 
-VALUES ('admin@crumb.local', '$2b$10$YourHashedPasswordHere')
-ON CONFLICT (email) DO NOTHING;
+-- Index für schnellere Abfragen nach user_id
+CREATE INDEX IF NOT EXISTS idx_recipes_user_id ON recipes(user_id);

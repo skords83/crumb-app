@@ -60,6 +60,7 @@ const initDB = async () => {
   const createRecipesTable = `
     CREATE TABLE IF NOT EXISTS recipes (
       id SERIAL PRIMARY KEY, 
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL, 
       subtitle TEXT, 
       description TEXT, 
@@ -72,6 +73,10 @@ const initDB = async () => {
       planned_at TIMESTAMP WITHOUT TIME ZONE, 
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+  `;
+  
+  const createRecipesUserIdIndex = `
+    CREATE INDEX IF NOT EXISTS idx_recipes_user_id ON recipes(user_id);
   `;
   
   const createUsersTable = `
@@ -87,8 +92,9 @@ const initDB = async () => {
   let retries = 10;
   while (retries > 0) {
     try { 
-      await pool.query(createRecipesTable);
       await pool.query(createUsersTable);
+      await pool.query(createRecipesTable);
+      await pool.query(createRecipesUserIdIndex);
       console.log("✅ Datenbank bereit"); 
       return;
     } catch (err) { 
@@ -164,7 +170,12 @@ const calculateTimeline = (plannedAt, sections) => {
 
 const checkAndNotify = async () => {
   try {
-    const result = await pool.query('SELECT * FROM recipes WHERE planned_at IS NOT NULL');
+    const result = await pool.query(`
+      SELECT r.*, u.email as user_email 
+      FROM recipes r 
+      JOIN users u ON r.user_id = u.id 
+      WHERE r.planned_at IS NOT NULL
+    `);
     const now = new Date();
     for (const recipe of result.rows) {
       if (!recipe.dough_sections) continue;
@@ -250,14 +261,14 @@ app.post('/api/import', async (req, res) => {
 
 app.get('/api/recipes', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM recipes ORDER BY created_at DESC');
+    const result = await pool.query('SELECT * FROM recipes WHERE user_id = $1 ORDER BY created_at DESC', [req.user.userId]);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/recipes/:id', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM recipes WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT * FROM recipes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.userId]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -266,8 +277,8 @@ app.get('/api/recipes/:id', async (req, res) => {
 app.post('/api/recipes', async (req, res) => {
   const { title, description, image_url, ingredients, dough_sections, steps } = req.body;
   try {
-    const query = `INSERT INTO recipes (title, description, image_url, ingredients, dough_sections, steps) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;`;
-    const values = [title, description, image_url, JSON.stringify(ingredients || []), JSON.stringify(dough_sections || []), JSON.stringify(steps || [])];
+    const query = `INSERT INTO recipes (user_id, title, description, image_url, ingredients, dough_sections, steps) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`;
+    const values = [req.user.userId, title, description, image_url, JSON.stringify(ingredients || []), JSON.stringify(dough_sections || []), JSON.stringify(steps || [])];
     const result = await pool.query(query, values);
     res.status(201).json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Datenbankfehler" }); }
@@ -277,16 +288,18 @@ app.put('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
   const { title, image_url, ingredients, steps, description, dough_sections } = req.body;
   try {
-    const query = `UPDATE recipes SET title = $1, image_url = $2, ingredients = $3, steps = $4, description = $5, dough_sections = $6 WHERE id = $7 RETURNING *;`;
-    const values = [title, image_url, JSON.stringify(ingredients), JSON.stringify(steps), description, JSON.stringify(dough_sections), id];
+    const query = `UPDATE recipes SET title = $1, image_url = $2, ingredients = $3, steps = $4, description = $5, dough_sections = $6 WHERE id = $7 AND user_id = $8 RETURNING *;`;
+    const values = [title, image_url, JSON.stringify(ingredients), JSON.stringify(steps), description, JSON.stringify(dough_sections), id, req.user.userId];
     const result = await pool.query(query, values);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Update-Fehler" }); }
 });
 
 app.delete('/api/recipes/:id', async (req, res) => {
   try { 
-    await pool.query('DELETE FROM recipes WHERE id = $1', [req.params.id]); 
+    const result = await pool.query('DELETE FROM recipes WHERE id = $1 AND user_id = $2 RETURNING *', [req.params.id, req.user.userId]); 
+    if (result.rowCount === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json({ message: "Gelöscht" }); 
   } catch (err) { res.status(500).json({ error: "Löschfehler" }); }
 });
@@ -296,8 +309,9 @@ app.patch('/api/recipes/:id', async (req, res) => {
   const { is_favorite, planned_at } = req.body;
   try {
     let result;
-    if (planned_at !== undefined) result = await pool.query("UPDATE recipes SET planned_at = $1 WHERE id = $2 RETURNING *", [planned_at, id]);
-    else if (is_favorite !== undefined) result = await pool.query("UPDATE recipes SET is_favorite = $1 WHERE id = $2 RETURNING *", [is_favorite, id]);
+    if (planned_at !== undefined) result = await pool.query("UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3 RETURNING *", [planned_at, id, req.user.userId]);
+    else if (is_favorite !== undefined) result = await pool.query("UPDATE recipes SET is_favorite = $1 WHERE id = $2 AND user_id = $3 RETURNING *", [is_favorite, id, req.user.userId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Patch-Fehler" }); }
 });
