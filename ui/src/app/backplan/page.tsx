@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { getApiUrl } from "@/lib/api-config";
 import { Clock, ChevronLeft, Check, List, Play, Timer, Sun, BookOpen, X } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,7 +20,7 @@ export default function BackplanPage() {
 
   // Rezepte laden
   useEffect(() => {
-    fetch(`${getApiUrl()}/recipes`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`)
       .then(res => res.json())
       .then(data => {
         const planned = data
@@ -164,7 +163,7 @@ export default function BackplanPage() {
   const finishBaking = async (recipeId: number) => {
     if (!confirm("Brot fertig?")) return;
     try {
-      const res = await fetch(`${getApiUrl()}/recipes/${recipeId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planned_at: null }),

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { getApiUrl } from "@/lib/api-config";
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Save, X } from 'lucide-react';
 import Link from 'next/link';
@@ -28,7 +27,7 @@ export default function EditRecipePage() {
       if (!recipeId) return;
       try {
         setLoading(true);
-        const res = await fetch(`${getApiUrl()}/recipes/${recipeId}`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`);
         if (!res.ok) throw new Error("Fehler beim Laden");
         const data = await res.json();
         
@@ -76,7 +75,7 @@ export default function EditRecipePage() {
     if (e) e.preventDefault();
     setIsSaving(true);
     try {
-      const res = await fetch(`${getApiUrl()}/recipes/${recipeId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

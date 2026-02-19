@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { getApiUrl } from "@/lib/api-config";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutGrid, FileDown, Clock, Sun, Moon } from 'lucide-react';
@@ -28,7 +27,7 @@ export default function Navigation() {
   useEffect(() => {
     const checkActivePlans = async () => {
       try {
-        const res = await fetch(`${getApiUrl()}/recipes`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`);
         const data = await res.json();
         const active = data.some((r: any) => r.planned_at !== null);
         setHasActivePlan(active);
