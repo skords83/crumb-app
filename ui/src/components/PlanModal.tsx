@@ -19,6 +19,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const [selectedTime, setSelectedTime] = useState("");
   const [multiplier, setMultiplier] = useState(1);
   const [activePreset, setActivePreset] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Reset beim Öffnen
   useEffect(() => {
@@ -27,8 +28,18 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       setSelectedTime("");
       setMultiplier(1);
       setActivePreset(null);
+      setError(null);
     }
   }, [isOpen]);
+
+  // Validate when selectedTime or mode changes
+  useEffect(() => {
+    if (mode === "end" && selectedTime) {
+      setError(validateEndTime(selectedTime));
+    } else {
+      setError(null);
+    }
+  }, [selectedTime, mode]);
 
   // Gesamtzeit aus allen Steps berechnen
   const totalMinutes = useMemo(() => {
@@ -67,6 +78,26 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const [y, m, day] = d.split("-").map(Number);
     const [h, min] = t.split(":").map(Number);
     return new Date(y, m - 1, day, h, min);
+  };
+
+  // Validation function for end time
+  const validateEndTime = (timeStr: string): string | null => {
+    if (!timeStr || mode !== "end") return null;
+    const endTime = parseTimeInput(timeStr);
+    const now = new Date();
+    
+    // Check if end time is in the past
+    if (endTime <= now) {
+      return "Die Endzeit liegt in der Vergangenheit. Bitte wähle eine Zeit in der Zukunft.";
+    }
+    
+    // Check if there's enough time for the recipe
+    const timeDiffMinutes = (endTime.getTime() - now.getTime()) / 60000;
+    if (timeDiffMinutes < totalMinutes) {
+      return `Für dieses Rezept werden ${totalHours}h ${totalMins}m benötigt. Die gewählte Zeit ist zu nah.`;
+    }
+    
+    return null;
   };
 
   const formatTime = (date: Date): string => {
@@ -179,11 +210,20 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const target = getTargetTimeString();
     if (!target) return;
 
+    // Validate end time before confirming
+    if (mode === "end") {
+      const validationError = validateEndTime(selectedTime);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+
     const timeline = calculateBackplan(target, recipe.dough_sections);
     onConfirm(target, multiplier, timeline);
   };
 
-  const canConfirm = mode === "now" || !!selectedTime;
+  const canConfirm = mode === "now" || (!!selectedTime && !error);
   const scaledWeight = baseWeight > 0
     ? `${((baseWeight * multiplier) / 1000).toFixed(2).replace(".", ",")} kg`
     : null;
@@ -193,54 +233,54 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div
-        className="bg-[#FFFDF9] rounded-[2rem] w-full max-w-[420px] shadow-2xl overflow-hidden"
+        className="bg-[#FFFDF9] dark:bg-gray-800 rounded-[2rem] w-full max-w-[420px] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-7 pt-7 pb-0 text-center relative">
           <button
             onClick={onClose}
-            className="absolute right-5 top-5 p-2 text-gray-300 hover:text-gray-500 transition-colors rounded-xl hover:bg-gray-100"
+            className="absolute right-5 top-5 p-2 text-gray-300 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-300 transition-colors rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <X size={18} />
           </button>
 
-          <div className="inline-flex items-center gap-2 bg-[#F5F0E8] px-4 py-1.5 rounded-full mb-4">
-            <Clock size={14} className="text-[#8B7355]" />
-            <span className="text-[13px] font-bold text-[#8B7355]">
+          <div className="inline-flex items-center gap-2 bg-[#F5F0E8] dark:bg-gray-700 px-4 py-1.5 rounded-full mb-4">
+            <Clock size={14} className="text-[#8B7355] dark:text-[#A0845C]" />
+            <span className="text-[13px] font-bold text-[#8B7355] dark:text-[#A0845C]">
               {totalHours}h {totalMins}m Gesamtzeit
             </span>
           </div>
 
-          <h2 className="text-2xl font-extrabold text-[#2D2D2D] tracking-tight mb-1">
+          <h2 className="text-2xl font-extrabold text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-1">
             Backplan erstellen
           </h2>
-          <p className="text-[13px] text-gray-400">{recipe.title}</p>
+          <p className="text-[13px] text-gray-400 dark:text-gray-400">{recipe.title}</p>
         </div>
 
         {/* Mengen-Slider */}
-        <div className="mx-7 mt-5 bg-[#FAF7F2] rounded-2xl p-4 border border-[#F0EBE3]">
+        <div className="mx-7 mt-5 bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
               Menge
             </span>
-            <span className="text-[15px] font-extrabold text-[#2D2D2D]">
+            <span className="text-[15px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
               {multiplier}×{" "}
               {scaledWeight && (
-                <span className="font-semibold text-[#8B7355]">({scaledWeight})</span>
+                <span className="font-semibold text-[#8B7355] dark:text-[#A0845C]">({scaledWeight})</span>
               )}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMultiplier(Math.max(0.5, +(multiplier - 0.5).toFixed(1)))}
-              className="w-9 h-9 rounded-xl border-2 border-[#E8E2D8] bg-white flex items-center justify-center text-[#8B7355] hover:border-[#8B7355] transition-colors"
+              className="w-9 h-9 rounded-xl border-2 border-[#E8E2D8] dark:border-gray-600 bg-white dark:bg-gray-800 flex items-center justify-center text-[#8B7355] dark:text-[#A0845C] hover:border-[#8B7355] dark:hover:border-[#A0845C] transition-colors"
             >
               <Minus size={16} strokeWidth={2.5} />
             </button>
-            <div className="flex-1 relative h-1.5 bg-[#E8E2D8] rounded-full">
+            <div className="flex-1 relative h-1.5 bg-[#E8E2D8] dark:bg-gray-600 rounded-full">
               <div
-                className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] rounded-full transition-all duration-200"
+                className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] dark:from-[#A0845C] dark:to-[#B8956A] rounded-full transition-all duration-200"
                 style={{ width: `${((multiplier - 0.5) / 2.5) * 100}%` }}
               />
               <input
@@ -255,7 +295,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             </div>
             <button
               onClick={() => setMultiplier(Math.min(3, +(multiplier + 0.5).toFixed(1)))}
-              className="w-9 h-9 rounded-xl border-2 border-[#E8E2D8] bg-white flex items-center justify-center text-[#8B7355] hover:border-[#8B7355] transition-colors"
+              className="w-9 h-9 rounded-xl border-2 border-[#E8E2D8] dark:border-gray-600 bg-white dark:bg-gray-800 flex items-center justify-center text-[#8B7355] dark:text-[#A0845C] hover:border-[#8B7355] dark:hover:border-[#A0845C] transition-colors"
             >
               <Plus size={16} strokeWidth={2.5} />
             </button>
@@ -263,7 +303,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
         </div>
 
         {/* Modus-Tabs */}
-        <div className="flex gap-1 mx-7 mt-5 bg-[#F5F0E8] rounded-2xl p-1">
+        <div className="flex gap-1 mx-7 mt-5 bg-[#F5F0E8] dark:bg-gray-700 rounded-2xl p-1">
           {([
             { id: "now" as const, label: "Jetzt", icon: <Play size={13} /> },
             { id: "start" as const, label: "Startzeit", icon: <Clock size={13} /> },
@@ -274,12 +314,13 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
               onClick={() => {
                 setMode(m.id);
                 setActivePreset(null);
+                setError(null);
                 if (m.id === "now") setSelectedTime("");
               }}
               className={`flex-1 py-2.5 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 ${
                 mode === m.id
-                  ? "bg-white text-[#2D2D2D] font-bold shadow-sm"
-                  : "text-gray-400 hover:text-gray-600"
+                  ? "bg-white dark:bg-gray-700 text-[#2D2D2D] dark:text-gray-100 font-bold shadow-sm"
+                  : "text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               }`}
             >
               {m.icon}
@@ -297,13 +338,13 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 onClick={() => handlePreset(p, i)}
                 className={`flex-1 py-3 px-2 rounded-2xl border-2 text-center transition-all duration-200 ${
                   activePreset === i
-                    ? "border-[#8B7355] bg-[#FAF5ED]"
-                    : "border-[#F0EBE3] bg-white hover:border-[#D4C9B8]"
+                    ? "border-[#8B7355] dark:border-[#A0845C] bg-[#FAF5ED] dark:bg-[#4A4030]"
+                    : "border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-[#D4C9B8] dark:hover:border-gray-500"
                 }`}
               >
-                <div className="flex justify-center mb-1 text-[#8B7355]">{p.icon}</div>
-                <div className="text-[12px] font-bold text-[#2D2D2D]">{p.label}</div>
-                <div className="text-[10px] text-gray-400 font-semibold">{p.desc}</div>
+                <div className="flex justify-center mb-1 text-[#8B7355] dark:text-[#A0845C]">{p.icon}</div>
+                <div className="text-[12px] font-bold text-[#2D2D2D] dark:text-gray-100">{p.label}</div>
+                <div className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold">{p.desc}</div>
               </button>
             ))}
           </div>
@@ -312,7 +353,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
         {/* Datetime Input (nicht bei "now") */}
         {mode !== "now" && (
           <div className="mx-7 mt-4">
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+            <label className="block text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-2">
               {mode === "start" ? "Wann willst du starten?" : "Wann soll das Brot fertig sein?"}
             </label>
             <input
@@ -322,23 +363,34 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 setSelectedTime(e.target.value);
                 setActivePreset(null);
               }}
-              className="w-full p-3.5 rounded-2xl border-2 border-[#F0EBE3] bg-white text-[16px] font-bold text-[#2D2D2D] outline-none focus:border-[#8B7355] transition-colors"
+              className={`w-full p-3.5 rounded-2xl border-2 text-[16px] font-bold outline-none transition-colors ${
+                error
+                  ? "border-red-400 bg-red-50 text-red-700 focus:border-red-500"
+                  : "border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#2D2D2D] dark:text-gray-100 focus:border-[#8B7355] dark:focus:border-[#A0845C]"
+              }`}
             />
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mx-7 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-[13px] font-semibold text-red-600">{error}</p>
           </div>
         )}
 
         {/* Berechnetes Ergebnis */}
         {(mode === "now" || calculated) && (
-          <div className="mx-7 mt-4 bg-gradient-to-br from-[#FAF7F2] to-[#F5F0E8] rounded-2xl p-4 border border-[#E8E2D8]">
+          <div className="mx-7 mt-4 bg-gradient-to-br from-[#FAF7F2] to-[#F5F0E8] dark:from-gray-700 dark:to-gray-800 rounded-2xl p-4 border border-[#E8E2D8] dark:border-gray-600">
             <div className="flex items-center justify-between">
               {/* Start */}
               <div className="text-center flex-1">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-1.5">
                   Start
                 </div>
                 <div
                   className={`text-[14px] font-extrabold ${
-                    mode === "start" || mode === "now" ? "text-[#8B7355]" : "text-[#2D2D2D]"
+                    mode === "start" || mode === "now" ? "text-[#8B7355] dark:text-[#A0845C]" : "text-[#2D2D2D] dark:text-gray-100"
                   }`}
                 >
                   {calculated?.startLabel || "—"}
@@ -347,22 +399,22 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
               {/* Pfeil */}
               <div className="flex flex-col items-center gap-1 px-3">
-                <div className="w-12 h-0.5 bg-gradient-to-r from-[#D4C9B8] via-[#8B7355] to-[#D4C9B8] rounded-full relative">
-                  <div className="absolute -right-1 -top-[3px] w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-l-[5px] border-l-[#8B7355]" />
+                <div className="w-12 h-0.5 bg-gradient-to-r from-[#D4C9B8] via-[#8B7355] to-[#D4C9B8] dark:from-[#5A5040] dark:via-[#A0845C] dark:to-[#5A5040] rounded-full relative">
+                  <div className="absolute -right-1 -top-[3px] w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-l-[5px] border-l-[#8B7355] dark:border-l-[#A0845C]" />
                 </div>
-                <span className="text-[10px] font-bold text-gray-300">
+                <span className="text-[10px] font-bold text-gray-300 dark:text-gray-500">
                   {totalHours}h {totalMins}m
                 </span>
               </div>
 
               {/* Ende */}
               <div className="text-center flex-1">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-1.5">
                   Fertig
                 </div>
                 <div
                   className={`text-[14px] font-extrabold ${
-                    mode === "end" ? "text-[#8B7355]" : "text-[#2D2D2D]"
+                    mode === "end" ? "text-[#8B7355] dark:text-[#A0845C]" : "text-[#2D2D2D] dark:text-gray-100"
                   }`}
                 >
                   {calculated?.endLabel || "—"}
@@ -376,7 +428,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
         <div className="flex gap-3 px-7 pt-5 pb-7">
           <button
             onClick={onClose}
-            className="flex-1 py-4 rounded-2xl text-[14px] font-bold text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all"
+            className="flex-1 py-4 rounded-2xl text-[14px] font-bold text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
           >
             Abbrechen
           </button>
@@ -385,8 +437,8 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             disabled={!canConfirm}
             className={`flex-[1.5] py-4 rounded-2xl text-[14px] font-extrabold uppercase tracking-wide transition-all duration-300 ${
               canConfirm
-                ? "bg-gradient-to-br from-[#8B7355] to-[#6B5740] text-white shadow-lg shadow-[#8B7355]/30 hover:scale-[1.02] active:scale-[0.98]"
-                : "bg-[#E8E2D8] text-gray-400 cursor-not-allowed"
+                ? "bg-gradient-to-br from-[#8B7355] to-[#6B5740] dark:from-[#A0845C] dark:to-[#8B7355] text-white shadow-lg shadow-[#8B7355]/30 dark:shadow-[#A0845C]/30 hover:scale-[1.02] active:scale-[0.98]"
+                : "bg-[#E8E2D8] dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
             }`}
           >
             Backplan starten
