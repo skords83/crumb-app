@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Clock, ChevronLeft, Check, List, Play, Timer, Sun, BookOpen, X } from 'lucide-react';
 import Link from 'next/link';
+import { BackplanSkeleton } from "@/components/LoadingSkeletons";
 
 export default function BackplanPage() {
   const [plannedRecipes, setPlannedRecipes] = useState<any[]>([]);
@@ -179,14 +180,7 @@ export default function BackplanPage() {
   // RENDER
   // ============================================================
 
-  if (isLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB]">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#8B7355] mx-auto mb-4" />
-        <p className="text-gray-400 font-bold text-sm uppercase tracking-widest animate-pulse">Backplan wird geladen...</p>
-      </div>
-    </div>
-  );
+  if (isLoading) return <BackplanSkeleton />;
 
   if (plannedRecipes.length === 0) return (
     <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] px-6">

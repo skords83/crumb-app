@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus, BookOpen, Search } from 'lucide-react';
 import PlanModal from "@/components/PlanModal";
 import RecipeCard from "@/components/RecipeCard";
+import { PageSkeleton, RecipeGridSkeleton } from "@/components/LoadingSkeletons";
 
 export default function HomePage() {
   const [recipes, setRecipes] = useState<any[]>([]);
@@ -126,7 +127,7 @@ export default function HomePage() {
 
         {/* Rezepte-Grid */}
         {isLoading ? (
-          <div className="py-40 text-center uppercase tracking-widest text-gray-400 dark:text-gray-500 animate-pulse font-bold">Ofen wird vorgeheizt...</div>
+          <RecipeGridSkeleton count={6} />
         ) : filteredRecipes.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-[3rem] p-20 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
             <BookOpen className="text-gray-200 dark:text-gray-700 mx-auto mb-6" size={48} />

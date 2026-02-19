@@ -6,6 +6,7 @@ import Link from 'next/link';
 import * as Icons from 'lucide-react';
 import { calculateBackplan, formatTimeManual } from '@/lib/backplan-utils';
 import PlanModal from "@/components/PlanModal";
+import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 
 export default function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -106,7 +107,7 @@ const stats = useMemo(() => {
     return Object.values(totals);
   }, [recipe]);
 
-  if (isLoading) return <div className="p-20 text-center font-bold text-gray-400 animate-pulse uppercase">Wird geladen...</div>;
+  if (isLoading) return <RecipeDetailSkeleton />;
   if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
 
   return (
