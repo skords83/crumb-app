@@ -21,7 +21,11 @@ export default function BackplanPage() {
 
   // Rezepte laden
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+      }
+    })
       .then(res => res.json())
       .then(data => {
         const planned = data
@@ -166,7 +170,10 @@ export default function BackplanPage() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
         body: JSON.stringify({ planned_at: null }),
       });
       if (res.ok) {

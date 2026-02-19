@@ -22,7 +22,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   // 1. Daten laden
   useEffect(() => {
     if (!id) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+      }
+    })
       .then(res => res.json())
       .then(data => {
         setRecipe(data);
@@ -71,6 +75,9 @@ const stats = useMemo(() => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        }
       });
       if (res.ok) {
         router.push('/');
@@ -259,7 +266,10 @@ const stats = useMemo(() => {
           try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+              },
               body: JSON.stringify({ planned_at: plannedAt }),
             });
             if (res.ok) {

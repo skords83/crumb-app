@@ -30,7 +30,11 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+      }
+    })
       .then(res => res.json())
       .then(data => {
         const sortedData = Array.isArray(data) ? data : [];
@@ -48,7 +52,10 @@ export default function HomePage() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
         body: JSON.stringify({ is_favorite: status })
       });
       
@@ -163,7 +170,10 @@ export default function HomePage() {
           try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${selectedRecipe.id}`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+              },
               body: JSON.stringify({ planned_at: plannedAt }),
             });
             if (res.ok) {

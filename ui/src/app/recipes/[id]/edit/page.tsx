@@ -27,7 +27,11 @@ export default function EditRecipePage() {
       if (!recipeId) return;
       try {
         setLoading(true);
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+          }
+        });
         if (!res.ok) throw new Error("Fehler beim Laden");
         const data = await res.json();
         
@@ -77,7 +81,10 @@ export default function EditRecipePage() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
         body: JSON.stringify({ 
           title, 
           image_url: imageUrl, 

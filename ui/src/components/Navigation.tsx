@@ -29,7 +29,11 @@ export default function Navigation() {
   useEffect(() => {
     const checkActivePlans = async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+          }
+        });
         const data = await res.json();
         const active = data.some((r: any) => r.planned_at !== null);
         setHasActivePlan(active);

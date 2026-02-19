@@ -38,7 +38,10 @@ export default function NewRecipePage() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
         body: JSON.stringify({ url: importUrl }),
       });
       const data = await res.json();
@@ -79,7 +82,10 @@ export default function NewRecipePage() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
         body: JSON.stringify({ 
           title, 
           image_url: imageUrl, 
