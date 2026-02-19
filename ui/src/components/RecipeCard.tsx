@@ -48,11 +48,11 @@ const getRecipeLabels = (recipe: any) => {
   const hatHefe = content.includes("hefe");
 
   if (hatSauerteig && hatHefe) {
-    labels.push({ label: "Gemischt", color: "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border-purple-100 dark:border-purple-800" });
+    labels.push({ label: "Gemischt", color: "bg-purple-50 text-purple-600 border-purple-100" });
   } else if (hatSauerteig) {
-    labels.push({ label: "Sauerteig", color: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 border-orange-100 dark:border-orange-800" });
+    labels.push({ label: "Sauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" });
   } else if (hatHefe) {
-    labels.push({ label: "Hefe", color: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 border-blue-100 dark:border-blue-800" });
+    labels.push({ label: "Hefe", color: "bg-blue-50 text-blue-600 border-blue-100" });
   }
 
   const hatVollkornBegriffe = content.includes("vollkorn") || content.includes("schrot");
@@ -60,17 +60,17 @@ const getRecipeLabels = (recipe: any) => {
   const hatTypenMehl = typenMehle.some(type => content.includes(type));
 
   if (hatVollkornBegriffe && !hatTypenMehl) {
-    labels.push({ label: "Reines Vollkorn", color: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800" });
+    labels.push({ label: "Reines Vollkorn", color: "bg-emerald-100 text-emerald-900 border-emerald-200" });
   } else if (hatVollkornBegriffe) {
-    labels.push({ label: "Vollkorn-Anteil", color: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-800" });
+    labels.push({ label: "Vollkorn-Anteil", color: "bg-emerald-50 text-emerald-700 border-emerald-100" });
   }
 
   if (content.includes("roggen")) {
-    labels.push({ label: "Roggen", color: "bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800" });
+    labels.push({ label: "Roggen", color: "bg-amber-100 text-amber-900 border-amber-200" });
   }
 
   if (labels.length === 0) {
-    labels.push({ label: "Brot", color: "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300 border-gray-100 dark:border-gray-600" });
+    labels.push({ label: "Brot", color: "bg-gray-50 text-gray-500 border-gray-100" });
   }
 
   return labels;
