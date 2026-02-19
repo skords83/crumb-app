@@ -183,13 +183,13 @@ export default function BackplanPage() {
   if (isLoading) return <BackplanSkeleton />;
 
   if (plannedRecipes.length === 0) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] px-6">
+    <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] dark:bg-gray-900 px-6">
       <div className="text-center">
-        <div className="w-20 h-20 rounded-full bg-[#F5F0E8] flex items-center justify-center mx-auto mb-6">
+        <div className="w-20 h-20 rounded-full bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center mx-auto mb-6">
           <Sun size={32} className="text-[#8B7355]" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Keine Backpläne aktiv</h2>
-        <p className="text-gray-400 mb-8">Plane ein Rezept um hier loszulegen.</p>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">Keine Backpläne aktiv</h2>
+        <p className="text-gray-400 dark:text-gray-500 mb-8">Plane ein Rezept um hier loszulegen.</p>
         <Link href="/" className="inline-flex items-center gap-2 bg-[#8B7355] text-white px-6 py-3 rounded-2xl font-bold text-sm">
           <ChevronLeft size={16} /> Zur Übersicht
         </Link>
@@ -228,16 +228,16 @@ export default function BackplanPage() {
         return (
           <div key={recipe.id}>
             {/* STICKY HEADER */}
-            <div className="sticky top-0 z-50 bg-[#FDFCFB]/92 backdrop-blur-xl border-b border-[#F0EBE3]">
+            <div className="sticky top-0 z-50 bg-[#FDFCFB]/92 dark:bg-gray-900/92 backdrop-blur-xl border-b border-[#F0EBE3] dark:border-gray-700">
               <div className="max-w-3xl mx-auto px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Link href="/" className="p-2 rounded-xl hover:bg-[#F5F0E8] transition-colors">
-                      <ChevronLeft size={18} className="text-gray-400" />
+                    <Link href="/" className="p-2 rounded-xl hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors">
+                      <ChevronLeft size={18} className="text-gray-400 dark:text-gray-500" />
                     </Link>
                     <img src={recipe.image_url || 'https://via.placeholder.com/48'} className="w-11 h-11 rounded-xl object-cover" alt="" />
                   <div>
-                    <h1 className="text-[17px] font-extrabold tracking-tight leading-tight">{recipe.title}</h1>
+                    <h1 className="text-[17px] font-extrabold tracking-tight leading-tight dark:text-gray-100">{recipe.title}</h1>
                     <p className="text-[13px] text-[#8B7355] font-bold flex items-center gap-1">
                       <Clock size={13} /> Fertig um {extractTimeFromString(recipe.planned_at)} Uhr
                     </p>
@@ -246,14 +246,14 @@ export default function BackplanPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowOverview(recipe.id)}
-                      className="p-2.5 rounded-xl border-2 border-[#F0EBE3] bg-white text-[#8B7355] hover:border-[#8B7355] transition-colors"
+                      className="p-2.5 rounded-xl border-2 border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#8B7355] hover:border-[#8B7355] transition-colors"
                       title="Alle Schritte"
                     >
                       <List size={16} />
                     </button>
                     <button
                       onClick={() => finishBaking(recipe.id)}
-                      className="px-3 py-2 rounded-xl bg-green-50 text-green-600 text-[11px] font-bold border border-green-100 hover:bg-green-100 transition-colors"
+                      className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-[11px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
                     >
                       Fertig
                     </button>
@@ -310,7 +310,7 @@ export default function BackplanPage() {
                           <span className="text-[12px] font-extrabold text-[#8B7355] uppercase tracking-widest">
                             {step.phase}
                           </span>
-                          <div className="flex-1 h-px bg-[#F0EBE3]" />
+                          <div className="flex-1 h-px bg-[#F0EBE3] dark:bg-gray-700" />
                         </div>
                       )}
 
@@ -323,7 +323,7 @@ export default function BackplanPage() {
                       >
                         {/* Zeitspalte */}
                         <div className="w-[60px] text-right flex-shrink-0" style={{ paddingTop: isActive ? 20 : 14 }}>
-                          <span className={`text-[13px] font-extrabold ${isActive ? 'text-[#8B7355]' : isDone ? 'text-gray-200' : 'text-gray-300'}`}>
+                          <span className={`text-[13px] font-extrabold ${isActive ? 'text-[#8B7355]' : isDone ? 'text-gray-200 dark:text-gray-600' : 'text-gray-300 dark:text-gray-600'}`}>
                             {formatTime(step.start)}
                           </span>
                         </div>
@@ -332,12 +332,12 @@ export default function BackplanPage() {
                         <div
                           className={`flex-1 transition-all duration-300 ${
                             isActive
-                              ? 'rounded-3xl border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] p-5'
+                              ? 'rounded-3xl border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-700 p-5'
                               : isNext
-                                ? 'rounded-2xl border-2 border-dashed border-[#D4C9B8] bg-white p-4'
+                                ? 'rounded-2xl border-2 border-dashed border-[#D4C9B8] dark:border-gray-600 bg-white dark:bg-gray-800 p-4'
                                 : isDone
-                                  ? 'rounded-2xl border border-[#F0EBE3] bg-[#FAFAFA] p-4 opacity-50'
-                                  : 'rounded-2xl border border-[#F0EBE3] bg-white p-4 hover:border-[#E0D8CC]'
+                                  ? 'rounded-2xl border border-[#F0EBE3] dark:border-gray-700 bg-[#FAFAFA] dark:bg-gray-800/50 p-4 opacity-50'
+                                  : 'rounded-2xl border border-[#F0EBE3] dark:border-gray-700 bg-white dark:bg-gray-800 p-4 hover:border-[#E0D8CC] dark:hover:border-gray-600'
                           }`}
                         >
                           {/* Badge + Dauer */}
@@ -346,11 +346,11 @@ export default function BackplanPage() {
                               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${
                                 step.type === 'Aktion'
                                   ? 'bg-[#8B7355] text-white'
-                                  : 'bg-[#F5F0E8] text-[#8B7355]'
+                                  : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'
                               }`}>
                                 {step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
                               </span>
-                              <span className="text-[11px] text-gray-300 font-bold">
+                              <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">
                                 {formatDuration(step.duration)}
                               </span>
                             </div>
@@ -359,7 +359,7 @@ export default function BackplanPage() {
 
                           {/* Anleitung */}
                           <p className={`text-[15px] leading-relaxed m-0 ${
-                            isActive ? 'text-[17px] font-semibold text-[#2D2D2D]' : isDone ? 'text-gray-400 line-through' : 'text-gray-600 font-medium'
+                            isActive ? 'text-[17px] font-semibold text-[#2D2D2D] dark:text-gray-100' : isDone ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-600 dark:text-gray-300 font-medium'
                           }`}>
                             {step.instruction}
                           </p>
@@ -370,7 +370,7 @@ export default function BackplanPage() {
                               {/* Timer */}
                               <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${
                                 step.type === 'Wartezeit'
-                                  ? 'bg-[#F5F0E8]'
+                                  ? 'bg-[#F5F0E8] dark:bg-gray-700'
                                   : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'
                               }`}>
                                 <div>
@@ -380,7 +380,7 @@ export default function BackplanPage() {
                                     {step.type === 'Wartezeit' ? 'Restzeit' : 'Timer'}
                                   </div>
                                   <div className={`text-[28px] font-extrabold tabular-nums tracking-tight ${
-                                    step.type === 'Wartezeit' ? 'text-[#2D2D2D]' : 'text-white'
+                                    step.type === 'Wartezeit' ? 'text-[#2D2D2D] dark:text-gray-100' : 'text-white'
                                   }`}>
                                     {formatCountdown(remainingSeconds)}
                                   </div>
@@ -414,16 +414,16 @@ export default function BackplanPage() {
 
                               {/* Zutaten (nur bei Aktion) */}
                               {step.type === 'Aktion' && step.ingredients.length > 0 && (
-                                <div className="mt-4 bg-white rounded-2xl p-4 border border-[#F0EBE3]">
-                                  <div className="text-[10px] font-extrabold text-gray-300 uppercase tracking-widest mb-3">
+                                <div className="mt-4 bg-white dark:bg-gray-800 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-700">
+                                  <div className="text-[10px] font-extrabold text-gray-300 dark:text-gray-500 uppercase tracking-widest mb-3">
                                     Zutaten – {step.phase}
                                   </div>
                                   {step.ingredients.map((ing: any, ii: number) => (
                                     <div key={ii} className={`flex justify-between py-2 text-[14px] ${ // py-2 für mehr Klickfläche
-                                      ii < step.ingredients.length - 1 ? 'border-b border-[#F8F6F2]' : ''
+                                      ii < step.ingredients.length - 1 ? 'border-b border-[#F8F6F2] dark:border-gray-700' : ''
                                     }`}>
-                                      <span className="text-gray-600 font-medium">{ing.name}</span>
-                                      <span className="font-extrabold text-[#2D2D2D] bg-[#F8F6F2] px-2.5 py-0.5 rounded-lg">
+                                      <span className="text-gray-600 dark:text-gray-300 font-medium">{ing.name}</span>
+                                      <span className="font-extrabold text-[#2D2D2D] dark:text-gray-100 bg-[#F8F6F2] dark:bg-gray-700 px-2.5 py-0.5 rounded-lg">
                                         {ing.amount} {ing.unit}
                                       </span>
                                     </div>
@@ -432,7 +432,7 @@ export default function BackplanPage() {
                               )}
 
                               {/* Zeitspanne */}
-                              <div className="mt-3 flex justify-between text-[11px] text-gray-300 font-semibold">
+                              <div className="mt-3 flex justify-between text-[11px] text-gray-300 dark:text-gray-500 font-semibold">
                                 <span>{formatTime(step.start)} Uhr</span>
                                 <span>→</span>
                                 <span>{formatTime(step.end)} Uhr</span>
@@ -448,12 +448,12 @@ export default function BackplanPage() {
                 {/* ENDZEITPUNKT */}
                 <div className="flex gap-4 mt-2">
                   <div className="w-[50px] text-right flex-shrink-0 pt-3">
-                    <span className="text-[11px] font-extrabold text-green-500">
+                    <span className="text-[11px] font-extrabold text-green-500 dark:text-green-400">
                       {extractTimeFromString(recipe.planned_at)}
                     </span>
                   </div>
-                  <div className="flex-1 rounded-2xl border-2 border-green-100 bg-green-50 p-4">
-                    <span className="text-green-700 font-bold text-[14px]">Brot fertig!</span>
+                  <div className="flex-1 rounded-2xl border-2 border-green-100 dark:border-green-800 bg-green-50 dark:bg-green-900/30 p-4">
+                    <span className="text-green-700 dark:text-green-300 font-bold text-[14px]">Brot fertig!</span>
                   </div>
                 </div>
 
@@ -486,20 +486,20 @@ export default function BackplanPage() {
         const nextStep = timeline[nextIndex];
 
         return (
-          <div key={`next-${recipe.id}`} className="fixed bottom-0 left-0 right-0 z-40 bg-[#FDFCFB]/95 backdrop-blur-xl border-t border-[#F0EBE3]">
+          <div key={`next-${recipe.id}`} className="fixed bottom-0 left-0 right-0 z-40 bg-[#FDFCFB]/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-[#F0EBE3] dark:border-gray-700">
             <div className="max-w-3xl mx-auto px-6 py-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#F5F0E8] flex items-center justify-center flex-shrink-0 text-[15px]">
+              <div className="w-10 h-10 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center flex-shrink-0 text-[15px]">
                 {nextStep.type === 'Aktion' ? '👐' : '⏳'}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[10px] font-bold text-[#8B7355] uppercase tracking-widest">
                   Nächster Schritt um {formatTime(nextStep.start)}
                 </div>
-                <div className="text-[13px] font-semibold text-[#2D2D2D] truncate">
+                <div className="text-[13px] font-semibold text-[#2D2D2D] dark:text-gray-100 truncate">
                   {nextStep.instruction}
                 </div>
               </div>
-              <span className="text-[11px] font-bold text-gray-300 flex-shrink-0">
+              <span className="text-[11px] font-bold text-gray-300 dark:text-gray-500 flex-shrink-0">
                 {formatDuration(nextStep.duration)}
               </span>
             </div>
@@ -522,16 +522,16 @@ export default function BackplanPage() {
             onClick={() => setShowOverview(null)}
           >
             <div
-              className="w-full max-w-[420px] bg-[#FFFDF9] h-full overflow-y-auto p-7"
+              className="w-full max-w-[420px] bg-[#FFFDF9] dark:bg-gray-900 h-full overflow-y-auto p-7"
               style={{ boxShadow: '-8px 0 40px rgba(0,0,0,0.1)' }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-extrabold">Alle Schritte</h2>
+                <h2 className="text-xl font-extrabold dark:text-gray-100">Alle Schritte</h2>
                 <button
                   onClick={() => setShowOverview(null)}
-                  className="w-9 h-9 rounded-xl bg-[#F5F0E8] flex items-center justify-center text-[#8B7355] hover:bg-[#E8E2D8] transition-colors"
+                  className="w-9 h-9 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center text-[#8B7355] hover:bg-[#E8E2D8] dark:hover:bg-gray-600 transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -540,19 +540,19 @@ export default function BackplanPage() {
               {/* Phasen */}
               {(recipe.dough_sections || []).map((section: any, si: number) => (
                 <div key={si} className="mb-7">
-                  <div className="text-[13px] font-extrabold text-[#8B7355] uppercase tracking-widest mb-3 pb-2 border-b-2 border-[#F0EBE3]">
+                  <div className="text-[13px] font-extrabold text-[#8B7355] uppercase tracking-widest mb-3 pb-2 border-b-2 border-[#F0EBE3] dark:border-gray-700">
                     {section.name}
                   </div>
 
                   {/* Zutaten */}
-                  <div className="bg-[#FAF7F2] rounded-2xl p-4 mb-3 border border-[#F0EBE3]">
-                    <div className="text-[10px] font-extrabold text-gray-300 uppercase tracking-widest mb-2">Zutaten</div>
+                  <div className="bg-[#FAF7F2] dark:bg-gray-800 rounded-2xl p-4 mb-3 border border-[#F0EBE3] dark:border-gray-700">
+                    <div className="text-[10px] font-extrabold text-gray-300 dark:text-gray-500 uppercase tracking-widest mb-2">Zutaten</div>
                     {(section.ingredients || []).map((ing: any, ii: number) => (
                       <div key={ii} className={`flex justify-between py-1.5 text-[13px] ${
-                        ii < section.ingredients.length - 1 ? 'border-b border-[#EDE8DF]' : ''
+                        ii < section.ingredients.length - 1 ? 'border-b border-[#EDE8DF] dark:border-gray-700' : ''
                       }`}>
-                        <span className="text-gray-500">{ing.name}</span>
-                        <span className="font-bold text-[#2D2D2D]">{ing.amount} {ing.unit}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{ing.name}</span>
+                        <span className="font-bold text-[#2D2D2D] dark:text-gray-100">{ing.amount} {ing.unit}</span>
                       </div>
                     ))}
                   </div>
@@ -570,25 +570,25 @@ export default function BackplanPage() {
                         <div key={sti} className={`flex gap-2.5 p-3 rounded-xl ${
                           isActive
                             ? 'bg-[#8B7355] text-white'
-                            : 'bg-white border border-[#F0EBE3]'
+                            : 'bg-white dark:bg-gray-800 border border-[#F0EBE3] dark:border-gray-700'
                         } ${isDone ? 'opacity-40' : ''}`}>
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[9px] font-extrabold flex-shrink-0 mt-0.5 ${
                             isActive
                               ? 'border-white/40 text-white'
                               : step.type === 'Aktion'
                                 ? 'bg-[#8B7355] border-[#8B7355] text-white'
-                                : 'border-[#D4C9B8] text-gray-400'
+                                : 'border-[#D4C9B8] dark:border-gray-600 text-gray-400 dark:text-gray-500'
                           }`}>
                             {sti + 1}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className={`text-[12px] font-medium leading-relaxed m-0 ${
                               isDone ? 'line-through' : ''
-                            } ${isActive ? 'text-white' : 'text-gray-600'}`}>
+                            } ${isActive ? 'text-white' : 'text-gray-600 dark:text-gray-300'}`}>
                               {step.instruction}
                             </p>
                             <span className={`text-[10px] font-bold mt-1 inline-block ${
-                              isActive ? 'text-white/60' : 'text-gray-300'
+                              isActive ? 'text-white/60' : 'text-gray-300 dark:text-gray-500'
                             }`}>
                               {step.type} · {formatDuration(parseInt(step.duration) || 0)}
                               {globalIdx >= 0 && timeline[globalIdx] && ` · ${formatTime(timeline[globalIdx].start)}`}
