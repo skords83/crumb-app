@@ -28,7 +28,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] flex items-center justify-center px-4">
+    <div className="min-h-[100dvh] bg-[#F4F7F8] dark:bg-[#0F172A] flex items-center justify-center px-4 py-8">
       <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-[#8B7355] rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -83,7 +83,7 @@ export default function LoginPage() {
             )}
             {!isRegister && (
               <div className="mt-2 text-right">
-                <a href="/forgot-password" className="text-xs text-[#8B7355] hover:text-[#766248] transition-colors">
+                <a href="/forgot-password" className="text-sm text-[#8B7355] hover:text-[#766248] font-medium transition-colors underline-offset-2 hover:underline">
                   Passwort vergessen?
                 </a>
               </div>
