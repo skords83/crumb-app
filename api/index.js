@@ -8,7 +8,7 @@ const fs = require('fs');
 const { Pool } = require('pg');
 const { getScraper } = require('./scrapers/index');
 const { v4: uuidv4 } = require('uuid');
-const { authenticateToken, login, register, verify } = require('./auth');
+const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword } = require('./auth');
 
 const app = express();
 
@@ -84,6 +84,8 @@ const initDB = async () => {
       id SERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      reset_token_hash TEXT,
+      reset_token_expires TIMESTAMP WITHOUT TIME ZONE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -204,6 +206,8 @@ const checkAndNotify = async () => {
 app.post('/api/auth/login', login);
 app.post('/api/auth/register', register);
 app.get('/api/auth/verify', authenticateToken, verify);
+app.post('/api/auth/request-reset', requestPasswordReset);
+app.post('/api/auth/reset-password', resetPassword);
 
 // ============================================================
 // API ROUTES (Protected)
