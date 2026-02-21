@@ -100,7 +100,7 @@ const initDB = async () => {
       console.log("✅ Datenbank bereit"); 
       return;
     } catch (err) { 
-      console.log(`🔌 Warte auf Datenbank... (${retries} Versuche verbleibend)`);
+      console.log(`🔌 DB-Init Fehler: ${err.message} (${retries} Versuche verbleibend)`);
       retries -= 1;
       await new Promise(res => setTimeout(res, 3000));
     }
