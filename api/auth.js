@@ -59,6 +59,7 @@ const login = async (req, res) => {
       token,
       user: {
         id: user.id,
+        username: user.username,
         email: user.email
       }
     });
@@ -70,28 +71,37 @@ const login = async (req, res) => {
 
 // Register
 const register = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, username } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password required' });
+  if (!email || !password || !username) {
+    return res.status(400).json({ error: 'Email, username and password required' });
   }
 
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
+  if (username.length < 2) {
+    return res.status(400).json({ error: 'Username must be at least 2 characters' });
+  }
+
   try {
-    const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ error: 'User already exists' });
+    const existingEmail = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    const existingUsername = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (existingUsername.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already taken' });
     }
 
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email',
-      [email, passwordHash]
+      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email',
+      [username, email, passwordHash]
     );
 
     const user = result.rows[0];
@@ -105,6 +115,7 @@ const register = async (req, res) => {
       token,
       user: {
         id: user.id,
+        username: user.username,
         email: user.email
       }
     });

@@ -103,7 +103,9 @@ export default function Navigation() {
                 className="flex items-center gap-2 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                 aria-label="Benutzermenü"
               >
-                <User size={20} className="text-white" />
+                <div className="w-6 h-6 rounded-full bg-[#8B7355] flex items-center justify-center text-white text-xs font-bold">
+                  {user?.username ? user.username.slice(0, 2).toUpperCase() : '?'}
+                </div>
                 <ChevronDown size={14} className="text-white" />
               </button>
 
@@ -115,8 +117,11 @@ export default function Navigation() {
                   />
                   <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
                     <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {user?.email || 'Benutzer'}
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        {user?.username || 'Benutzer'}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {user?.email}
                       </p>
                     </div>
                     <Link

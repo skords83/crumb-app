@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const { login, register, isLoading, error } = useAuth();
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function LoginPage() {
     
     try {
       if (isRegister) {
-        await register(email, password);
+        await register(email, password, username);
       } else {
         await login(email, password);
       }
@@ -49,6 +50,23 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {isRegister && (
+            <div>
+              <label className="block text-sm font-bold text-gray-300 mb-2">
+                Benutzername
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-700 bg-gray-900 text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors placeholder:text-gray-600"
+                placeholder="deinname"
+                required
+                minLength={2}
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-bold text-gray-300 mb-2">
               E-Mail
