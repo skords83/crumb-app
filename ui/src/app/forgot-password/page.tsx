@@ -40,50 +40,50 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="bg-[#F4F7F8] dark:bg-[#0F172A] flex items-center justify-center px-4 py-8">
-      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
+    <div className="min-h-[100dvh] bg-[#0F172A] flex items-center justify-center px-4 py-8">
+      <div className="max-w-md w-full bg-gray-800/80 backdrop-blur-sm rounded-3xl shadow-xl p-8 border border-gray-700">
         <button
           onClick={() => router.push('/login')}
-          className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-[#8B7355] mb-6 transition-colors"
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 mb-6 transition-colors"
         >
           <ArrowLeft size={16} />
           Zurück zur Anmeldung
         </button>
 
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-[#8B7355] rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-black text-white">C</span>
+          <div className="w-16 h-16 border-2 border-white/30 rounded-full flex items-center justify-center bg-white/10 overflow-hidden mx-auto mb-4">
+            <img src="/logo.png" alt="Crumb Logo" className="w-11 h-11 object-contain" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+          <h1 className="text-2xl font-bold text-gray-100">
             Passwort vergessen?
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2">
+          <p className="text-gray-400 mt-2">
             Gib deine E-Mail-Adresse ein, um einen Link zum Zurücksetzen zu erhalten.
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-300 text-sm">
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-800 rounded-xl text-red-300 text-sm">
             {error}
           </div>
         )}
 
         {message && (
-          <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl text-green-600 dark:text-green-300 text-sm">
+          <div className="mb-6 p-4 bg-green-900/30 border border-green-800 rounded-xl text-green-300 text-sm">
             {message}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-bold text-gray-300 mb-2">
               E-Mail
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-700 bg-gray-900 text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors placeholder:text-gray-600"
               placeholder="deine@email.de"
               required
             />
