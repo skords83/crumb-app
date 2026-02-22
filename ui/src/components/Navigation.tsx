@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, User, ChevronDown, KeyRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Navigation() {
@@ -13,10 +13,11 @@ export default function Navigation() {
   
   if (isAuthPage) return null;
   
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -88,6 +89,59 @@ export default function Navigation() {
           </div>
           
           <div className="flex items-center gap-4">
+            {hasActivePlan && (
+              <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/20">
+                <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                Backvorgang läuft
+              </div>
+            )}
+
+            {/* User Menu Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                aria-label="Benutzermenü"
+              >
+                <User size={20} className="text-white" />
+                <ChevronDown size={14} className="text-white" />
+              </button>
+
+              {showUserMenu && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowUserMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {user?.email || 'Benutzer'}
+                      </p>
+                    </div>
+                    <Link
+                      href="/profile"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <KeyRound size={16} />
+                      Passwort ändern
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        logout();
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      <LogOut size={16} />
+                      Abmelden
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={toggleTheme}
               className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
@@ -99,22 +153,6 @@ export default function Navigation() {
                 <Moon size={20} className="text-white" />
               )}
             </button>
-
-            <button
-              onClick={logout}
-              className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              aria-label="Abmelden"
-              title="Abmelden"
-            >
-              <LogOut size={20} className="text-white" />
-            </button>
-
-            {hasActivePlan && (
-              <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/20">
-                <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-                Backvorgang läuft
-              </div>
-            )}
           </div>
         </div>
 

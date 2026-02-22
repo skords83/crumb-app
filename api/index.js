@@ -8,7 +8,7 @@ const fs = require('fs');
 const { Pool } = require('pg');
 const { getScraper } = require('./scrapers/index');
 const { v4: uuidv4 } = require('uuid');
-const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword } = require('./auth');
+const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 
 const app = express();
 
@@ -208,6 +208,7 @@ app.post('/api/auth/register', register);
 app.get('/api/auth/verify', authenticateToken, verify);
 app.post('/api/auth/request-reset', requestPasswordReset);
 app.post('/api/auth/reset-password', resetPassword);
+app.post('/api/auth/change-password', authenticateToken, changePassword);
 
 // ============================================================
 // API ROUTES (Protected)
