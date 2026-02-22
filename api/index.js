@@ -265,6 +265,52 @@ app.post('/api/import', async (req, res) => {
   }
 });
 
+// ============================================================
+// HELPER FUNCTIONS für Step-Extraktion
+// ============================================================
+function extractDuration(text) {
+  if (!text) return 0;
+  
+  const patterns = [
+    { regex: /(\d+[,.]?\d*)\s*Stunden?/i, multiplier: 60 },
+    { regex: /(\d+[,.]?\d*)\s*h\b/i, multiplier: 60 },
+    { regex: /(\d+)\s*Minuten?/i, multiplier: 1 },
+    { regex: /(\d+)\s*min\b/i, multiplier: 1 },
+    { regex: /(\d+):(\d+)\s*(Uhr|Stunden)?/i, special: 'time' }
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern.regex);
+    if (match) {
+      if (pattern.special === 'time') {
+        const hours = parseInt(match[1]);
+        const mins = parseInt(match[2]);
+        return hours * 60 + mins;
+      } else {
+        const value = parseFloat(match[1].replace(',', '.'));
+        return Math.round(value * pattern.multiplier);
+      }
+    }
+  }
+  
+  return 0;
+}
+
+function detectStepType(text) {
+  if (!text) return 'other';
+  
+  const lower = text.toLowerCase();
+  
+  if (lower.match(/misch|kneten|rühr|verarbeit|verbind/)) return 'mixing';
+  if (lower.match(/ruhen|reifen|gare|gehen|aufgehen|stockgare|stückgare/)) return 'resting';
+  if (lower.match(/form|wirk|rund|einschlag|schluss/)) return 'shaping';
+  if (lower.match(/back|ofen|temperatur|dampf/)) return 'baking';
+  if (lower.match(/dehn|falt|stretch/)) return 'folding';
+  if (lower.match(/kühl|kalt|refriger/)) return 'cold_proof';
+  
+  return 'other';
+}
+
 // Parse recipe from uploaded HTML file
 app.post('/api/import/html', async (req, res) => {
   try {
@@ -299,7 +345,102 @@ app.post('/api/import/html', async (req, res) => {
       });
     }
 
-    // Bild-Download Logik (wie bei /api/import)
+    // ============================================================
+    // FIX 1: DEDUPLICATE INGREDIENTS
+    // ============================================================
+    if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
+      const seen = new Map();
+      const uniqueIngredients = [];
+      
+      recipeData.ingredients.forEach(ing => {
+        const normalizedName = ing.name.toLowerCase().replace(/\s+/g, ' ').trim();
+        
+        if (!seen.has(normalizedName)) {
+          seen.set(normalizedName, true);
+          uniqueIngredients.push(ing);
+        }
+      });
+      
+      recipeData.ingredients = uniqueIngredients;
+      console.log(`✅ Dedupliziert: ${recipeData.ingredients.length} einzigartige Zutaten`);
+    }
+
+    // ============================================================
+    // FIX 2: EXTRACT STEPS if missing
+    // ============================================================
+    if (!recipeData.steps || recipeData.steps.length === 0) {
+      console.log('📋 Versuche Schritte zu extrahieren...');
+      const steps = [];
+      
+      $('h2, h3, h4').each((i, elem) => {
+        const heading = $(elem).text().trim();
+        
+        if (heading.match(/Hauptteig|Zubereitung|Anleitung|Herstellung/i)) {
+          console.log(`📍 Gefunden: ${heading}`);
+          let currentElem = $(elem).next();
+          let instructionTexts = [];
+          
+          while (currentElem.length && !currentElem.is('h2, h3, h4')) {
+            if (currentElem.is('p')) {
+              const text = currentElem.text().trim();
+              if (text && text.length > 10) {
+                instructionTexts.push(text);
+              }
+            } else if (currentElem.is('ol, ul')) {
+              currentElem.find('li').each((j, li) => {
+                const text = $(li).text().trim();
+                if (text && text.length > 10) {
+                  instructionTexts.push(text);
+                }
+              });
+            }
+            currentElem = currentElem.next();
+          }
+          
+          instructionTexts.forEach((text, idx) => {
+            const duration = extractDuration(text);
+            steps.push({
+              instruction: text,
+              duration: duration || 0,
+              type: detectStepType(text)
+            });
+          });
+        }
+      });
+      
+      // Fallback: nummerierte Listen
+      if (steps.length === 0) {
+        console.log('🔍 Suche nach nummerierten Listen...');
+        $('ol li').each((i, elem) => {
+          const text = $(elem).text().trim();
+          if (text && text.length > 10 && !text.match(/^\d+\s*g\s/i)) {
+            const duration = extractDuration(text);
+            steps.push({
+              instruction: text,
+              duration: duration || 0,
+              type: detectStepType(text)
+            });
+          }
+        });
+      }
+      
+      // Fallback: Default Steps
+      if (steps.length === 0) {
+        console.log('⚠️ Keine Schritte gefunden - nutze Defaults');
+        steps.push(
+          { instruction: 'Alle Zutaten in der angegebenen Reihenfolge mischen', duration: 10, type: 'mixing' },
+          { instruction: 'Teig ruhen lassen und dabei dehnen und falten', duration: 90, type: 'resting' },
+          { instruction: 'Teig formen', duration: 10, type: 'shaping' },
+          { instruction: 'Stückgare im Gärkorb', duration: 60, type: 'proofing' },
+          { instruction: 'Im vorgeheizten Ofen backen', duration: 45, type: 'baking' }
+        );
+      }
+      
+      recipeData.steps = steps;
+      console.log(`✅ ${steps.length} Schritte extrahiert`);
+    }
+
+    // Bild-Download
     if (recipeData.image_url && recipeData.image_url.startsWith('http')) {
       try {
         const response = await axios.get(recipeData.image_url, { 
@@ -314,10 +455,16 @@ app.post('/api/import/html', async (req, res) => {
       } catch (e) { console.error("⚠️ Bild-Fehler:", e.message); }
     }
 
+    console.log('✅ HTML erfolgreich geparst:', {
+      title: recipeData.title,
+      ingredients: recipeData.ingredients?.length || 0,
+      steps: recipeData.steps?.length || 0
+    });
+
     res.json(recipeData);
   } catch (error) {
     console.error("🚨 HTML PARSE FEHLER:", error.message);
-    res.status(500).json({ error: 'Failed to parse HTML file' });
+    res.status(500).json({ error: 'Failed to parse HTML file: ' + error.message });
   }
 });
 
