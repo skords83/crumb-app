@@ -34,13 +34,14 @@ export default function Navigation() {
             'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
           }
         });
-        const data = await res.json();
-        const active = data.some((r: any) => r.planned_at !== null);
-        setHasActivePlan(active);
-      } catch (err) {
-        console.error("Nav-Check Fehler:", err);
-      }
-    };
+    const data = await res.json();
+    // Fix: prüfen ob data wirklich ein Array ist
+    const active = Array.isArray(data) && data.some((r: any) => r.planned_at !== null);
+    setHasActivePlan(active);
+  } catch (err) {
+    console.error("Nav-Check Fehler:", err);
+  }
+};
 
     checkActivePlans();
     const interval = setInterval(checkActivePlans, 30000);
