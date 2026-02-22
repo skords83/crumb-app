@@ -323,27 +323,47 @@ app.post('/api/import/html', async (req, res) => {
     const cheerio = require('cheerio');
     const $ = cheerio.load(html);
     
-    let recipeData = null;
     const fname = filename || 'uploaded.html';
     
-    // Try to detect source and parse
-    if (fname.includes('ploetzblog')) {
-      const { parseHtml } = require('./scrapers/ploetzblog');
-      recipeData = await parseHtml($, fname);
-    } else if (fname.includes('homebaking')) {
-      const { parseHtml } = require('./scrapers/homebaking');
-      recipeData = await parseHtml($, fname);
-    } else {
-      // Default to Plötzblog parser
-      const { parseHtml } = require('./scrapers/ploetzblog');
-      recipeData = await parseHtml($, fname);
-    }
+    // ============================================================
+    // Direktes HTML-Parsing (NICHT URL-Scraper nutzen!)
+    // ============================================================
+    let recipeData = {
+      title: $('h1.entry-title').first().text().trim() || 
+             $('h1').first().text().trim() || 
+             'Importiertes Rezept',
+      description: $('meta[property="og:description"]').attr('content') || '',
+      image_url: $('meta[property="og:image"]').attr('content') || '',
+      source_url: fname,
+      ingredients: [],
+      steps: [],
+      dough_sections: []
+    };
 
-    if (!recipeData) {
-      return res.status(400).json({ 
-        error: 'Could not parse recipe from HTML. Make sure it\'s a supported recipe page.' 
-      });
-    }
+    console.log('🔍 Starte HTML-Parsing für:', recipeData.title);
+
+    // ============================================================
+    // ZUTATEN aus Tabellen extrahieren
+    // ============================================================
+    $('table tr').each((i, tr) => {
+      const cells = $(tr).find('td');
+      if (cells.length >= 2) {
+        const amount = $(cells[0]).text().trim();
+        const name = $(cells[1]).text().trim();
+        
+        // Nur wenn Amount eine Menge enthält und Name nicht leer
+        if (amount.match(/\d+[,.]?\d*\s*(g|kg|ml|l|%|EL|TL|Prise)/i) && name && name.length > 2) {
+          recipeData.ingredients.push({
+            name: name,
+            amount: amount,
+            unit: '',
+            notes: ''
+          });
+        }
+      }
+    });
+
+    console.log(`🥖 Aus Tabellen extrahiert: ${recipeData.ingredients.length} Zutaten`);
 
     // ============================================================
     // FIX 1: DEDUPLICATE INGREDIENTS
@@ -366,81 +386,83 @@ app.post('/api/import/html', async (req, res) => {
     }
 
     // ============================================================
-    // FIX 2: EXTRACT STEPS if missing
+    // FIX 2: EXTRACT STEPS
     // ============================================================
-    if (!recipeData.steps || recipeData.steps.length === 0) {
-      console.log('📋 Versuche Schritte zu extrahieren...');
-      const steps = [];
+    console.log('📋 Versuche Schritte zu extrahieren...');
+    const steps = [];
+    
+    // Methode 1: Suche "Hauptteig" Section
+    $('h2, h3, h4').each((i, elem) => {
+      const heading = $(elem).text().trim();
       
-      $('h2, h3, h4').each((i, elem) => {
-        const heading = $(elem).text().trim();
+      if (heading.match(/Hauptteig|Zubereitung|Anleitung|Herstellung/i)) {
+        console.log(`📍 Gefunden: ${heading}`);
+        let currentElem = $(elem).next();
+        let instructionTexts = [];
         
-        if (heading.match(/Hauptteig|Zubereitung|Anleitung|Herstellung/i)) {
-          console.log(`📍 Gefunden: ${heading}`);
-          let currentElem = $(elem).next();
-          let instructionTexts = [];
-          
-          while (currentElem.length && !currentElem.is('h2, h3, h4')) {
-            if (currentElem.is('p')) {
-              const text = currentElem.text().trim();
+        while (currentElem.length && !currentElem.is('h2, h3, h4')) {
+          if (currentElem.is('p')) {
+            const text = currentElem.text().trim();
+            if (text && text.length > 10) {
+              instructionTexts.push(text);
+            }
+          } else if (currentElem.is('ol, ul')) {
+            currentElem.find('li').each((j, li) => {
+              const text = $(li).text().trim();
               if (text && text.length > 10) {
                 instructionTexts.push(text);
               }
-            } else if (currentElem.is('ol, ul')) {
-              currentElem.find('li').each((j, li) => {
-                const text = $(li).text().trim();
-                if (text && text.length > 10) {
-                  instructionTexts.push(text);
-                }
-              });
-            }
-            currentElem = currentElem.next();
-          }
-          
-          instructionTexts.forEach((text, idx) => {
-            const duration = extractDuration(text);
-            steps.push({
-              instruction: text,
-              duration: duration || 0,
-              type: detectStepType(text)
             });
+          }
+          currentElem = currentElem.next();
+        }
+        
+        instructionTexts.forEach((text, idx) => {
+          const duration = extractDuration(text);
+          steps.push({
+            instruction: text,
+            duration: duration || 0,
+            type: detectStepType(text)
+          });
+        });
+      }
+    });
+    
+    // Methode 2: Fallback - nummerierte Listen
+    if (steps.length === 0) {
+      console.log('🔍 Suche nach nummerierten Listen...');
+      $('ol li').each((i, elem) => {
+        const text = $(elem).text().trim();
+        // Keine Zutaten (beginnen mit Mengenangabe)
+        if (text && text.length > 10 && !text.match(/^\d+[,.]?\d*\s*(g|kg|ml)/i)) {
+          const duration = extractDuration(text);
+          steps.push({
+            instruction: text,
+            duration: duration || 0,
+            type: detectStepType(text)
           });
         }
       });
-      
-      // Fallback: nummerierte Listen
-      if (steps.length === 0) {
-        console.log('🔍 Suche nach nummerierten Listen...');
-        $('ol li').each((i, elem) => {
-          const text = $(elem).text().trim();
-          if (text && text.length > 10 && !text.match(/^\d+\s*g\s/i)) {
-            const duration = extractDuration(text);
-            steps.push({
-              instruction: text,
-              duration: duration || 0,
-              type: detectStepType(text)
-            });
-          }
-        });
-      }
-      
-      // Fallback: Default Steps
-      if (steps.length === 0) {
-        console.log('⚠️ Keine Schritte gefunden - nutze Defaults');
-        steps.push(
-          { instruction: 'Alle Zutaten in der angegebenen Reihenfolge mischen', duration: 10, type: 'mixing' },
-          { instruction: 'Teig ruhen lassen und dabei dehnen und falten', duration: 90, type: 'resting' },
-          { instruction: 'Teig formen', duration: 10, type: 'shaping' },
-          { instruction: 'Stückgare im Gärkorb', duration: 60, type: 'proofing' },
-          { instruction: 'Im vorgeheizten Ofen backen', duration: 45, type: 'baking' }
-        );
-      }
-      
-      recipeData.steps = steps;
-      console.log(`✅ ${steps.length} Schritte extrahiert`);
     }
+    
+    // Methode 3: Fallback - Default Steps
+    if (steps.length === 0) {
+      console.log('⚠️ Keine Schritte gefunden - nutze Defaults');
+      steps.push(
+        { instruction: 'Alle Zutaten in der angegebenen Reihenfolge mischen', duration: 10, type: 'mixing' },
+        { instruction: 'Teig ruhen lassen und dabei dehnen und falten', duration: 90, type: 'resting' },
+        { instruction: 'Teig formen', duration: 10, type: 'shaping' },
+        { instruction: 'Stückgare im Gärkorb', duration: 60, type: 'proofing' },
+        { instruction: 'Im vorgeheizten Ofen backen', duration: 45, type: 'baking' }
+      );
+    }
+    
+    recipeData.steps = steps;
+    console.log(`✅ ${steps.length} Schritte extrahiert`);
 
-    // Bild-Download
+    // ============================================================
+    // BILD DOWNLOAD
+    // ============================================================
     if (recipeData.image_url && recipeData.image_url.startsWith('http')) {
       try {
         const response = await axios.get(recipeData.image_url, { 
@@ -452,7 +474,9 @@ app.post('/api/import/html', async (req, res) => {
         const fullPath = path.join(uploadDir, fileName);
         fs.writeFileSync(fullPath, response.data);
         recipeData.image_url = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
-      } catch (e) { console.error("⚠️ Bild-Fehler:", e.message); }
+      } catch (e) { 
+        console.error("⚠️ Bild-Download Fehler:", e.message); 
+      }
     }
 
     console.log('✅ HTML erfolgreich geparst:', {
@@ -462,6 +486,7 @@ app.post('/api/import/html', async (req, res) => {
     });
 
     res.json(recipeData);
+    
   } catch (error) {
     console.error("🚨 HTML PARSE FEHLER:", error.message);
     res.status(500).json({ error: 'Failed to parse HTML file: ' + error.message });
