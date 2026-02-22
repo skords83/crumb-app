@@ -114,7 +114,7 @@ export default function RecipeForm({
         
         {/* HEADER: BILD & TITEL */}
         <div className="bg-gray-50/50 dark:bg-gray-700/50 p-8 border-b border-gray-100 dark:border-gray-600 flex flex-col md:flex-row gap-8 items-start">
-         <div className="group relative w-full md:w-32 h-32 bg-white rounded-3xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0 shadow-inner hover:border-[#8B7355] transition-all">
+          <div className="group relative w-full md:w-32 h-32 bg-white dark:bg-gray-700 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-600 flex items-center justify-center overflow-hidden shrink-0 shadow-inner hover:border-[#8B7355] transition-all">
   {isUploading ? (
     <div className="flex flex-col items-center gap-2">
       <div className="w-6 h-6 border-2 border-[#8B7355] border-t-transparent rounded-full animate-spin"></div>
@@ -132,9 +132,9 @@ export default function RecipeForm({
       </button>
     </>
   ) : (
-    <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full hover:bg-gray-50 transition-colors">
-      <Plus className="text-gray-300 mb-1" size={24} />
-      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Upload</span>
+    <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+      <Plus className="text-gray-300 dark:text-gray-500 mb-1" size={24} />
+      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Upload</span>
       <input 
         type="file" 
         className="hidden" 
@@ -176,16 +176,16 @@ export default function RecipeForm({
 </div>
           <div className="flex-1 w-full space-y-4">
             <input 
-              className="text-4xl font-black w-full bg-transparent outline-none border-b-2 border-transparent focus:border-[#8B7355] pb-2 transition-all tracking-tight" 
+              className="text-4xl font-black w-full bg-transparent dark:bg-transparent outline-none border-b-2 border-transparent focus:border-[#8B7355] pb-2 transition-all tracking-tight placeholder-gray-300 dark:placeholder-gray-600"
               value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Name deines Brotes..."
             />
             <textarea 
-              className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2 text-sm outline-none focus:border-[#8B7355] shadow-sm resize-none"
+              className="w-full bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-4 py-2 text-sm outline-none focus:border-[#8B7355] shadow-sm resize-none dark:text-gray-100"
               value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Beschreibung..."
               rows={2}
             />
             <input 
-              className="w-full bg-white border border-gray-100 rounded-xl px-4 py-2 text-xs outline-none focus:border-[#8B7355] shadow-sm text-gray-400"
+              className="w-full bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-4 py-2 text-xs outline-none focus:border-[#8B7355] shadow-sm text-gray-400 dark:text-gray-300"
               value={imageUrl || ""} // Das || "" verhindert, dass React meckert, wenn der Wert noch leer ist
               onChange={(e) => setImageUrl(e.target.value)} 
               placeholder="Bild URL..."
@@ -196,14 +196,14 @@ export default function RecipeForm({
         <div className="p-8 md:p-12 space-y-12">
           {/* GESAMT-ZUTATENLISTE */}
           {totalIngredients.length > 0 && (
-            <div className="bg-[#8B7355]/5 rounded-3xl p-6 border border-[#8B7355]/10">
+            <div className="bg-[#8B7355]/5 dark:bg-[#8B7355]/10 rounded-3xl p-6 border border-[#8B7355]/10">
               <div className="flex items-center gap-2 mb-4 text-[#8B7355]">
                 <List size={18} />
                 <h4 className="font-black text-xs uppercase tracking-widest">Gesamtzutaten</h4>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {totalIngredients.map((ing, idx) => (
-                  <div key={`total-${idx}`} className="flex flex-col bg-white/60 px-4 py-2 rounded-2xl border border-white shadow-sm">
+                  <div key={`total-${idx}`} className="flex flex-col bg-white/60 dark:bg-gray-700/60 px-4 py-2 rounded-2xl border border-white dark:border-gray-600 shadow-sm">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{ing.name}</span>
                     <span className="text-sm font-black text-[#8B7355]">{ing.amount} {ing.unit}</span>
                   </div>
@@ -221,13 +221,13 @@ export default function RecipeForm({
           {/* PHASEN-LOOP */}
           <div className="space-y-6">
             {doughSections.map((section: any, sIdx: number) => (
-              <div key={`section-${sIdx}`} className="bg-[#fcfcfc] rounded-2xl p-6 md:p-8 border border-gray-100 shadow-sm relative transition-all hover:border-[#8B7355]/20 group">
+              <div key={`section-${sIdx}`} className="bg-[#fcfcfc] dark:bg-gray-800/50 rounded-2xl p-6 md:p-8 border border-gray-100 dark:border-gray-700 shadow-sm relative transition-all hover:border-[#8B7355]/20 group">
                 
                 {/* PHASEN HEADER */}
-                <div className="flex flex-col md:flex-row justify-between gap-4 mb-8 pb-4 border-b border-gray-100/50">
+                <div className="flex flex-col md:flex-row justify-between gap-4 mb-8 pb-4 border-b border-gray-100/50 dark:border-gray-600/50">
                   <div className="flex-1 space-y-2">
                     <select 
-                      className="bg-white border border-gray-200 rounded-lg px-3 py-1 text-[10px] font-black uppercase text-[#8B7355] outline-none shadow-sm cursor-pointer"
+                      className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1 text-[10px] font-black uppercase text-[#8B7355] outline-none shadow-sm cursor-pointer"
                       value={PHASE_TYPES.find(t => t.label === section.name) ? section.name : "Custom"}
                       onChange={(e) => {
                         const selected = PHASE_TYPES.find(t => t.label === e.target.value);
@@ -241,7 +241,7 @@ export default function RecipeForm({
                       {PHASE_TYPES.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
                     </select>
                     <input 
-                      className="text-2xl font-black text-gray-800 bg-transparent outline-none w-full tracking-tight"
+                      className="text-2xl font-black text-gray-800 dark:text-gray-100 bg-transparent outline-none w-full tracking-tight"
                       value={section.name} 
                       onChange={(e) => {
                         const newS = [...doughSections];
@@ -255,13 +255,13 @@ export default function RecipeForm({
                         newS[sIdx].is_parallel = e.target.checked;
                         setDoughSections(newS);
                       }} />
-                      <div className={`w-7 h-3.5 rounded-full transition-colors relative ${section.is_parallel ? "bg-[#8B7355]" : "bg-gray-200"}`}>
+                      <div className={`w-7 h-3.5 rounded-full transition-colors relative ${section.is_parallel ? "bg-[#8B7355]" : "bg-gray-200 dark:bg-gray-600"}`}>
                         <div className={`absolute left-0.5 top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform ${section.is_parallel ? "translate-x-3.5" : ""}`} />
                       </div>
                       <span className="text-[9px] font-black uppercase text-gray-400">Parallel ablaufend</span>
                     </label>
                   </div>
-                  <button type="button" onClick={() => removeSection(sIdx)} className="text-gray-200 hover:text-red-500 self-start pt-2"><Trash2 size={20} /></button>
+                  <button type="button" onClick={() => removeSection(sIdx)} className="text-gray-300 dark:text-gray-600 hover:text-red-500 self-start pt-2"><Trash2 size={20} /></button>
                 </div>
 
                 {/* GRID */}
@@ -270,26 +270,26 @@ export default function RecipeForm({
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8B7355]">Zutaten</p>
                     <div className="space-y-2">
                       {section.ingredients.map((ing: any, iIdx: number) => (
-                        <div key={`ing-${sIdx}-${iIdx}`} className="bg-white p-3 rounded-xl border border-gray-50 shadow-sm space-y-2 group/ing relative">
+                        <div key={`ing-${sIdx}-${iIdx}`} className="bg-white dark:bg-gray-700 p-3 rounded-xl border border-gray-50 dark:border-gray-600 shadow-sm space-y-2 group/ing relative">
                           <div className="flex gap-2">
-                            <input placeholder="Zutat" className="flex-1 text-sm font-bold bg-transparent outline-none" value={ing.name || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'name', e.target.value)} />
-                            <input placeholder="Menge" className="w-16 text-sm font-black text-center bg-gray-50 rounded-lg py-1" value={ing.amount || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'amount', e.target.value)} />
+                            <input placeholder="Zutat" className="flex-1 text-sm font-bold bg-transparent dark:bg-transparent outline-none dark:text-gray-100" value={ing.name || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'name', e.target.value)} />
+                            <input placeholder="Menge" className="w-16 text-sm font-black text-center bg-gray-50 dark:bg-gray-600 rounded-lg py-1 dark:text-gray-100" value={ing.amount || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'amount', e.target.value)} />
                             <button type="button" onClick={() => {
                               const newS = [...doughSections];
                               newS[sIdx].ingredients.splice(iIdx, 1);
                               setDoughSections(newS);
-                            }} className="text-gray-200 hover:text-red-400"><Trash2 size={14} /></button>
+                            }} className="text-gray-300 dark:text-gray-500 hover:text-red-400"><Trash2 size={14} /></button>
                           </div>
                           <div className="flex gap-2">
-                            <div className="flex items-center gap-1 bg-blue-50/50 text-blue-600 px-2 py-1 rounded-md border border-blue-100/30">
+                            <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-100/30 dark:border-blue-800/30">
                                 <TempIcon size={10} />
-                                <input placeholder="°C" className="text-[9px] font-bold bg-transparent w-6 outline-none" value={ing.temperature || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'temperature', e.target.value)} />
+                                <input placeholder="°C" className="text-[9px] font-bold bg-transparent w-6 outline-none dark:text-gray-100" value={ing.temperature || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'temperature', e.target.value)} />
                             </div>
-                            <input placeholder="Notiz..." className="text-[9px] bg-gray-50 text-gray-500 px-2 py-1 rounded-md flex-1 outline-none border border-gray-100" value={ing.note || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'note', e.target.value)} />
+                            <input placeholder="Notiz..." className="text-[9px] bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 px-2 py-1 rounded-md flex-1 outline-none border border-gray-100 dark:border-gray-500" value={ing.note || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'note', e.target.value)} />
                           </div>
                         </div>
                       ))}
-                      <button type="button" onClick={() => addIngredient(sIdx)} className="w-full py-2 border border-dashed border-gray-200 rounded-xl text-[9px] font-black text-gray-400 hover:text-[#8B7355] uppercase tracking-widest">+ Zutat</button>
+                      <button type="button" onClick={() => addIngredient(sIdx)} className="w-full py-2 border border-dashed border-gray-200 dark:border-gray-600 rounded-xl text-[9px] font-black text-gray-400 hover:text-[#8B7355] uppercase tracking-widest">+ Zutat</button>
                     </div>
                   </div>
 
@@ -297,32 +297,32 @@ export default function RecipeForm({
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8B7355]">Ablauf</p>
                     <div className="space-y-3">
                       {section.steps?.map((step: any, stIdx: number) => (
-                        <div key={`step-${sIdx}-${stIdx}`} className="flex gap-3 p-4 bg-white rounded-2xl border border-gray-50 shadow-sm relative group/step">
+                        <div key={`step-${sIdx}-${stIdx}`} className="flex gap-3 p-4 bg-white dark:bg-gray-700 rounded-2xl border border-gray-50 dark:border-gray-600 shadow-sm relative group/step">
                           <div className="flex-1 space-y-2">
                             <textarea 
-                              className="w-full bg-transparent text-sm font-semibold outline-none resize-none leading-snug" rows={1} placeholder="Schritt..."
+                              className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100" rows={1} placeholder="Schritt..."
                               value={step.instruction} onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
                             />
                             <div className="flex gap-2">
                               <select 
-                                className={`text-[8px] font-black uppercase px-2 py-1 rounded-md border outline-none ${step.type === 'Aktion' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}
+                                className={`text-[8px] font-black uppercase px-2 py-1 rounded-md border outline-none ${step.type === 'Aktion' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800' : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800'}`}
                                 value={step.type} onChange={(e) => updateStepInSection(sIdx, stIdx, 'type', e.target.value)}
                               >
                                 <option value="Aktion">Aktion</option>
                                 <option value="Warten">Warten</option>
                               </select>
-                              <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md border border-gray-100 text-[8px] font-black text-gray-400">
+                              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-[8px] font-black text-gray-400 dark:text-gray-300">
                                 <Clock size={10} />
-                                <input className="bg-transparent w-6 text-center outline-none text-gray-700" type="number" value={step.duration} onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)} /> Min.
+                                <input className="bg-transparent dark:bg-transparent w-6 text-center outline-none text-gray-700 dark:text-gray-200" type="number" value={step.duration} onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)} /> Min.
                               </div>
                             </div>
                           </div>
-                          <button type="button" onClick={() => removeStepFromSection(sIdx, stIdx)} className="text-gray-200 hover:text-red-400 self-start"><Trash2 size={14} /></button>
+                          <button type="button" onClick={() => removeStepFromSection(sIdx, stIdx)} className="text-gray-300 dark:text-gray-500 hover:text-red-400 self-start"><Trash2 size={14} /></button>
                         </div>
                       ))}
                       <div className="flex gap-2">
-                         <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 rounded-xl text-[9px] font-black uppercase text-gray-400 hover:text-[#8B7355] border border-transparent hover:border-[#8B7355]/20">+ Aktion</button>
-                         <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 rounded-xl text-[9px] font-black uppercase text-gray-400 hover:text-[#8B7355] border border-transparent hover:border-[#8B7355]/20">+ Warten</button>
+                         <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-[9px] font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>
+                         <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-[9px] font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Warten</button>
                       </div>
                     </div>
                   </div>
@@ -333,10 +333,10 @@ export default function RecipeForm({
             <button 
               type="button" 
               onClick={addSection} 
-              className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-center gap-3 group hover:border-[#8B7355] hover:bg-[#8B7355]/5 transition-all mt-4"
+              className="w-full py-4 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-3 group hover:border-[#8B7355] hover:bg-[#8B7355]/5 dark:hover:bg-[#8B7355]/10 transition-all mt-4"
             >
-              <Plus size={18} className="text-gray-300 group-hover:text-[#8B7355]" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-[#8B7355]">Nächste Phase hinzufügen</span>
+              <Plus size={18} className="text-gray-300 dark:text-gray-500 group-hover:text-[#8B7355]" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 group-hover:text-[#8B7355]">Nächste Phase hinzufügen</span>
             </button>
           </div>
 
