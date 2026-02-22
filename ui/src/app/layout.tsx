@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Navigation from "../components/Navigation";
+import MainWrapper from "@/components/MainWrapper";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -42,9 +43,9 @@ export default function RootLayout({
         <AuthProvider>
           <ProtectedRoute>
             <Navigation />
-            <main className="md:pt-32 pb-24 md:pb-8">
+            <MainWrapper>
               {children}
-            </main>
+            </MainWrapper>
           </ProtectedRoute>
         </AuthProvider>
       </body>
