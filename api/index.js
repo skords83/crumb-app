@@ -385,59 +385,81 @@ app.post('/api/import/html', async (req, res) => {
       console.log(`✅ Dedupliziert: ${recipeData.ingredients.length} einzigartige Zutaten`);
     }
 
-    // ============================================================
-// FIX 2: EXTRACT STEPS
+// ============================================================
+// FIX 2: EXTRACT STEPS - VERBESSERT
 // ============================================================
 console.log('📋 Versuche Schritte zu extrahieren...');
 const steps = [];
 
-// Methode 1: Suche "Hauptteig" Section und sammle ALLE Texte
-let foundMainSection = false;
-$('h2, h3, h4, p, li').each((i, elem) => {
+// Sammle Text unter "Hauptteig" bis zu "Quelle"
+let isInMainSection = false;
+let collectedText = '';
+
+$('*').each((i, elem) => {
+  const tagName = $(elem).prop('tagName');
   const text = $(elem).text().trim();
   
-  // Erkenne Section-Start
-  if (text.match(/Hauptteig|Zubereitung/i)) {
-    console.log(`📍 Section gefunden: ${text}`);
-    foundMainSection = true;
-    return; // Skip den Header selbst
-  }
-  
-  // Stop bei nächster großer Section
-  if (foundMainSection && text.match(/Quelle:|Zutat.*übersicht|Planungs/i)) {
-    foundMainSection = false;
+  // Start: "Hauptteig" gefunden
+  if (text.match(/^Hauptteig\s*$/i)) {
+    console.log('📍 Hauptteig Section Start');
+    isInMainSection = true;
     return;
   }
   
-  // Sammle Anweisungen
-  if (foundMainSection && text.length > 15) {
-    // Filtere raus: Zeitangaben ("08:44 Uhr"), Mengenangaben ("264 g")
-    if (text.match(/^\d{1,2}:\d{2}\s*Uhr/i)) return;
-    if (text.match(/^\d+[,.]?\d*\s*(g|ml|kg|%)/i)) return;
+  // Stop: Section Ende
+  if (isInMainSection && (text.match(/^Quelle:/i) || text.match(/^Ähnliche Rezepte/i))) {
+    console.log('📍 Hauptteig Section Ende');
+    isInMainSection = false;
+    return;
+  }
+  
+  // Sammle nur direkte Text-Kinder
+  if (isInMainSection && (tagName === 'P' || tagName === 'LI')) {
+    const directText = $(elem).contents()
+      .filter(function() { return this.type === 'text'; })
+      .text().trim();
     
-    const duration = extractDuration(text);
-    steps.push({
-      instruction: text,
-      duration: duration || 0,
-      type: detectStepType(text)
-    });
-    console.log(`  ✓ Step: ${text.substring(0, 50)}...`);
+    if (directText && directText.length > 20) {
+      collectedText += directText + '\n';
+    }
   }
 });
 
-// Fallback: Default Steps
-if (steps.length < 3) {
-  console.log('⚠️ Zu wenige Schritte - füge Defaults hinzu');
+// Parse gesammelten Text
+if (collectedText) {
+  const lines = collectedText.split('\n').filter(l => l.trim().length > 20);
+  console.log(`📝 Gefundene Textzeilen: ${lines.length}`);
+  
+  lines.forEach(line => {
+    // Filter: Keine URLs, keine Überschriften in GROSSBUCHSTABEN
+    if (line.match(/https?:\/\//)) return;
+    if (line === line.toUpperCase() && line.length < 50) return;
+    if (line.match(/^\d+[,.]?\d*\s*(g|ml|°C)/i)) return; // Keine Mengen
+    
+    const duration = extractDuration(line);
+    steps.push({
+      instruction: line,
+      duration: duration || 0,
+      type: detectStepType(line)
+    });
+    console.log(`  ✓ ${line.substring(0, 60)}...`);
+  });
+}
+
+// Wenn immer noch nichts: Defaults
+if (steps.length === 0) {
+  console.log('⚠️ Keine Steps gefunden - nutze Defaults');
   steps.push(
-    { instruction: 'Teig ruhen lassen und dabei dehnen und falten', duration: 90, type: 'resting' },
-    { instruction: 'Teig formen', duration: 10, type: 'shaping' },
-    { instruction: 'Stückgare im Gärkorb', duration: 60, type: 'proofing' },
-    { instruction: 'Im vorgeheizten Ofen backen', duration: 45, type: 'baking' }
+    { instruction: 'Alle Zutaten in der angegebenen Reihenfolge mischen', duration: 10, type: 'mixing' },
+    { instruction: 'Teig 1,5 Stunden ruhen lassen, dabei nach 30, 60 und 90 Minuten dehnen und falten', duration: 90, type: 'resting' },
+    { instruction: 'Teig aus der Schüssel auf bemehlte Arbeitsfläche geben und rund einschlagen', duration: 10, type: 'shaping' },
+    { instruction: '1 Stunde im Gärkorb reifen lassen', duration: 60, type: 'proofing' },
+    { instruction: 'Bei 250°C backen, nach 20 Min Dampf ablassen, insgesamt 45 Min', duration: 45, type: 'baking' }
   );
 }
 
 recipeData.steps = steps;
-console.log(`✅ ${steps.length} Schritte extrahiert`);
+console.log(`✅ ${steps.length} Schritte final`);
 
     // ============================================================
     // BILD DOWNLOAD
