@@ -496,8 +496,27 @@ if (!recipeData.dough_sections || recipeData.dough_sections.length === 0) {
       steps: recipeData.steps?.length || 0
     });
 
-    res.json(recipeData);
-    
+    // ============================================================
+    // CRITICAL: Ensure all required fields exist
+    // ============================================================
+    const finalData = {
+      title: recipeData.title || 'Importiertes Rezept',
+      description: recipeData.description || '',
+      image_url: recipeData.image_url || '',
+      source_url: recipeData.source_url || '',
+      ingredients: recipeData.ingredients || [],
+      steps: recipeData.steps || [],
+      dough_sections: recipeData.dough_sections || []
+    };
+
+    console.log('📤 Sending to frontend:', {
+      title: finalData.title,
+      ingredients: finalData.ingredients.length,
+      steps: finalData.steps.length,
+      dough_sections: finalData.dough_sections.length
+    });
+
+    res.json(finalData);    
   } catch (error) {
     console.error("🚨 HTML PARSE FEHLER:", error.message);
     res.status(500).json({ error: 'Failed to parse HTML file: ' + error.message });
