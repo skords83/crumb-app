@@ -386,79 +386,58 @@ app.post('/api/import/html', async (req, res) => {
     }
 
     // ============================================================
-    // FIX 2: EXTRACT STEPS
-    // ============================================================
-    console.log('📋 Versuche Schritte zu extrahieren...');
-    const steps = [];
+// FIX 2: EXTRACT STEPS
+// ============================================================
+console.log('📋 Versuche Schritte zu extrahieren...');
+const steps = [];
+
+// Methode 1: Suche "Hauptteig" Section und sammle ALLE Texte
+let foundMainSection = false;
+$('h2, h3, h4, p, li').each((i, elem) => {
+  const text = $(elem).text().trim();
+  
+  // Erkenne Section-Start
+  if (text.match(/Hauptteig|Zubereitung/i)) {
+    console.log(`📍 Section gefunden: ${text}`);
+    foundMainSection = true;
+    return; // Skip den Header selbst
+  }
+  
+  // Stop bei nächster großer Section
+  if (foundMainSection && text.match(/Quelle:|Zutat.*übersicht|Planungs/i)) {
+    foundMainSection = false;
+    return;
+  }
+  
+  // Sammle Anweisungen
+  if (foundMainSection && text.length > 15) {
+    // Filtere raus: Zeitangaben ("08:44 Uhr"), Mengenangaben ("264 g")
+    if (text.match(/^\d{1,2}:\d{2}\s*Uhr/i)) return;
+    if (text.match(/^\d+[,.]?\d*\s*(g|ml|kg|%)/i)) return;
     
-    // Methode 1: Suche "Hauptteig" Section
-    $('h2, h3, h4').each((i, elem) => {
-      const heading = $(elem).text().trim();
-      
-      if (heading.match(/Hauptteig|Zubereitung|Anleitung|Herstellung/i)) {
-        console.log(`📍 Gefunden: ${heading}`);
-        let currentElem = $(elem).next();
-        let instructionTexts = [];
-        
-        while (currentElem.length && !currentElem.is('h2, h3, h4')) {
-          if (currentElem.is('p')) {
-            const text = currentElem.text().trim();
-            if (text && text.length > 10) {
-              instructionTexts.push(text);
-            }
-          } else if (currentElem.is('ol, ul')) {
-            currentElem.find('li').each((j, li) => {
-              const text = $(li).text().trim();
-              if (text && text.length > 10) {
-                instructionTexts.push(text);
-              }
-            });
-          }
-          currentElem = currentElem.next();
-        }
-        
-        instructionTexts.forEach((text, idx) => {
-          const duration = extractDuration(text);
-          steps.push({
-            instruction: text,
-            duration: duration || 0,
-            type: detectStepType(text)
-          });
-        });
-      }
+    const duration = extractDuration(text);
+    steps.push({
+      instruction: text,
+      duration: duration || 0,
+      type: detectStepType(text)
     });
-    
-    // Methode 2: Fallback - nummerierte Listen
-    if (steps.length === 0) {
-      console.log('🔍 Suche nach nummerierten Listen...');
-      $('ol li').each((i, elem) => {
-        const text = $(elem).text().trim();
-        // Keine Zutaten (beginnen mit Mengenangabe)
-        if (text && text.length > 10 && !text.match(/^\d+[,.]?\d*\s*(g|kg|ml)/i)) {
-          const duration = extractDuration(text);
-          steps.push({
-            instruction: text,
-            duration: duration || 0,
-            type: detectStepType(text)
-          });
-        }
-      });
-    }
-    
-    // Methode 3: Fallback - Default Steps
-    if (steps.length === 0) {
-      console.log('⚠️ Keine Schritte gefunden - nutze Defaults');
-      steps.push(
-        { instruction: 'Alle Zutaten in der angegebenen Reihenfolge mischen', duration: 10, type: 'mixing' },
-        { instruction: 'Teig ruhen lassen und dabei dehnen und falten', duration: 90, type: 'resting' },
-        { instruction: 'Teig formen', duration: 10, type: 'shaping' },
-        { instruction: 'Stückgare im Gärkorb', duration: 60, type: 'proofing' },
-        { instruction: 'Im vorgeheizten Ofen backen', duration: 45, type: 'baking' }
-      );
-    }
-    
-    recipeData.steps = steps;
-    console.log(`✅ ${steps.length} Schritte extrahiert`);
+    console.log(`  ✓ Step: ${text.substring(0, 50)}...`);
+  }
+});
+
+// Fallback: Default Steps
+if (steps.length < 3) {
+  console.log('⚠️ Zu wenige Schritte - füge Defaults hinzu');
+  steps.push(
+    { instruction: 'Teig ruhen lassen und dabei dehnen und falten', duration: 90, type: 'resting' },
+    { instruction: 'Teig formen', duration: 10, type: 'shaping' },
+    { instruction: 'Stückgare im Gärkorb', duration: 60, type: 'proofing' },
+    { instruction: 'Im vorgeheizten Ofen backen', duration: 45, type: 'baking' }
+  );
+}
+
+recipeData.steps = steps;
+console.log(`✅ ${steps.length} Schritte extrahiert`);
 
     // ============================================================
     // BILD DOWNLOAD
