@@ -386,80 +386,90 @@ app.post('/api/import/html', async (req, res) => {
     }
 
 // ============================================================
-// FIX 2: EXTRACT STEPS - VERBESSERT
+// FIX 2: EXTRACT STEPS - Nutze Nummern-DIVs
 // ============================================================
 console.log('📋 Versuche Schritte zu extrahieren...');
 const steps = [];
 
-// Sammle Text unter "Hauptteig" bis zu "Quelle"
-let isInMainSection = false;
-let collectedText = '';
-
-$('*').each((i, elem) => {
-  const tagName = $(elem).prop('tagName');
-  const text = $(elem).text().trim();
+// Finde alle nummerierten Steps
+$('div').each((i, elem) => {
+  const $div = $(elem);
+  const bgColor = $div.attr('style');
   
-  // Start: "Hauptteig" gefunden
-  if (text.match(/^Hauptteig\s*$/i)) {
-    console.log('📍 Hauptteig Section Start');
-    isInMainSection = true;
-    return;
-  }
-  
-  // Stop: Section Ende
-  if (isInMainSection && (text.match(/^Quelle:/i) || text.match(/^Ähnliche Rezepte/i))) {
-    console.log('📍 Hauptteig Section Ende');
-    isInMainSection = false;
-    return;
-  }
-  
-  // Sammle nur direkte Text-Kinder
-  if (isInMainSection && (tagName === 'P' || tagName === 'LI')) {
-    const directText = $(elem).contents()
-      .filter(function() { return this.type === 'text'; })
-      .text().trim();
+  // Check: Hat dieses Div den typischen Hintergrund?
+  if (bgColor && bgColor.includes('rgba(196, 173, 130')) {
+    // Finde die Nummer
+    const numberDiv = $div.find('div').first();
+    const stepNumber = numberDiv.text().trim();
     
-    if (directText && directText.length > 20) {
-      collectedText += directText + '\n';
+    if (stepNumber.match(/^\d+$/)) {
+      console.log(`📍 Gefunden: Step #${stepNumber}`);
+      
+      // Finde den Text NACH diesem Div
+      let nextElem = $div;
+      let stepText = '';
+      
+      // Sammle Text der nächsten 3-5 Elemente
+      for (let j = 0; j < 5; j++) {
+        nextElem = nextElem.next();
+        if (!nextElem.length) break;
+        
+        const text = nextElem.text().trim();
+        
+        // Stop bei nächster Nummer oder Section
+        if (text.match(/^\d+$/)) break;
+        if (text.match(/^Quelle:/i)) break;
+        
+        if (text && text.length > 10) {
+          stepText += text + ' ';
+        }
+      }
+      
+      stepText = stepText.trim();
+      
+      if (stepText && stepText.length > 20) {
+        const duration = extractDuration(stepText);
+        steps.push({
+          instruction: stepText,
+          duration: duration || 0,
+          type: detectStepType(stepText)
+        });
+        console.log(`  ✓ ${stepText.substring(0, 60)}...`);
+      }
     }
   }
 });
 
-// Parse gesammelten Text
-if (collectedText) {
-  const lines = collectedText.split('\n').filter(l => l.trim().length > 20);
-  console.log(`📝 Gefundene Textzeilen: ${lines.length}`);
-  
-  lines.forEach(line => {
-    // Filter: Keine URLs, keine Überschriften in GROSSBUCHSTABEN
-    if (line.match(/https?:\/\//)) return;
-    if (line === line.toUpperCase() && line.length < 50) return;
-    if (line.match(/^\d+[,.]?\d*\s*(g|ml|°C)/i)) return; // Keine Mengen
-    
-    const duration = extractDuration(line);
-    steps.push({
-      instruction: line,
-      duration: duration || 0,
-      type: detectStepType(line)
-    });
-    console.log(`  ✓ ${line.substring(0, 60)}...`);
-  });
-}
-
-// Wenn immer noch nichts: Defaults
+// Fallback: Defaults
 if (steps.length === 0) {
   console.log('⚠️ Keine Steps gefunden - nutze Defaults');
   steps.push(
-    { instruction: 'Alle Zutaten in der angegebenen Reihenfolge mischen', duration: 10, type: 'mixing' },
-    { instruction: 'Teig 1,5 Stunden ruhen lassen, dabei nach 30, 60 und 90 Minuten dehnen und falten', duration: 90, type: 'resting' },
-    { instruction: 'Teig aus der Schüssel auf bemehlte Arbeitsfläche geben und rund einschlagen', duration: 10, type: 'shaping' },
-    { instruction: '1 Stunde im Gärkorb reifen lassen', duration: 60, type: 'proofing' },
-    { instruction: 'Bei 250°C backen, nach 20 Min Dampf ablassen, insgesamt 45 Min', duration: 45, type: 'baking' }
+    { instruction: 'Alle Zutaten mischen', duration: 10, type: 'mixing' },
+    { instruction: 'Teig 1,5h ruhen lassen, dabei 3x dehnen und falten', duration: 90, type: 'resting' },
+    { instruction: 'Teig formen', duration: 10, type: 'shaping' },
+    { instruction: 'Gare 1h im Gärkorb', duration: 60, type: 'proofing' },
+    { instruction: 'Bei 250°C 45 Min backen', duration: 45, type: 'baking' }
   );
 }
 
 recipeData.steps = steps;
-console.log(`✅ ${steps.length} Schritte final`);
+console.log(`✅ ${steps.length} Schritte extrahiert`);
+
+// ============================================================
+// FIX 3: Convert to dough_sections format
+// ============================================================
+if (!recipeData.dough_sections || recipeData.dough_sections.length === 0) {
+  recipeData.dough_sections = [{
+    name: 'Hauptteig',
+    is_parallel: false,
+    steps: recipeData.steps.map(step => ({
+      instruction: step.instruction,
+      duration: step.duration,
+      type: step.type
+    }))
+  }];
+  console.log('✅ Converted to dough_sections format');
+}
 
     // ============================================================
     // BILD DOWNLOAD
