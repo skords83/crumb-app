@@ -9,6 +9,10 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function Navigation() {
   const pathname = usePathname();
+  const isAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(pathname);
+  
+  if (isAuthPage) return null;
+  
   const { logout } = useAuth();
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
