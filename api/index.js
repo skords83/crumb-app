@@ -452,8 +452,26 @@ if (steps.length === 0) {
   );
 }
 
-recipeData.steps = steps;
-console.log(`✅ ${steps.length} Schritte extrahiert`);
+// ============================================================
+// DEDUPLICATE STEPS (Nummern kommen mehrfach vor!)
+// ============================================================
+const uniqueSteps = [];
+const seenInstructions = new Set();
+
+steps.forEach(step => {
+  // Normalisiere Text (erste 50 Zeichen)
+  const key = step.instruction.substring(0, 50).toLowerCase().trim();
+  
+  if (!seenInstructions.has(key)) {
+    seenInstructions.add(key);
+    uniqueSteps.push(step);
+  }
+});
+
+console.log(`🔄 Dedupliziert: ${steps.length} → ${uniqueSteps.length} Steps`);
+
+recipeData.steps = uniqueSteps;
+console.log(`✅ ${uniqueSteps.length} Schritte final`);
 
 // ============================================================
 // FIX 3: Convert to dough_sections format
