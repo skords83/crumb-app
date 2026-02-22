@@ -14,8 +14,9 @@ export default function NewRecipePage() {
   const [activeTab, setActiveTab] = useState<'import' | 'manual'>('import');
   const [showEditor, setShowEditor] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // NEU: State für den Speicherprozess
+  const [isSaving, setIsSaving] = useState(false);
   const [importUrl, setImportUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Rezept States
   const [title, setTitle] = useState("");
@@ -30,6 +31,72 @@ export default function NewRecipePage() {
       steps: [{ instruction: "", type: "Aktion", duration: 5 }]
     }
   ]); 
+
+  // --- FILE UPLOAD LOGIK ---
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && (file.name.endsWith('.html') || file.name.endsWith('.htm'))) {
+      setSelectedFile(file);
+    } else {
+      alert('Bitte wähle eine HTML-Datei (.html oder .htm)');
+    }
+  };
+
+  const handleHtmlImport = async () => {
+    if (!selectedFile) return;
+    setIsImporting(true);
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const html = e.target?.result as string;
+        if (!html) {
+          alert('Fehler beim Lesen der Datei');
+          setIsImporting(false);
+          return;
+        }
+
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import/html`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+            },
+            body: JSON.stringify({ html, filename: selectedFile.name })
+          });
+          const data = await res.json();
+          
+          if (data.error) throw new Error(data.error);
+
+          setTitle(data.title || "");
+          setImageUrl(data.image_url || "");
+          setDescription(data.description || "");
+          setDoughSections(data.dough_sections?.map((s: any) => ({ 
+            ...s, 
+            is_parallel: s.is_parallel || false,
+            steps: s.steps || [{ instruction: "", type: "Aktion", duration: 5 }]
+          })) || [{ name: "Hauptteig", is_parallel: false, ingredients: [], steps: [] }]);
+          
+          setShowEditor(true);
+          setActiveTab('manual');
+          setSelectedFile(null);
+        } catch (err) {
+          alert("Fehler beim Import: " + (err instanceof Error ? err.message : 'Unknown error'));
+        } finally {
+          setIsImporting(false);
+        }
+      };
+      reader.onerror = () => {
+        alert('Fehler beim Lesen der Datei');
+        setIsImporting(false);
+      };
+      reader.readAsText(selectedFile);
+    } catch (err) {
+      alert("Fehler beim Import");
+      setIsImporting(false);
+    }
+  };
 
   // --- AUTO IMPORT LOGIK ---
   const handleAutoImport = async () => {
@@ -148,6 +215,33 @@ export default function NewRecipePage() {
               <button onClick={handleAutoImport} disabled={isImporting} className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md">
                 {isImporting ? "Lädt..." : "Importieren"}
               </button>
+            </div>
+
+            {/* --- ODER HTML DATEI HOCHLADEN --- */}
+            <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-sm text-gray-400 dark:text-gray-500 mb-4 font-medium">Oder HTML-Datei hochladen</p>
+              <div className="flex flex-col md:flex-row gap-3 max-w-2xl mx-auto">
+                <input
+                  type="file"
+                  accept=".html,.htm"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="html-file-input"
+                />
+                <label
+                  htmlFor="html-file-input"
+                  className="flex-1 px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-left cursor-pointer hover:border-[#8B7355] transition-colors text-gray-500 dark:text-gray-400"
+                >
+                  {selectedFile ? selectedFile.name : "HTML-Datei auswählen..."}
+                </label>
+                <button
+                  onClick={handleHtmlImport}
+                  disabled={!selectedFile || isImporting}
+                  className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md"
+                >
+                  {isImporting ? "Lädt..." : "Hochladen"}
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -27,4 +27,8 @@ const scrapeHomebaking = ($) => {
   return { title, imageUrl, ingredients, steps };
 };
 
-module.exports = scrapeHomebaking;
+const parseHtml = async ($, filename) => {
+  return scrapeHomebaking($);
+};
+
+module.exports = { scrapeHomebaking, parseHtml };

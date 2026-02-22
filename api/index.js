@@ -265,6 +265,62 @@ app.post('/api/import', async (req, res) => {
   }
 });
 
+// Parse recipe from uploaded HTML file
+app.post('/api/import/html', async (req, res) => {
+  try {
+    const { html, filename } = req.body;
+    
+    if (!html) {
+      return res.status(400).json({ error: 'No HTML content provided' });
+    }
+
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(html);
+    
+    let recipeData = null;
+    const fname = filename || 'uploaded.html';
+    
+    // Try to detect source and parse
+    if (fname.includes('ploetzblog')) {
+      const { parseHtml } = require('./scrapers/ploetzblog');
+      recipeData = await parseHtml($, fname);
+    } else if (fname.includes('homebaking')) {
+      const { parseHtml } = require('./scrapers/homebaking');
+      recipeData = await parseHtml($, fname);
+    } else {
+      // Default to Plötzblog parser
+      const { parseHtml } = require('./scrapers/ploetzblog');
+      recipeData = await parseHtml($, fname);
+    }
+
+    if (!recipeData) {
+      return res.status(400).json({ 
+        error: 'Could not parse recipe from HTML. Make sure it\'s a supported recipe page.' 
+      });
+    }
+
+    // Bild-Download Logik (wie bei /api/import)
+    if (recipeData.image_url && recipeData.image_url.startsWith('http')) {
+      try {
+        const response = await axios.get(recipeData.image_url, { 
+          responseType: 'arraybuffer',
+          timeout: 7000,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const fileName = `import-${Date.now()}-${uuidv4().substring(0, 8)}.jpg`;
+        const fullPath = path.join(uploadDir, fileName);
+        fs.writeFileSync(fullPath, response.data);
+        recipeData.image_url = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+      } catch (e) { console.error("⚠️ Bild-Fehler:", e.message); }
+    }
+
+    res.json(recipeData);
+  } catch (error) {
+    console.error("🚨 HTML PARSE FEHLER:", error.message);
+    res.status(500).json({ error: 'Failed to parse HTML file' });
+  }
+});
+
 app.get('/api/recipes', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM recipes WHERE user_id = $1 ORDER BY created_at DESC', [req.user.userId]);

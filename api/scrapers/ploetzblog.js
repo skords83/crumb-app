@@ -334,4 +334,120 @@ const scrapePloetz = async (url) => {
   }
 };
 
-module.exports = scrapePloetz;
+// Parse from pre-loaded cheerio $
+const parseHtml = async ($, filename) => {
+  try {
+    // 1. TITEL & UNTERTITEL
+    const title = $('h1').first().text().trim().replace(/\uAD/g, '');
+    const subtitle = $('h2').first().text().trim();
+
+    // 2. BILD
+    let imageUrl = $('meta[property="og:image"]').attr('content') || 
+                   $('meta[name="twitter:image"]').attr('content') || '';
+    
+    if (!imageUrl || imageUrl.includes('placeholder')) {
+      const galleryImg = $('a[href*="/gallery/"] img, figure img').first();
+      imageUrl = galleryImg.attr('data-src') || galleryImg.attr('src') || '';
+    }
+
+    if (imageUrl) {
+      imageUrl = imageUrl.split(' ')[0];
+      if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
+      if (imageUrl.startsWith('/')) imageUrl = 'https://www.ploetzblog.de' + imageUrl;
+      if (imageUrl.includes('cloudimg.io')) {
+        imageUrl = imageUrl.replace(/\?p=w\d+/, '?p=w800');
+      }
+    }
+
+    // 3. BESCHREIBUNG
+    const descParagraphs = [];
+    let foundTitle = false, reachedTable = false;
+    $('h1, h2, p, table').each((_, el) => {
+      if (reachedTable) return false;
+      const tag = (el.tagName || el.name || '').toLowerCase();
+      if (tag === 'h1') { foundTitle = true; return; }
+      if (tag === 'h2' && foundTitle) return;
+      if (tag === 'table') { reachedTable = true; return false; }
+      if (foundTitle && tag === 'p') {
+        const text = $(el).text().trim();
+        const skip = ['Produktempfehlung','Anzeige','Mitgliedschaft','Kommentare','Rezept drucken'];
+        if (text.length > 20 && !skip.some(s => text.includes(s))) descParagraphs.push(text);
+      }
+    });
+
+    const description = descParagraphs.join('\n\n');
+
+    // 4. ZUTATEN & PHASEN
+    const isIngredientTable = (table) => {
+      const text = $(table).text().toLowerCase();
+      if ((text.includes('amazon') || text.includes('otto')) &&
+          (text.includes('abdeckfolie') || text.includes('backstein') ||
+           text.includes('ofenhandschuh') || text.includes('knetmaschine') ||
+           text.includes('schneebesen') || text.includes('teigreinigung'))) return false;
+      if (text.includes('uhr') && text.includes('vorheizen')) return false;
+      const uhrCount = (text.match(/uhr/gi) || []).length;
+      if (uhrCount >= 3) return false;
+      let hasGrams = false;
+      $(table).find('tr').each((_, row) => {
+        if (/^\d+[\.,]?\d*\s*g/.test($(row).find('td').first().text().trim())) hasGrams = true;
+      });
+      return hasGrams;
+    };
+
+    const parseIngredientTable = (table) => {
+      const ingredients = [];
+      $(table).find('tr').each((_, row) => {
+        const cells = $(row).find('td');
+        if (cells.length < 2) return;
+        const amountCell = $(cells[0]).text().trim();
+        const nameCell = $(cells[1]).text().trim();
+        let tempCell = '';
+        if (cells.length >= 3) {
+          const thirdCell = $(cells[2]).text().trim();
+          if (/\d+\s*\u00b0\s*C/.test(thirdCell)) tempCell = thirdCell;
+        }
+        if (amountCell && nameCell) {
+          ingredients.push({ name: nameCell, amount: amountCell.replace(/[^\d,.]/g, '').trim(), unit: 'g', temperature: tempCell });
+        }
+      });
+      return ingredients;
+    };
+
+    const doughSections = [];
+    const ingredientTables = $('table').filter((_, table) => isIngredientTable(table));
+
+    if (ingredientTables.length > 0) {
+      ingredientTables.each((i, table) => {
+        const tableText = $(table).text().toLowerCase();
+        let sectionName = 'Zutaten';
+        
+        if (tableText.includes('vorteig') || tableText.includes('poolish')) sectionName = 'Vorteig / Poolish';
+        else if (tableText.includes('sauer')) sectionName = 'Sauerteig';
+        else if (tableText.includes('quell') || tableText.includes('koch')) sectionName = 'Quellstück / Kochstück';
+        else if (tableText.includes('auto')) sectionName = 'Autolyse';
+        else if (tableText.includes('haupt')) sectionName = 'Hauptteig';
+        else if (tableText.includes('stock')) sectionName = 'Stockgare';
+        else if (tableText.includes('stück')) sectionName = 'Stückgare';
+        
+        doughSections.push({
+          name: sectionName,
+          is_parallel: sectionName !== 'Hauptteig',
+          ingredients: parseIngredientTable(table)
+        });
+      });
+    }
+
+    return {
+      title,
+      subtitle,
+      description,
+      image_url: imageUrl,
+      dough_sections: doughSections
+    };
+  } catch (error) {
+    console.error("Ploetzblog HTML Parse Error:", error.message);
+    return null;
+  }
+};
+
+module.exports = { scrapePloetz, parseHtml };
