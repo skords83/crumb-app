@@ -65,34 +65,58 @@ export default function NewRecipePage() {
             },
             body: JSON.stringify({ html, filename: selectedFile.name })
           });
+          
           const data = await res.json();
+          
+          // DEBUG LOGGING
+          console.log('🔍 HTML Import Response:', data);
+          console.log('🔍 ingredients:', data.ingredients);
+          console.log('🔍 steps:', data.steps);
+          console.log('🔍 dough_sections:', data.dough_sections);
           
           if (data.error) throw new Error(data.error);
 
           setTitle(data.title || "");
           setImageUrl(data.image_url || "");
           setDescription(data.description || "");
-          setDoughSections(data.dough_sections?.map((s: any) => ({ 
-            ...s, 
-            is_parallel: s.is_parallel || false,
-            steps: s.steps || [{ instruction: "", type: "Aktion", duration: 5 }]
-          })) || [{ name: "Hauptteig", is_parallel: false, ingredients: [], steps: [] }]);
           
+          // Sichere Verarbeitung mit Fallbacks
+          const sections = Array.isArray(data.dough_sections) && data.dough_sections.length > 0
+            ? data.dough_sections.map((s: any) => ({ 
+                name: s.name || "Phase",
+                is_parallel: s.is_parallel || false,
+                ingredients: Array.isArray(s.ingredients) ? s.ingredients : [],
+                steps: Array.isArray(s.steps) ? s.steps : [{ instruction: "", type: "Aktion", duration: 5 }]
+              }))
+            : [{ 
+                name: "Hauptteig", 
+                is_parallel: false, 
+                ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+                steps: Array.isArray(data.steps) ? data.steps : []
+              }];
+          
+          setDoughSections(sections);
           setShowEditor(true);
           setActiveTab('manual');
           setSelectedFile(null);
+          
+          console.log('✅ Import erfolgreich, Sections:', sections);
         } catch (err) {
+          console.error('❌ Import Error:', err);
           alert("Fehler beim Import: " + (err instanceof Error ? err.message : 'Unknown error'));
         } finally {
           setIsImporting(false);
         }
       };
+      
       reader.onerror = () => {
         alert('Fehler beim Lesen der Datei');
         setIsImporting(false);
       };
+      
       reader.readAsText(selectedFile);
     } catch (err) {
+      console.error('❌ File Read Error:', err);
       alert("Fehler beim Import");
       setIsImporting(false);
     }
@@ -115,10 +139,7 @@ export default function NewRecipePage() {
       if (data.error) throw new Error(data.error);
 
       setTitle(data.title || "");
-    
-      // HIER DIE KORREKTUR:
-      setImageUrl(data.image_url || ""); // Nutze image_url statt imageUrl
-    
+      setImageUrl(data.image_url || "");
       setDescription(data.description || "");
       
       setDoughSections(data.dough_sections?.map((s: any) => ({ 
@@ -250,7 +271,7 @@ export default function NewRecipePage() {
         {showEditor && (
           <>
             <RecipeForm 
-              id="main-recipe-form" // Wichtig für die Verknüpfung mit dem SaveButton
+              id="main-recipe-form"
               title={title} setTitle={setTitle}
               imageUrl={imageUrl} setImageUrl={setImageUrl}
               description={description} setDescription={setDescription}
@@ -258,7 +279,6 @@ export default function NewRecipePage() {
               onSubmit={handleSubmit}
               isSubmitting={isSaving}
             />
-            {/* Der schwebende SaveButton erscheint nur im Editor-Modus */}
             <SaveButton isSaving={isSaving} type="create" />
           </>
         )}
