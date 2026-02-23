@@ -578,172 +578,272 @@ recipeData.description = description;
       console.log(`✅ Dedupliziert: ${recipeData.ingredients.length} einzigartige Zutaten`);
     }
 
- // ============================================================
-// EXTRACT STEPS & PHASES (multi-section support)
+// ============================================================
+// EXTRACT STEPS & PHASES (multi-section, positional)
 // ============================================================
 console.log('📋 Extrahiere Phasen und Schritte...');
 
-// ---- 1. Finde alle Phasen-Positionen ----
-const PHASE_PATTERNS = [
-  { regex: /Kochstück/i,       name: 'Kochstück',       is_parallel: true  },
-  { regex: /Brühstück/i,       name: 'Brühstück',       is_parallel: true  },
-  { regex: /Quellstück/i,      name: 'Quellstück',      is_parallel: true  },
-  { regex: /Roggensauerteig/i, name: 'Roggensauerteig', is_parallel: true  },
-  { regex: /Sauerteig/i,       name: 'Sauerteig',       is_parallel: true  },
-  { regex: /Vorteig/i,         name: 'Vorteig',         is_parallel: true  },
-  { regex: /Poolish/i,         name: 'Poolish',         is_parallel: true  },
-  { regex: /Autolyse/i,        name: 'Autolyse',        is_parallel: false },
-  { regex: /Hauptteig/i,       name: 'Hauptteig',       is_parallel: false },
-];
-
-// Suche Phasennamen als sichtbaren Text (zwischen > und <, nicht in Tag-Attributen)
 const rawHtml = $.html();
-const detectedPhases = []; // { name, is_parallel, charPos }
 
-for (const pattern of PHASE_PATTERNS) {
-  let match;
-  // Match ">   PhaseName   <" pattern  
-  const inlineRegex = new RegExp(`>\\s*(${pattern.regex.source})\\s*<`, 'gi');
-  while ((match = inlineRegex.exec(rawHtml)) !== null) {
-    detectedPhases.push({
-      name: pattern.name,
-      is_parallel: pattern.is_parallel,
-      charPos: match.index,
-    });
+// ---- HELPERS ------------------------------------------------
+
+/**
+ * Wandelt HTML-Chunk in sauberen Text um (Tags entfernen, Whitespace normalisieren).
+ */
+function htmlToText(html) {
+  return (html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Findet das Ende eines <div>-Inhalts durch korrekte Tag-Tiefenverfolgung.
+ * Nutzt Regex statt char-by-char, um false-positives in style-Attributen zu vermeiden.
+ */
+function findDivContentEnd(html, startPos) {
+  const tagRe = /(<\/div>|<div(?:\s[^>]*)?>)/gi;
+  tagRe.lastIndex = startPos;
+  let depth = 0;
+  let m;
+  while ((m = tagRe.exec(html)) !== null) {
+    if (m[1].startsWith('</')) {
+      if (depth === 0) return m.index;
+      depth--;
+    } else {
+      depth++;
+    }
+  }
+  return html.length;
+}
+
+// ---- 1. PHASEN aus <h4>-Tags ermitteln ----------------------
+
+const KNOWN_PHASES = {
+  'Kochstück':        { is_parallel: true  },
+  'Brühstück':        { is_parallel: true  },
+  'Quellstück':       { is_parallel: true  },
+  'Roggensauerteig':  { is_parallel: true  },
+  'Weizensauerteig':  { is_parallel: true  },
+  'Sauerteig':        { is_parallel: true  },
+  'Vorteig':          { is_parallel: true  },
+  'Poolish':          { is_parallel: true  },
+  'Levain':           { is_parallel: true  },
+  'Autolyse':         { is_parallel: false },
+  'Hauptteig':        { is_parallel: false },
+};
+
+const detectedPhases = [];
+const h4Re = /<h4[^>]*>([\s\S]*?)<\/h4>/gi;
+let h4Match;
+while ((h4Match = h4Re.exec(rawHtml)) !== null) {
+  const h4Text = htmlToText(h4Match[1]);
+  for (const [phaseName, opts] of Object.entries(KNOWN_PHASES)) {
+    if (h4Text.toLowerCase() === phaseName.toLowerCase()) {
+      detectedPhases.push({
+        name: phaseName,
+        is_parallel: opts.is_parallel,
+        charPos: h4Match.index,
+        endPos: h4Match.index + h4Match[0].length,
+      });
+      break;
+    }
   }
 }
 
-// Sortiere nach Position im Dokument
-detectedPhases.sort((a, b) => a.charPos - b.charPos);
-
-// Dedupliziere (gleicher Name direkt hintereinander = Doppeltreffer)
-const uniquePhases = detectedPhases.filter((p, i) =>
-  i === 0 || p.name !== detectedPhases[i - 1].name
+// Deduplizierung (gleicher Name direkt nacheinander)
+const uniquePhases = detectedPhases.filter(
+  (p, i) => i === 0 || p.name !== detectedPhases[i - 1].name
 );
 
 console.log(`🗂️  Erkannte Phasen: ${uniquePhases.map(p => p.name).join(', ')}`);
 
-// ---- 2. Finde alle Step-Marker-Positionen (rgba-Hintergrund) ----
-const stepMarkerRegex = /rgba\(196,\s*173,\s*130[^)]*\)/g;
-const allStepPositions = [];
-let stepMatch;
-while ((stepMatch = stepMarkerRegex.exec(rawHtml)) !== null) {
-  allStepPositions.push(stepMatch.index);
+// ---- 2. ZUTATEN pro Phase aus Tabellen extrahieren ----------
+
+/**
+ * Extrahiert Zutaten aus dem HTML-Chunk einer Phase.
+ */
+function extractIngredientsFromChunk(chunk) {
+  const ingredients = [];
+  const seen = new Set();
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let row;
+  while ((row = rowRe.exec(chunk)) !== null) {
+    const cells = [];
+    const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let cell;
+    while ((cell = cellRe.exec(row[1])) !== null) {
+      cells.push(htmlToText(cell[1]));
+    }
+    if (cells.length < 2) continue;
+
+    const amount = cells[0].trim();
+    let name = cells[1].trim();
+
+    // Nur echte Mengenangaben (g, ml, kg, EL, TL, Prise, Stück …)
+    if (!amount.match(/\d+[,.]?\d*\s*(g|kg|ml|l|EL|TL|Prise|St[üu]ck|%)/i)) continue;
+    // Prozentwerte (Baker's %) überspringen
+    if (amount.match(/^\d+\s*%/)) continue;
+    if (!name || name.length < 2 || name.length > 100) continue;
+
+    // Temperatur extrahieren
+    let temperature = '';
+    const tempMatch = name.match(/(\d+)\s*°C/);
+    if (tempMatch) {
+      temperature = tempMatch[1];
+      name = name.replace(/\d+\s*°C/g, '').trim();
+    }
+
+    // Hinweis in Klammern
+    let note = '';
+    const noteMatch = name.match(/\(([^)]+)\)/);
+    if (noteMatch) {
+      note = noteMatch[1];
+      name = name.replace(/\([^)]+\)/g, '').trim();
+    }
+
+    name = name.replace(/\s+/g, ' ').trim();
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    ingredients.push({ name, amount, unit: '', temperature, note });
+  }
+  return ingredients;
 }
 
-// ---- 3. Extrahiere Step-Text (bestehende Logik, aber mit Position) ----
-const stepsWithPos = new Map(); // charPos -> stepObj
+// ---- 3. STEPS (Flex-Kreise) extrahieren --------------------
 
-$('div').each((i, elem) => {
-  const $div = $(elem);
-  const bgColor = $div.attr('style');
-  if (!bgColor || !bgColor.includes('rgba(196, 173, 130')) return;
+/**
+ * Gibt alle sichtbaren (display:flex) Step-Kreise mit Position + Text zurück.
+ */
+function extractAllSteps(html) {
+  const steps = [];
+  const rgbaRe = /rgba\(196,\s*173,\s*130[^)]*\)/g;
+  let m;
+  while ((m = rgbaRe.exec(html)) !== null) {
+    const pos = m.index;
 
-  const numberDiv = $div.find('div').first();
-  const stepNumber = numberDiv.text().trim();
-  if (!stepNumber.match(/^\d+$/)) return;
+    // Prüfe ob nächster sichtbarer display-Wert "flex" ist
+    const before = html.slice(Math.max(0, pos - 700), pos);
+    const displays = before.match(/display:(none|block|flex|grid)/g) || [];
+    const lastDisplay = displays.length ? displays[displays.length - 1].split(':')[1] : '';
+    if (lastDisplay !== 'flex') continue;
 
-  // Ermittle Dokument-Position über den HTML-String
-  const elemHtml = $.html($div);
-  const elemPos = rawHtml.indexOf(elemHtml.substring(0, 80));
+    // Schrittnummer aus dem Kreis-div
+    const after = html.slice(pos, pos + 500);
+    const numMatch = after.match(/>(\d+)<\/div>\s*<\/div>/);
+    if (!numMatch) continue;
+    const stepNum = parseInt(numMatch[1]);
 
-  if (stepsWithPos.has(elemPos)) return; // Duplikat
+    // Instruktions-div: kommt direkt nach dem Kreis-div
+    const circleEndAbs = pos + numMatch.index + numMatch[0].length;
+    const restStart = circleEndAbs;
+    const rest = html.slice(restStart, restStart + 8000);
 
-  let nextElem = $div;
-  let stepText = '';
-  for (let j = 0; j < 5; j++) {
-    nextElem = nextElem.next();
-    if (!nextElem.length) break;
-    const text = nextElem.text().trim();
-    if (text.match(/^\d+$/)) break;
-    if (text.match(/^Quelle:/i)) break;
-    if (text && text.length > 10) stepText += text + ' ';
+    const divStart = rest.indexOf('<div');
+    if (divStart === -1) continue;
+
+    const tagEnd = rest.indexOf('>', divStart + 4);
+    if (tagEnd === -1) continue;
+
+    const contentStart = tagEnd + 1;
+    const contentEnd = findDivContentEnd(rest, contentStart);
+    const instructionHtml = rest.slice(contentStart, contentEnd);
+
+    const instruction = htmlToText(instructionHtml);
+    if (instruction.length < 5) continue;
+
+    steps.push({ pos, stepNum, instruction });
   }
-  stepText = stepText.trim();
+  return steps;
+}
 
-  if (stepText && stepText.length > 20) {
-    const duration = extractDuration(stepText);
-    const type = detectStepType(stepText);
-    stepsWithPos.set(elemPos, {
-      stepNumber: parseInt(stepNumber),
-      instruction: stepText,
-      duration: duration || 0,
-      type: type,
-      charPos: elemPos,
-    });
-  }
-});
+const allSteps = extractAllSteps(rawHtml);
+console.log(`📋 ${allSteps.length} Schritte extrahiert (gesamt)`);
 
-// Sortiere Steps nach Dokumentposition
-const allStepsSorted = Array.from(stepsWithPos.values())
-  .sort((a, b) => a.charPos - b.charPos);
+// ---- 4. Steps + Zutaten den Phasen zuweisen ----------------
 
-// ---- 4. Weise Steps den Phasen zu ----
 let dough_sections = [];
 
 if (uniquePhases.length === 0) {
-  // Fallback: alles in eine Phase
-  console.log('⚠️  Keine Phasen gefunden, nutze Fallback-Phase');
-  let steps = allStepsSorted.map(s => ({
-    instruction: s.instruction, duration: s.duration, type: s.type
+  // Fallback: alles in Hauptteig
+  console.log('⚠️  Keine Phasen erkannt – Fallback auf Hauptteig');
+  let steps = allSteps.map(s => ({
+    instruction: s.instruction,
+    duration: extractDuration(s.instruction),
+    type: detectStepType(s.instruction),
   }));
-  const expandedSteps = [];
+  const expanded = [];
   steps.forEach(step => {
-    const repeating = parseRepeatingActions(step.instruction, step.duration);
-    if (repeating) expandedSteps.push(...repeating);
-    else expandedSteps.push(step);
+    const rep = parseRepeatingActions(step.instruction, step.duration);
+    rep ? expanded.push(...rep) : expanded.push(step);
   });
   dough_sections = [{
     name: 'Hauptteig',
     is_parallel: false,
     ingredients: recipeData.ingredients || [],
-    steps: expandedSteps.length > 0 ? expandedSteps : [
+    steps: expanded.length > 0 ? expanded : [
       { instruction: 'Alle Zutaten mischen', duration: 10, type: 'Aktion' },
-      { instruction: 'Teig ruhen lassen', duration: 90, type: 'Warten' },
-      { instruction: 'Backen', duration: 45, type: 'Aktion' },
-    ]
+      { instruction: 'Teig ruhen lassen',    duration: 90, type: 'Warten' },
+      { instruction: 'Backen',               duration: 45, type: 'Aktion' },
+    ],
   }];
 } else {
-  // Jeder Phase werden Steps zugewiesen, die zwischen dieser und der nächsten Phase liegen
   for (let i = 0; i < uniquePhases.length; i++) {
     const phase = uniquePhases[i];
     const nextPhasePos = i + 1 < uniquePhases.length
       ? uniquePhases[i + 1].charPos
       : rawHtml.length;
 
-    const phaseSteps = allStepsSorted
-      .filter(s => s.charPos > phase.charPos && s.charPos < nextPhasePos);
+    // Zutaten: aus dem HTML-Chunk dieser Phase
+    const phaseChunk = rawHtml.slice(phase.charPos, nextPhasePos);
+    const phaseIngredients = extractIngredientsFromChunk(phaseChunk);
 
-    let steps = phaseSteps.map(s => ({
-      instruction: s.instruction, duration: s.duration, type: s.type
-    }));
+    // Schritte: alle Steps, deren Position zwischen dieser und der nächsten Phase liegt
+    const phaseSteps = allSteps
+      .filter(s => s.pos > phase.charPos && s.pos < nextPhasePos)
+      .map(s => {
+        const duration = extractDuration(s.instruction);
+        return {
+          instruction: s.instruction,
+          duration,
+          type: detectStepType(s.instruction),
+        };
+      });
 
-    // Expand repeating actions
+    // Wiederholende Aktionen auffalten
     const expandedSteps = [];
-    steps.forEach(step => {
-      const repeating = parseRepeatingActions(step.instruction, step.duration);
-      if (repeating) expandedSteps.push(...repeating);
-      else expandedSteps.push(step);
+    phaseSteps.forEach(step => {
+      const rep = parseRepeatingActions(step.instruction, step.duration);
+      rep ? expandedSteps.push(...rep) : expandedSteps.push(step);
     });
 
-    console.log(`  → ${phase.name}: ${expandedSteps.length} Schritte`);
+    console.log(`  → ${phase.name}: ${phaseIngredients.length} Zutaten, ${expandedSteps.length} Schritte`);
 
     dough_sections.push({
       name: phase.name,
       is_parallel: phase.is_parallel,
-      ingredients: [], // Zutaten pro Phase könnten hier noch zugewiesen werden
+      ingredients: phaseIngredients,
       steps: expandedSteps,
     });
   }
 }
 
-recipeData.dough_sections = dough_sections;
-recipeData.steps = allStepsSorted.map(s => ({
-  instruction: s.instruction, duration: s.duration, type: s.type
+// Alle Steps flach als recipeData.steps (für Kompatibilität)
+recipeData.steps = allSteps.map(s => ({
+  instruction: s.instruction,
+  duration: extractDuration(s.instruction),
+  type: detectStepType(s.instruction),
 }));
 
-console.log(`✅ ${dough_sections.length} Phasen, ${recipeData.steps.length} Schritte gesamt`);
+recipeData.dough_sections = dough_sections;
 
+// Globale ingredients = Vereinigung aller Phasenzutaten (für Kompatibilität)
+recipeData.ingredients = dough_sections.flatMap(s => s.ingredients);
+
+console.log(`✅ ${dough_sections.length} Phasen, ${recipeData.steps.length} Schritte, ${recipeData.ingredients.length} Zutaten gesamt`);
     // ============================================================
     // BILD DOWNLOAD
     // ============================================================
