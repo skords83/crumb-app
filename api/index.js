@@ -310,6 +310,60 @@ function detectStepType(text) {
   return 'Aktion';
 }
 
+// ============================================================
+// HELPER: Parse wiederholende Aktionen
+// ============================================================
+function parseRepeatingActions(instruction, totalDuration) {
+  const steps = [];
+  
+  // Check: "Dabei nach 30, 60 und 90 Minuten ..."
+  const pattern = /dabei\s+nach\s+([\d,\s]+)\s*minuten?\s+(.+)/i;
+  const match = instruction.match(pattern);
+  
+  if (match) {
+    const intervals = match[1].split(/[,\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
+    const action = match[2].trim();
+    
+    // Haupt-Anweisung ohne "Dabei..." Teil
+    const mainInstruction = instruction.replace(pattern, '').trim().replace(/\.$/, '');
+    
+    let lastTime = 0;
+    intervals.forEach((time, idx) => {
+      // Warte-Zeit
+      const waitDuration = time - lastTime;
+      if (waitDuration > 0) {
+        steps.push({
+          instruction: mainInstruction,
+          duration: waitDuration,
+          type: 'Warten'
+        });
+      }
+      
+      // Aktion
+      steps.push({
+        instruction: action.charAt(0).toUpperCase() + action.slice(1),
+        duration: 5,
+        type: 'Aktion'
+      });
+      
+      lastTime = time + 5;
+    });
+    
+    // Rest-Zeit nach letzter Aktion
+    if (lastTime < totalDuration) {
+      steps.push({
+        instruction: mainInstruction,
+        duration: totalDuration - lastTime,
+        type: 'Warten'
+      });
+    }
+    
+    return steps;
+  }
+  
+  return null; // Keine wiederholenden Aktionen gefunden
+}
+
 // Parse recipe from uploaded HTML file
 app.post('/api/import/html', async (req, res) => {
   try {
@@ -332,7 +386,7 @@ app.post('/api/import/html', async (req, res) => {
              $('h1').first().text().trim() || 
              'Importiertes Rezept',
       description: $('meta[property="og:description"]').attr('content') || '',
-      image_url: $('meta[property="og:image"]').attr('content') || '',
+      image_url: '',
       source_url: fname,
       ingredients: [],
       steps: [],
@@ -340,6 +394,39 @@ app.post('/api/import/html', async (req, res) => {
     };
 
     console.log('🔍 Starte HTML-Parsing für:', recipeData.title);
+
+    // ============================================================
+    // BILD EXTRAKTION (Archive.is Support)
+    // ============================================================
+    let imageUrl = $('meta[property="og:image"]').attr('content') || '';
+
+    // Wenn kein og:image, suche erstes img
+    if (!imageUrl) {
+      const imgSrc = $('.wp-post-image, img.entry-thumbnail, .entry-content img').first().attr('src');
+      if (imgSrc) {
+        console.log('🖼️ Bild gefunden:', imgSrc.substring(0, 100));
+        
+        // Wenn base64
+        if (imgSrc.startsWith('data:image')) {
+          imageUrl = imgSrc;
+          console.log('✅ Base64 Bild erkannt');
+        }
+        // Wenn relative URL von archive.is (z.B. /WQIRB/abc.jpg)
+        else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
+          imageUrl = 'https://archive.is' + imgSrc;
+          console.log('✅ Archive.is Bild URL:', imageUrl);
+        }
+        // Wenn absolute URL
+        else if (imgSrc.startsWith('http')) {
+          imageUrl = imgSrc;
+          console.log('✅ Absolute Bild URL');
+        }
+      }
+    } else {
+      console.log('✅ og:image gefunden:', imageUrl.substring(0, 100));
+    }
+
+    recipeData.image_url = imageUrl;
 
     // ============================================================
     // ZUTATEN aus Tabellen extrahieren (MIT TEMPERATUR & NOTES)
@@ -405,21 +492,18 @@ app.post('/api/import/html', async (req, res) => {
     // FIX 2: EXTRACT STEPS - Nutze Nummern-DIVs
     // ============================================================
     console.log('📋 Versuche Schritte zu extrahieren...');
-    const stepsMap = new Map(); // Nutze Map für bessere Deduplizierung
+    const stepsMap = new Map();
 
     // Finde alle nummerierten Steps
     $('div').each((i, elem) => {
       const $div = $(elem);
       const bgColor = $div.attr('style');
       
-      // Check: Hat dieses Div den typischen Hintergrund?
       if (bgColor && bgColor.includes('rgba(196, 173, 130')) {
-        // Finde die Nummer
         const numberDiv = $div.find('div').first();
         const stepNumber = numberDiv.text().trim();
         
         if (stepNumber.match(/^\d+$/)) {
-          // Wenn wir diese Nummer schon haben, skip
           if (stepsMap.has(stepNumber)) {
             console.log(`  ⏭️  Step #${stepNumber} bereits vorhanden, überspringe Duplikat`);
             return;
@@ -427,18 +511,15 @@ app.post('/api/import/html', async (req, res) => {
           
           console.log(`📍 Gefunden: Step #${stepNumber}`);
           
-          // Finde den Text NACH diesem Div
           let nextElem = $div;
           let stepText = '';
           
-          // Sammle Text der nächsten 3-5 Elemente
           for (let j = 0; j < 5; j++) {
             nextElem = nextElem.next();
             if (!nextElem.length) break;
             
             const text = nextElem.text().trim();
             
-            // Stop bei nächster Nummer oder Section
             if (text.match(/^\d+$/)) break;
             if (text.match(/^Quelle:/i)) break;
             
@@ -464,9 +545,24 @@ app.post('/api/import/html', async (req, res) => {
     });
 
     // Konvertiere Map zu Array (in numerischer Reihenfolge)
-    const steps = Array.from(stepsMap.entries())
+    let steps = Array.from(stepsMap.entries())
       .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
       .map(([num, step]) => step);
+
+    // ============================================================
+    // FIX: EXPAND REPEATING ACTIONS
+    // ============================================================
+    const expandedSteps = [];
+    steps.forEach(step => {
+      const repeating = parseRepeatingActions(step.instruction, step.duration);
+      if (repeating) {
+        console.log(`🔄 Wiederholende Aktion erkannt: ${repeating.length} Schritte generiert`);
+        expandedSteps.push(...repeating);
+      } else {
+        expandedSteps.push(step);
+      }
+    });
+    steps = expandedSteps;
 
     // Fallback: Defaults
     if (steps.length === 0) {
@@ -486,17 +582,16 @@ app.post('/api/import/html', async (req, res) => {
     // ============================================================
     // FIX 3: DETECT PHASE TYPE & Convert to dough_sections
     // ============================================================
-    let phaseName = 'Hauptteig'; // Default
+    let phaseName = 'Hauptteig';
     let isParallel = false;
 
-    // Erkenne Phase-Typ aus dem HTML
     $('h2, h3, h4').each((i, elem) => {
       const text = $(elem).text().trim();
       
       if (text.match(/Sauerteig/i)) {
         phaseName = 'Sauerteig';
         isParallel = true;
-        return false; // Stop loop
+        return false;
       } else if (text.match(/Vorteig|Poolish/i)) {
         phaseName = 'Vorteig / Poolish';
         isParallel = true;
@@ -530,9 +625,11 @@ app.post('/api/import/html', async (req, res) => {
     console.log(`✅ Phase erkannt: ${phaseName} (parallel: ${isParallel})`);
 
     // ============================================================
-    // BILD DOWNLOAD
+    // BILD DOWNLOAD (wenn nicht base64)
     // ============================================================
-    if (recipeData.image_url && recipeData.image_url.startsWith('http')) {
+    if (recipeData.image_url && 
+        recipeData.image_url.startsWith('http') && 
+        !recipeData.image_url.startsWith('data:')) {
       try {
         const response = await axios.get(recipeData.image_url, { 
           responseType: 'arraybuffer',
@@ -543,6 +640,7 @@ app.post('/api/import/html', async (req, res) => {
         const fullPath = path.join(uploadDir, fileName);
         fs.writeFileSync(fullPath, response.data);
         recipeData.image_url = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+        console.log('✅ Bild heruntergeladen');
       } catch (e) { 
         console.error("⚠️ Bild-Download Fehler:", e.message); 
       }
@@ -563,6 +661,7 @@ app.post('/api/import/html', async (req, res) => {
 
     console.log('📤 Sending to frontend:', {
       title: finalData.title,
+      image: finalData.image_url ? finalData.image_url.substring(0, 50) + '...' : 'none',
       ingredients: finalData.ingredients.length,
       steps: finalData.steps.length,
       dough_sections: finalData.dough_sections.length,
