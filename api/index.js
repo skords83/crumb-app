@@ -394,7 +394,7 @@ app.post('/api/import/html', async (req, res) => {
       title: $('h1.entry-title').first().text().trim() || 
              $('h1').first().text().trim() || 
              'Importiertes Rezept',
-      description: $('meta[property="og:description"]').attr('content') || '',
+      description: '',  // Wird weiter unten gefüllt
       image_url: '',
       source_url: fname,
       ingredients: [],
@@ -402,86 +402,109 @@ app.post('/api/import/html', async (req, res) => {
       dough_sections: []
     };
 
-    console.log('🔍 Starte HTML-Parsing für:', recipeData.title);
-
-    // ============================================================
-    // BILD EXTRAKTION - Suche VOR "Kommentare" Button
-    // ============================================================
-    // ============================================================
-// BILD EXTRAKTION - ROBUST mit Fallbacks
 // ============================================================
-let imageUrl = '';
-const imgCandidates = [];
+// BESCHREIBUNG - Robuster Ansatz für Archive.is
+// ============================================================
+let description = '';
+const descParagraphs = [];
+const skipWords = ['Produktempfehlung', 'Anzeige', 'Mitgliedschaft', 'Kommentare', 
+                   'Rezept drucken', 'Benötigtes Zubehör', 'Häufig gestellte Fragen',
+                   'Amazon', 'Otto', 'Steady', 'Newsletter', 'Copyright'];
 
-// Strategie 1: Suche in der gesamten Seite AUSSER Buttons/Footer
-$('img').each((i, img) => {
-  const src = $(img).attr('src');
-  const parent = $(img).parent().text();
+$('p').each((i, elem) => {
+  const text = $(elem).text().trim();
   
-  // Skip wenn in Button oder nach "Kommentare"
-  if (parent.includes('Kommentare') || 
-      parent.includes('Benötigtes Zubehör') || 
-      parent.includes('Rezept drucken')) {
-    return;
-  }
+  // Skip zu kurze oder irrelevante Texte
+  if (text.length < 50) return;
+  if (skipWords.some(word => text.includes(word))) return;
+  if (text.match(/^\d+\s*(g|ml|°C|Min|Std)/)) return; // Keine Zutatenlisten
+  if (text.includes('Uhr')) return; // Keine Zeitpläne
   
-  if (src && 
-      !src.includes('scr.png') &&
-      !src.includes('/scr/') &&
-      !src.includes('icon') &&
-      !src.includes('logo') &&
-      !src.includes('.svg') &&
-      !src.startsWith('data:image/svg') &&
-      (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp'))) {
-    
-    // Priorität: Größere Bilder zuerst (wahrscheinlicher das Hauptbild)
-    const width = $(img).attr('width');
-    const height = $(img).attr('height');
-    const size = (parseInt(width) || 0) * (parseInt(height) || 0);
-    
-    imgCandidates.push({ src, size });
-  }
+  descParagraphs.push(text);
+  
+  // Max 3 Paragraphen
+  if (descParagraphs.length >= 3) return false;
 });
 
-// Sortiere nach Größe (größte zuerst)
-imgCandidates.sort((a, b) => b.size - a.size);
-
-// Strategie 2: Fallback zu og:image
-if (imgCandidates.length === 0) {
-  const ogImage = $('meta[property="og:image"]').attr('content');
-  if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) {
-    imgCandidates.push({ src: ogImage, size: 0 });
-  }
+if (descParagraphs.length > 0) {
+  description = descParagraphs.join('\n\n');
+  console.log(`📝 Beschreibung gefunden: ${description.length} Zeichen`);
 }
 
-console.log(`🖼️ ${imgCandidates.length} Bild-Kandidaten gefunden`);
+recipeData.description = description;
 
-if (imgCandidates.length > 0) {
-  const imgSrc = imgCandidates[0].src;
-  console.log('🖼️ Gewähltes Bild:', imgSrc.substring(0, 80));
-  
-  // Base64
-  if (imgSrc.startsWith('data:image') && !imgSrc.startsWith('data:image/svg')) {
-    imageUrl = imgSrc;
-    console.log('✅ Base64 Bild');
-  }
-  // Archive.is relative URL (mit /WQIRB/ ODER Dinkelbrot-Dateien/)
-  else if (imgSrc.match(/^\/[A-Z0-9]+\//) || imgSrc.includes('-Dateien/')) {
-    imageUrl = 'https://archive.is/' + imgSrc.replace(/^\//, '');
-    console.log('✅ Archive.is URL:', imageUrl);
-  }
-  // Absolute URL
-  else if (imgSrc.startsWith('http')) {
-    imageUrl = imgSrc;
-    console.log('✅ Absolute URL');
-  }
-  // Relative ohne / am Anfang
-  else if (!imgSrc.startsWith('data:')) {
-    imageUrl = 'https://archive.is/' + imgSrc;
-    console.log('✅ Archive.is relative URL:', imageUrl);
-  }
+// ============================================================
+// BILD EXTRAKTION - Cloudimg Original bevorzugen!
+// ============================================================
+let imageUrl = '';
+
+// Priorität 1: Cloudimg entity/gallery URLs (Original vom Plötzblog)
+const cloudimgMatch = html.match(/https?:\/\/[^"']*cloudimg\.io[^"']*\/entity\/gallery\/[^"']*\.jpg[^"']*/);
+if (cloudimgMatch) {
+  imageUrl = cloudimgMatch[0]
+    .replace(/^\/\//, 'https://')
+    .replace(/\?p=w\d+/, '?p=w800')  // Größere Version
+    .replace(/\?p=grid-[^&\s"']+/, '?p=w800');
+  console.log('✅ Cloudimg Original gefunden:', imageUrl);
 } else {
-  console.log('⚠️ Kein Bild gefunden');
+  // Priorität 2: Archive.is Bilder
+  const imgCandidates = [];
+  
+  $('img').each((i, img) => {
+    const src = $(img).attr('src');
+    const parent = $(img).parent().text();
+    
+    if (parent.includes('Kommentare') || 
+        parent.includes('Benötigtes Zubehör') || 
+        parent.includes('Rezept drucken')) {
+      return;
+    }
+    
+    if (src && 
+        !src.includes('scr.png') &&
+        !src.includes('Partner') &&
+        !src.includes('icon') &&
+        !src.includes('logo') &&
+        !src.includes('.svg') &&
+        !src.startsWith('data:image/svg') &&
+        (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp'))) {
+      
+      const width = $(img).attr('width');
+      const height = $(img).attr('height');
+      const size = (parseInt(width) || 0) * (parseInt(height) || 0);
+      
+      imgCandidates.push({ src, size });
+    }
+  });
+  
+  imgCandidates.sort((a, b) => b.size - a.size);
+  
+  if (imgCandidates.length > 0) {
+    const imgSrc = imgCandidates[0].src;
+    console.log('🖼️ Archive.is Bild:', imgSrc.substring(0, 80));
+    
+    if (imgSrc.startsWith('data:image') && !imgSrc.startsWith('data:image/svg')) {
+      imageUrl = imgSrc;
+    }
+    else if (imgSrc.match(/^\/[A-Z0-9]+\//) || imgSrc.includes('-Dateien/')) {
+      imageUrl = 'https://archive.is/' + imgSrc.replace(/^\//, '');
+    }
+    else if (imgSrc.startsWith('http')) {
+      imageUrl = imgSrc;
+    }
+    else if (!imgSrc.startsWith('data:')) {
+      imageUrl = 'https://archive.is/' + imgSrc;
+    }
+  }
+  
+  // Priorität 3: og:image als letzter Fallback
+  if (!imageUrl) {
+    const ogImage = $('meta[property="og:image"]').attr('content');
+    if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) {
+      imageUrl = ogImage;
+      console.log('🖼️ og:image Fallback');
+    }
+  }
 }
 
 recipeData.image_url = imageUrl;
