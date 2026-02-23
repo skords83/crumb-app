@@ -478,7 +478,7 @@ if (cloudimgMatch) {
 recipeData.image_url = imageUrl;
 
 // ============================================================
-// BESCHREIBUNG - Kombinierter Ansatz
+// BESCHREIBUNG - Kombinierter Ansatz mit Deduplizierung
 // ============================================================
 let description = $('meta[property="og:description"]').attr('content') || '';
 
@@ -486,6 +486,7 @@ if (!description || description.length < 50) {
   console.log('🔍 Suche Beschreibung im Text...');
   
   const descParagraphs = [];
+  const seenTexts = new Set(); // ← NEU: Deduplizierung
   const skipWords = ['Produktempfehlung', 'Anzeige', 'Mitgliedschaft', 'Kommentare', 
     'Rezept drucken', 'Benötigtes Zubehör', 'Häufig gestellte Fragen',
     'Amazon', 'Otto', 'Steady', 'Newsletter', 'Copyright'];
@@ -498,18 +499,15 @@ if (!description || description.length < 50) {
     const tag = elem.name || elem.tagName;
     const text = $(elem).text().trim();
     
-    // H1 gefunden - ab jetzt sammeln
     if (tag === 'h1') {
       foundH1 = true;
       return;
     }
     
-    // Skip H2 (Untertitel)
     if (tag === 'h2' && foundH1) {
       return;
     }
     
-    // Sammle sinnvolle Absätze nach H1
     if (foundH1 && (tag === 'p' || tag === 'div')) {
       // Filter
       if (text.length < 50) return;
@@ -517,6 +515,14 @@ if (!description || description.length < 50) {
       if (text.match(/^\d+\s*(g|ml|°C|Min|Std)/)) return;
       if (text.includes('Uhr') && text.length < 100) return;
       
+      // ← NEU: Prüfe ob Text schon vorhanden
+      const normalized = text.toLowerCase().replace(/\s+/g, ' ');
+      if (seenTexts.has(normalized)) {
+        console.log(`⏭️  Duplikat übersprungen: ${text.substring(0, 40)}...`);
+        return;
+      }
+      
+      seenTexts.add(normalized);
       descParagraphs.push(text);
       console.log(`📝 Absatz ${descParagraphs.length} gefunden: ${text.substring(0, 60)}...`);
     }
