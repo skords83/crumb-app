@@ -583,7 +583,7 @@ recipeData.description = description;
 // ============================================================
 console.log('📋 Extrahiere Phasen und Schritte...');
 
-const rawHtml = $.html();
+const rawHtml = html;
 
 // ---- HELPERS ------------------------------------------------
 
@@ -725,11 +725,13 @@ function extractAllSteps(html) {
   while ((m = rgbaRe.exec(html)) !== null) {
     const pos = m.index;
 
-    // Prüfe ob nächster sichtbarer display-Wert "flex" ist
-    const before = html.slice(Math.max(0, pos - 700), pos);
-    const displays = before.match(/display:(none|block|flex|grid)/g) || [];
-    const lastDisplay = displays.length ? displays[displays.length - 1].split(':')[1] : '';
-    if (lastDisplay !== 'flex') continue;
+// Prüfe ob nächster sichtbarer display-Wert "flex" ist
+const before = html.slice(Math.max(0, pos - 700), pos);
+const displays = before.match(/display:\s*(none|block|flex|grid)/g) || [];
+const lastDisplay = displays.length
+  ? displays[displays.length - 1].replace(/display:\s*/, '')
+  : '';
+if (lastDisplay !== 'flex') continue;
 
     // Schrittnummer aus dem Kreis-div
     const after = html.slice(pos, pos + 500);
