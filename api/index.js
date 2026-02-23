@@ -478,15 +478,13 @@ if (cloudimgMatch) {
 recipeData.image_url = imageUrl;
 
 // ============================================================
-// BESCHREIBUNG - Kombinierter Ansatz mit Deduplizierung
+// BESCHREIBUNG - Nur erster Absatz nach H1
 // ============================================================
 let description = $('meta[property="og:description"]').attr('content') || '';
 
 if (!description || description.length < 50) {
   console.log('🔍 Suche Beschreibung im Text...');
   
-  const descParagraphs = [];
-  const seenTexts = new Set(); // ← NEU: Deduplizierung
   const skipWords = ['Produktempfehlung', 'Anzeige', 'Mitgliedschaft', 'Kommentare', 
     'Rezept drucken', 'Benötigtes Zubehör', 'Häufig gestellte Fragen',
     'Amazon', 'Otto', 'Steady', 'Newsletter', 'Copyright'];
@@ -494,7 +492,7 @@ if (!description || description.length < 50) {
   let foundH1 = false;
   
   $('h1, h2, p, div').each((i, elem) => {
-    if (descParagraphs.length >= 3) return false;
+    if (description) return false; // ← Stop wenn gefunden!
     
     const tag = elem.name || elem.tagName;
     const text = $(elem).text().trim();
@@ -509,29 +507,17 @@ if (!description || description.length < 50) {
     }
     
     if (foundH1 && (tag === 'p' || tag === 'div')) {
-      // Filter
-      if (text.length < 50) return;
-      if (skipWords.some(word => text.includes(word))) return;
-      if (text.match(/^\d+\s*(g|ml|°C|Min|Std)/)) return;
-      if (text.includes('Uhr') && text.length < 100) return;
-      
-      // ← NEU: Prüfe ob Text schon vorhanden
-      const normalized = text.toLowerCase().replace(/\s+/g, ' ');
-      if (seenTexts.has(normalized)) {
-        console.log(`⏭️  Duplikat übersprungen: ${text.substring(0, 40)}...`);
-        return;
-      }
-      
-      seenTexts.add(normalized);
-      descParagraphs.push(text);
-      console.log(`📝 Absatz ${descParagraphs.length} gefunden: ${text.substring(0, 60)}...`);
-    }
-  });
+  // Filter
+  if (text.length < 50) return;
+  if (skipWords.some(word => text.includes(word))) return;
+  if (text.match(/^\d+\s*(g|ml|°C|Min|Std)/)) return;
+  if (text.includes('Uhr') && text.length < 100) return;
   
-  if (descParagraphs.length > 0) {
-    description = descParagraphs.join('\n\n');
-    console.log(`✅ Beschreibung: ${description.length} Zeichen aus ${descParagraphs.length} Absätzen`);
-  }
+  description = text.replace(/\s+/g, ' ').trim(); // ← Whitespace bereinigen
+  console.log(`✅ Beschreibung gefunden: ${description.substring(0, 80)}...`);
+  return false;
+}
+  });
 }
 
 recipeData.description = description;

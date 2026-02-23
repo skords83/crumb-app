@@ -148,6 +148,15 @@ const stats = useMemo(() => {
         <div className="p-6 md:p-10">
           <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8">{recipe.title}</h1>
 
+{/* NEU: BESCHREIBUNG */}
+{recipe.description && (
+  <div className="mb-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 rounded-2xl border border-amber-100/50 dark:border-amber-800/50">
+    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+      {recipe.description}
+    </p>
+  </div>
+)}
+
           {/* GESAMT-ZUTATENLISTE */}
           {totalIngredients.length > 0 && (
             <div className="mb-10 p-6 bg-gray-50 dark:bg-gray-700 rounded-[1.5rem] border border-gray-100 dark:border-gray-700">
