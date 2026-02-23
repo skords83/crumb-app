@@ -407,61 +407,76 @@ app.post('/api/import/html', async (req, res) => {
     // ============================================================
     // BILD EXTRAKTION - Suche VOR "Kommentare" Button
     // ============================================================
-    let imageUrl = '';
-    const imgCandidates = [];
+    // ============================================================
+// BILD EXTRAKTION - ROBUST mit Fallbacks
+// ============================================================
+let imageUrl = '';
+const imgCandidates = [];
 
-    const commentButton = $('a:contains("Kommentare"), button:contains("Kommentare")').first();
-    let searchScope = $('body');
+// Strategie 1: Suche in der gesamten Seite AUSSER Buttons/Footer
+$('img').each((i, img) => {
+  const src = $(img).attr('src');
+  const parent = $(img).parent().text();
+  
+  // Skip wenn in Button oder nach "Kommentare"
+  if (parent.includes('Kommentare') || 
+      parent.includes('Benötigtes Zubehör') || 
+      parent.includes('Rezept drucken')) {
+    return;
+  }
+  
+  if (src && 
+      !src.includes('scr.png') &&
+      !src.includes('/scr/') &&
+      !src.includes('icon') &&
+      !src.includes('logo') &&
+      !src.includes('.svg') &&
+      !src.startsWith('data:image/svg') &&
+      (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp'))) {
+    
+    // Priorität: Größere Bilder zuerst (wahrscheinlicher das Hauptbild)
+    const width = $(img).attr('width');
+    const height = $(img).attr('height');
+    const size = (parseInt(width) || 0) * (parseInt(height) || 0);
+    
+    imgCandidates.push({ src, size });
+  }
+});
 
-    if (commentButton.length > 0) {
-      searchScope = commentButton.prevAll();
-      console.log('🔍 Suche Bilder VOR Kommentare-Button');
-    }
+// Sortiere nach Größe (größte zuerst)
+imgCandidates.sort((a, b) => b.size - a.size);
 
-    searchScope.find('img').each((i, img) => {
-      const src = $(img).attr('src');
-      if (src && 
-          !src.includes('scr.png') &&
-          !src.includes('/scr/') &&
-          !src.includes('icon') &&
-          !src.includes('logo') &&
-          !src.includes('.svg') &&
-          !src.startsWith('data:image/svg') &&
-          (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp'))) {
-        imgCandidates.push(src);
-      }
-    });
+// Strategie 2: Fallback zu og:image
+if (imgCandidates.length === 0) {
+  const ogImage = $('meta[property="og:image"]').attr('content');
+  if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) {
+    imgCandidates.push({ src: ogImage, size: 0 });
+  }
+}
 
-    if (imgCandidates.length === 0) {
-      const ogImage = $('meta[property="og:image"]').attr('content');
-      if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) {
-        imgCandidates.push(ogImage);
-      }
-    }
+console.log(`🖼️ ${imgCandidates.length} Bild-Kandidaten gefunden`);
 
-    console.log(`🖼️ ${imgCandidates.length} Bild-Kandidaten gefunden`);
+if (imgCandidates.length > 0) {
+  const imgSrc = imgCandidates[0].src;
+  console.log('🖼️ Gewähltes Bild:', imgSrc.substring(0, 80));
+  
+  if (imgSrc.startsWith('data:image') && !imgSrc.startsWith('data:image/svg')) {
+    imageUrl = imgSrc;
+    console.log('✅ Base64 Bild');
+  }
+  else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
+    imageUrl = 'https://archive.is' + imgSrc;
+    console.log('✅ Archive.is URL:', imageUrl);
+  }
+  else if (imgSrc.startsWith('http')) {
+    imageUrl = imgSrc;
+    console.log('✅ Absolute URL');
+  }
+} else {
+  console.log('⚠️ Kein Bild gefunden');
+}
 
-    if (imgCandidates.length > 0) {
-      const imgSrc = imgCandidates[0];
-      console.log('🖼️ Gewähltes Bild:', imgSrc.substring(0, 80));
-      
-      if (imgSrc.startsWith('data:image') && !imgSrc.startsWith('data:image/svg')) {
-        imageUrl = imgSrc;
-        console.log('✅ Base64 Bild');
-      }
-      else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
-        imageUrl = 'https://archive.is' + imgSrc;
-        console.log('✅ Archive.is URL:', imageUrl);
-      }
-      else if (imgSrc.startsWith('http')) {
-        imageUrl = imgSrc;
-        console.log('✅ Absolute URL');
-      }
-    } else {
-      console.log('⚠️ Kein Bild gefunden');
-    }
-
-    recipeData.image_url = imageUrl;
+recipeData.image_url = imageUrl;
 
     // ============================================================
     // ZUTATEN aus Tabellen extrahieren
