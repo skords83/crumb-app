@@ -578,137 +578,171 @@ recipeData.description = description;
       console.log(`✅ Dedupliziert: ${recipeData.ingredients.length} einzigartige Zutaten`);
     }
 
-    // ============================================================
-    // EXTRACT STEPS
-    // ============================================================
-    console.log('📋 Versuche Schritte zu extrahieren...');
-    const stepsMap = new Map();
+ // ============================================================
+// EXTRACT STEPS & PHASES (multi-section support)
+// ============================================================
+console.log('📋 Extrahiere Phasen und Schritte...');
 
-    $('div').each((i, elem) => {
-      const $div = $(elem);
-      const bgColor = $div.attr('style');
-      
-      if (bgColor && bgColor.includes('rgba(196, 173, 130')) {
-        const numberDiv = $div.find('div').first();
-        const stepNumber = numberDiv.text().trim();
-        
-        if (stepNumber.match(/^\d+$/)) {
-          if (stepsMap.has(stepNumber)) {
-            console.log(`  ⏭️  Step #${stepNumber} bereits vorhanden, überspringe Duplikat`);
-            return;
-          }
-          
-          console.log(`📍 Gefunden: Step #${stepNumber}`);
-          
-          let nextElem = $div;
-          let stepText = '';
-          
-          for (let j = 0; j < 5; j++) {
-            nextElem = nextElem.next();
-            if (!nextElem.length) break;
-            
-            const text = nextElem.text().trim();
-            
-            if (text.match(/^\d+$/)) break;
-            if (text.match(/^Quelle:/i)) break;
-            
-            if (text && text.length > 10) {
-              stepText += text + ' ';
-            }
-          }
-          
-          stepText = stepText.trim();
-          
-          if (stepText && stepText.length > 20) {
-            const duration = extractDuration(stepText);
-            const type = detectStepType(stepText);
-            stepsMap.set(stepNumber, {
-              instruction: stepText,
-              duration: duration || 0,
-              type: type
-            });
-            console.log(`  ✓ ${stepText.substring(0, 60)}... [${type}, ${duration}min]`);
-          }
-        }
-      }
+// ---- 1. Finde alle Phasen-Positionen ----
+const PHASE_PATTERNS = [
+  { regex: /Kochstück/i,       name: 'Kochstück',       is_parallel: true  },
+  { regex: /Brühstück/i,       name: 'Brühstück',       is_parallel: true  },
+  { regex: /Quellstück/i,      name: 'Quellstück',      is_parallel: true  },
+  { regex: /Roggensauerteig/i, name: 'Roggensauerteig', is_parallel: true  },
+  { regex: /Sauerteig/i,       name: 'Sauerteig',       is_parallel: true  },
+  { regex: /Vorteig/i,         name: 'Vorteig',         is_parallel: true  },
+  { regex: /Poolish/i,         name: 'Poolish',         is_parallel: true  },
+  { regex: /Autolyse/i,        name: 'Autolyse',        is_parallel: false },
+  { regex: /Hauptteig/i,       name: 'Hauptteig',       is_parallel: false },
+];
+
+// Suche Phasennamen als sichtbaren Text (zwischen > und <, nicht in Tag-Attributen)
+const rawHtml = $.html();
+const detectedPhases = []; // { name, is_parallel, charPos }
+
+for (const pattern of PHASE_PATTERNS) {
+  let match;
+  // Match ">   PhaseName   <" pattern  
+  const inlineRegex = new RegExp(`>\\s*(${pattern.regex.source})\\s*<`, 'gi');
+  while ((match = inlineRegex.exec(rawHtml)) !== null) {
+    detectedPhases.push({
+      name: pattern.name,
+      is_parallel: pattern.is_parallel,
+      charPos: match.index,
     });
+  }
+}
 
-    let steps = Array.from(stepsMap.entries())
-      .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-      .map(([num, step]) => step);
+// Sortiere nach Position im Dokument
+detectedPhases.sort((a, b) => a.charPos - b.charPos);
 
-    // ============================================================
-    // EXPAND REPEATING ACTIONS
-    // ============================================================
+// Dedupliziere (gleicher Name direkt hintereinander = Doppeltreffer)
+const uniquePhases = detectedPhases.filter((p, i) =>
+  i === 0 || p.name !== detectedPhases[i - 1].name
+);
+
+console.log(`🗂️  Erkannte Phasen: ${uniquePhases.map(p => p.name).join(', ')}`);
+
+// ---- 2. Finde alle Step-Marker-Positionen (rgba-Hintergrund) ----
+const stepMarkerRegex = /rgba\(196,\s*173,\s*130[^)]*\)/g;
+const allStepPositions = [];
+let stepMatch;
+while ((stepMatch = stepMarkerRegex.exec(rawHtml)) !== null) {
+  allStepPositions.push(stepMatch.index);
+}
+
+// ---- 3. Extrahiere Step-Text (bestehende Logik, aber mit Position) ----
+const stepsWithPos = new Map(); // charPos -> stepObj
+
+$('div').each((i, elem) => {
+  const $div = $(elem);
+  const bgColor = $div.attr('style');
+  if (!bgColor || !bgColor.includes('rgba(196, 173, 130')) return;
+
+  const numberDiv = $div.find('div').first();
+  const stepNumber = numberDiv.text().trim();
+  if (!stepNumber.match(/^\d+$/)) return;
+
+  // Ermittle Dokument-Position über den HTML-String
+  const elemHtml = $.html($div);
+  const elemPos = rawHtml.indexOf(elemHtml.substring(0, 80));
+
+  if (stepsWithPos.has(elemPos)) return; // Duplikat
+
+  let nextElem = $div;
+  let stepText = '';
+  for (let j = 0; j < 5; j++) {
+    nextElem = nextElem.next();
+    if (!nextElem.length) break;
+    const text = nextElem.text().trim();
+    if (text.match(/^\d+$/)) break;
+    if (text.match(/^Quelle:/i)) break;
+    if (text && text.length > 10) stepText += text + ' ';
+  }
+  stepText = stepText.trim();
+
+  if (stepText && stepText.length > 20) {
+    const duration = extractDuration(stepText);
+    const type = detectStepType(stepText);
+    stepsWithPos.set(elemPos, {
+      stepNumber: parseInt(stepNumber),
+      instruction: stepText,
+      duration: duration || 0,
+      type: type,
+      charPos: elemPos,
+    });
+  }
+});
+
+// Sortiere Steps nach Dokumentposition
+const allStepsSorted = Array.from(stepsWithPos.values())
+  .sort((a, b) => a.charPos - b.charPos);
+
+// ---- 4. Weise Steps den Phasen zu ----
+let dough_sections = [];
+
+if (uniquePhases.length === 0) {
+  // Fallback: alles in eine Phase
+  console.log('⚠️  Keine Phasen gefunden, nutze Fallback-Phase');
+  let steps = allStepsSorted.map(s => ({
+    instruction: s.instruction, duration: s.duration, type: s.type
+  }));
+  const expandedSteps = [];
+  steps.forEach(step => {
+    const repeating = parseRepeatingActions(step.instruction, step.duration);
+    if (repeating) expandedSteps.push(...repeating);
+    else expandedSteps.push(step);
+  });
+  dough_sections = [{
+    name: 'Hauptteig',
+    is_parallel: false,
+    ingredients: recipeData.ingredients || [],
+    steps: expandedSteps.length > 0 ? expandedSteps : [
+      { instruction: 'Alle Zutaten mischen', duration: 10, type: 'Aktion' },
+      { instruction: 'Teig ruhen lassen', duration: 90, type: 'Warten' },
+      { instruction: 'Backen', duration: 45, type: 'Aktion' },
+    ]
+  }];
+} else {
+  // Jeder Phase werden Steps zugewiesen, die zwischen dieser und der nächsten Phase liegen
+  for (let i = 0; i < uniquePhases.length; i++) {
+    const phase = uniquePhases[i];
+    const nextPhasePos = i + 1 < uniquePhases.length
+      ? uniquePhases[i + 1].charPos
+      : rawHtml.length;
+
+    const phaseSteps = allStepsSorted
+      .filter(s => s.charPos > phase.charPos && s.charPos < nextPhasePos);
+
+    let steps = phaseSteps.map(s => ({
+      instruction: s.instruction, duration: s.duration, type: s.type
+    }));
+
+    // Expand repeating actions
     const expandedSteps = [];
     steps.forEach(step => {
       const repeating = parseRepeatingActions(step.instruction, step.duration);
-      if (repeating) {
-        expandedSteps.push(...repeating);
-      } else {
-        expandedSteps.push(step);
-      }
-    });
-    steps = expandedSteps;
-
-    if (steps.length === 0) {
-      console.log('⚠️ Keine Steps gefunden - nutze Defaults');
-      steps.push(
-        { instruction: 'Alle Zutaten mischen', duration: 10, type: 'Aktion' },
-        { instruction: 'Teig ruhen lassen', duration: 90, type: 'Warten' },
-        { instruction: 'Teig formen', duration: 10, type: 'Aktion' },
-        { instruction: 'Gare im Gärkorb', duration: 60, type: 'Warten' },
-        { instruction: 'Backen', duration: 45, type: 'Aktion' }
-      );
-    }
-
-    recipeData.steps = steps;
-    console.log(`✅ ${steps.length} Schritte final`);
-
-    // ============================================================
-    // DETECT PHASE TYPE
-    // ============================================================
-    let phaseName = 'Hauptteig';
-    let isParallel = false;
-
-    $('h2, h3, h4').each((i, elem) => {
-      const text = $(elem).text().trim();
-      
-      if (text.match(/Sauerteig/i)) {
-        phaseName = 'Sauerteig';
-        isParallel = true;
-        return false;
-      } else if (text.match(/Vorteig|Poolish/i)) {
-        phaseName = 'Vorteig / Poolish';
-        isParallel = true;
-        return false;
-      } else if (text.match(/Quellstück|Kochstück/i)) {
-        phaseName = 'Quellstück / Kochstück';
-        isParallel = true;
-        return false;
-      } else if (text.match(/Autolyse/i)) {
-        phaseName = 'Autolyse';
-        isParallel = false;
-        return false;
-      } else if (text.match(/Hauptteig/i)) {
-        phaseName = 'Hauptteig';
-        isParallel = false;
-        return false;
-      }
+      if (repeating) expandedSteps.push(...repeating);
+      else expandedSteps.push(step);
     });
 
-    recipeData.dough_sections = [{
-      name: phaseName,
-      is_parallel: isParallel,
-      ingredients: recipeData.ingredients || [],
-      steps: (recipeData.steps || []).map(step => ({
-        instruction: step.instruction || '',
-        duration: step.duration || 0,
-        type: step.type || 'Aktion'
-      }))
-    }];
+    console.log(`  → ${phase.name}: ${expandedSteps.length} Schritte`);
 
-    console.log(`✅ Phase erkannt: ${phaseName} (parallel: ${isParallel})`);
+    dough_sections.push({
+      name: phase.name,
+      is_parallel: phase.is_parallel,
+      ingredients: [], // Zutaten pro Phase könnten hier noch zugewiesen werden
+      steps: expandedSteps,
+    });
+  }
+}
+
+recipeData.dough_sections = dough_sections;
+recipeData.steps = allStepsSorted.map(s => ({
+  instruction: s.instruction, duration: s.duration, type: s.type
+}));
+
+console.log(`✅ ${dough_sections.length} Phasen, ${recipeData.steps.length} Schritte gesamt`);
 
     // ============================================================
     // BILD DOWNLOAD
