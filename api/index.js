@@ -401,38 +401,6 @@ app.post('/api/import/html', async (req, res) => {
       steps: [],
       dough_sections: []
     };
-
-// ============================================================
-// BESCHREIBUNG - Robuster Ansatz für Archive.is
-// ============================================================
-let description = '';
-const descParagraphs = [];
-const skipWords = ['Produktempfehlung', 'Anzeige', 'Mitgliedschaft', 'Kommentare', 
-                   'Rezept drucken', 'Benötigtes Zubehör', 'Häufig gestellte Fragen',
-                   'Amazon', 'Otto', 'Steady', 'Newsletter', 'Copyright'];
-
-$('p').each((i, elem) => {
-  const text = $(elem).text().trim();
-  
-  // Skip zu kurze oder irrelevante Texte
-  if (text.length < 50) return;
-  if (skipWords.some(word => text.includes(word))) return;
-  if (text.match(/^\d+\s*(g|ml|°C|Min|Std)/)) return; // Keine Zutatenlisten
-  if (text.includes('Uhr')) return; // Keine Zeitpläne
-  
-  descParagraphs.push(text);
-  
-  // Max 3 Paragraphen
-  if (descParagraphs.length >= 3) return false;
-});
-
-if (descParagraphs.length > 0) {
-  description = descParagraphs.join('\n\n');
-  console.log(`📝 Beschreibung gefunden: ${description.length} Zeichen`);
-}
-
-recipeData.description = description;
-
 // ============================================================
 // BILD EXTRAKTION - Cloudimg Original bevorzugen!
 // ============================================================
@@ -443,7 +411,7 @@ const cloudimgMatch = html.match(/https?:\/\/[^"']*cloudimg\.io[^"']*\/entity\/g
 if (cloudimgMatch) {
   imageUrl = cloudimgMatch[0]
     .replace(/^\/\//, 'https://')
-    .replace(/\?p=w\d+/, '?p=w800')  // Größere Version
+    .replace(/\?p=w\d+/, '?p=w800')
     .replace(/\?p=grid-[^&\s"']+/, '?p=w800');
   console.log('✅ Cloudimg Original gefunden:', imageUrl);
 } else {
@@ -509,6 +477,58 @@ if (cloudimgMatch) {
 
 recipeData.image_url = imageUrl;
 
+// ============================================================
+// BESCHREIBUNG - Kombinierter Ansatz
+// ============================================================
+let description = $('meta[property="og:description"]').attr('content') || '';
+
+if (!description || description.length < 50) {
+  console.log('🔍 Suche Beschreibung im Text...');
+  
+  const descParagraphs = [];
+  const skipWords = ['Produktempfehlung', 'Anzeige', 'Mitgliedschaft', 'Kommentare', 
+    'Rezept drucken', 'Benötigtes Zubehör', 'Häufig gestellte Fragen',
+    'Amazon', 'Otto', 'Steady', 'Newsletter', 'Copyright'];
+  
+  let foundH1 = false;
+  
+  $('h1, h2, p, div').each((i, elem) => {
+    if (descParagraphs.length >= 3) return false;
+    
+    const tag = elem.name || elem.tagName;
+    const text = $(elem).text().trim();
+    
+    // H1 gefunden - ab jetzt sammeln
+    if (tag === 'h1') {
+      foundH1 = true;
+      return;
+    }
+    
+    // Skip H2 (Untertitel)
+    if (tag === 'h2' && foundH1) {
+      return;
+    }
+    
+    // Sammle sinnvolle Absätze nach H1
+    if (foundH1 && (tag === 'p' || tag === 'div')) {
+      // Filter
+      if (text.length < 50) return;
+      if (skipWords.some(word => text.includes(word))) return;
+      if (text.match(/^\d+\s*(g|ml|°C|Min|Std)/)) return;
+      if (text.includes('Uhr') && text.length < 100) return;
+      
+      descParagraphs.push(text);
+      console.log(`📝 Absatz ${descParagraphs.length} gefunden: ${text.substring(0, 60)}...`);
+    }
+  });
+  
+  if (descParagraphs.length > 0) {
+    description = descParagraphs.join('\n\n');
+    console.log(`✅ Beschreibung: ${description.length} Zeichen aus ${descParagraphs.length} Absätzen`);
+  }
+}
+
+recipeData.description = description;
     // ============================================================
     // ZUTATEN aus Tabellen extrahieren
     // ============================================================
