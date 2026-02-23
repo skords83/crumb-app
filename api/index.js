@@ -729,7 +729,7 @@ function extractAllSteps(str) {
     if (lastDisplay !== 'flex') continue;
 
     // Schritt-Nummer aus dem Kreis-div
-    const after = str.slice(pos, pos + 600);
+    const after = str.slice(pos, pos + 2000);
     const numMatch = after.match(/>(\d+)<\/div>\s*<\/div>/);
     if (!numMatch) continue;
     const stepNum = parseInt(numMatch[1]);
