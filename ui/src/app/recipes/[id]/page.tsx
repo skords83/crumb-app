@@ -8,6 +8,42 @@ import { calculateBackplan, formatTimeManual } from '@/lib/backplan-utils';
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 
+// Beschreibungs-Box Komponente mit Expand/Collapse
+function DescriptionBox({ description }: { description: string }) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  
+  // Zeige nur erste 2 Zeilen (~150 Zeichen)
+  const preview = description.substring(0, 150);
+  const needsExpansion = description.length > 150;
+  
+  return (
+    <div className="mb-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 rounded-2xl border border-amber-100/50 dark:border-amber-800/50">
+      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+        {isExpanded ? description : preview + (needsExpansion ? '...' : '')}
+      </p>
+      
+      {needsExpansion && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors"
+        >
+          {isExpanded ? (
+            <>
+              <Icons.ChevronUp size={14} />
+              Weniger anzeigen
+            </>
+          ) : (
+            <>
+              <Icons.ChevronDown size={14} />
+              Mehr lesen
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const id = resolvedParams.id;
@@ -148,14 +184,10 @@ const stats = useMemo(() => {
         <div className="p-6 md:p-10">
           <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8">{recipe.title}</h1>
 
-{/* NEU: BESCHREIBUNG */}
-{recipe.description && (
-  <div className="mb-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 rounded-2xl border border-amber-100/50 dark:border-amber-800/50">
-    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-      {recipe.description}
-    </p>
-  </div>
-)}
+          {/* BESCHREIBUNG mit Expand/Collapse */}
+          {recipe.description && (
+            <DescriptionBox description={recipe.description} />
+          )}
 
           {/* GESAMT-ZUTATENLISTE */}
           {totalIngredients.length > 0 && (
