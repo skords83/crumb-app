@@ -385,109 +385,132 @@ app.post('/api/import/html', async (req, res) => {
       console.log(`✅ Dedupliziert: ${recipeData.ingredients.length} einzigartige Zutaten`);
     }
 
-// ============================================================
-// FIX 2: EXTRACT STEPS - Nutze Nummern-DIVs
-// ============================================================
-console.log('📋 Versuche Schritte zu extrahieren...');
-const steps = [];
+    // ============================================================
+    // FIX 2: EXTRACT STEPS - Nutze Nummern-DIVs
+    // ============================================================
+    console.log('📋 Versuche Schritte zu extrahieren...');
+    const stepsMap = new Map(); // Nutze Map für bessere Deduplizierung
 
-// Finde alle nummerierten Steps
-$('div').each((i, elem) => {
-  const $div = $(elem);
-  const bgColor = $div.attr('style');
-  
-  // Check: Hat dieses Div den typischen Hintergrund?
-  if (bgColor && bgColor.includes('rgba(196, 173, 130')) {
-    // Finde die Nummer
-    const numberDiv = $div.find('div').first();
-    const stepNumber = numberDiv.text().trim();
-    
-    if (stepNumber.match(/^\d+$/)) {
-      console.log(`📍 Gefunden: Step #${stepNumber}`);
+    // Finde alle nummerierten Steps
+    $('div').each((i, elem) => {
+      const $div = $(elem);
+      const bgColor = $div.attr('style');
       
-      // Finde den Text NACH diesem Div
-      let nextElem = $div;
-      let stepText = '';
-      
-      // Sammle Text der nächsten 3-5 Elemente
-      for (let j = 0; j < 5; j++) {
-        nextElem = nextElem.next();
-        if (!nextElem.length) break;
+      // Check: Hat dieses Div den typischen Hintergrund?
+      if (bgColor && bgColor.includes('rgba(196, 173, 130')) {
+        // Finde die Nummer
+        const numberDiv = $div.find('div').first();
+        const stepNumber = numberDiv.text().trim();
         
-        const text = nextElem.text().trim();
-        
-        // Stop bei nächster Nummer oder Section
-        if (text.match(/^\d+$/)) break;
-        if (text.match(/^Quelle:/i)) break;
-        
-        if (text && text.length > 10) {
-          stepText += text + ' ';
+        if (stepNumber.match(/^\d+$/)) {
+          // Wenn wir diese Nummer schon haben, skip
+          if (stepsMap.has(stepNumber)) {
+            console.log(`  ⏭️  Step #${stepNumber} bereits vorhanden, überspringe Duplikat`);
+            return;
+          }
+          
+          console.log(`📍 Gefunden: Step #${stepNumber}`);
+          
+          // Finde den Text NACH diesem Div
+          let nextElem = $div;
+          let stepText = '';
+          
+          // Sammle Text der nächsten 3-5 Elemente
+          for (let j = 0; j < 5; j++) {
+            nextElem = nextElem.next();
+            if (!nextElem.length) break;
+            
+            const text = nextElem.text().trim();
+            
+            // Stop bei nächster Nummer oder Section
+            if (text.match(/^\d+$/)) break;
+            if (text.match(/^Quelle:/i)) break;
+            
+            if (text && text.length > 10) {
+              stepText += text + ' ';
+            }
+          }
+          
+          stepText = stepText.trim();
+          
+          if (stepText && stepText.length > 20) {
+            const duration = extractDuration(stepText);
+            stepsMap.set(stepNumber, {
+              instruction: stepText,
+              duration: duration || 0,
+              type: detectStepType(stepText)
+            });
+            console.log(`  ✓ ${stepText.substring(0, 60)}...`);
+          }
         }
       }
-      
-      stepText = stepText.trim();
-      
-      if (stepText && stepText.length > 20) {
-        const duration = extractDuration(stepText);
-        steps.push({
-          instruction: stepText,
-          duration: duration || 0,
-          type: detectStepType(stepText)
-        });
-        console.log(`  ✓ ${stepText.substring(0, 60)}...`);
-      }
+    });
+
+    // Konvertiere Map zu Array (in numerischer Reihenfolge)
+    const steps = Array.from(stepsMap.entries())
+      .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+      .map(([num, step]) => step);
+
+    // Fallback: Defaults
+    if (steps.length === 0) {
+      console.log('⚠️ Keine Steps gefunden - nutze Defaults');
+      steps.push(
+        { instruction: 'Alle Zutaten mischen', duration: 10, type: 'mixing' },
+        { instruction: 'Teig 1,5h ruhen lassen, dabei 3x dehnen und falten', duration: 90, type: 'resting' },
+        { instruction: 'Teig formen', duration: 10, type: 'shaping' },
+        { instruction: 'Gare 1h im Gärkorb', duration: 60, type: 'proofing' },
+        { instruction: 'Bei 250°C 45 Min backen', duration: 45, type: 'baking' }
+      );
     }
-  }
-});
 
-// Fallback: Defaults
-if (steps.length === 0) {
-  console.log('⚠️ Keine Steps gefunden - nutze Defaults');
-  steps.push(
-    { instruction: 'Alle Zutaten mischen', duration: 10, type: 'mixing' },
-    { instruction: 'Teig 1,5h ruhen lassen, dabei 3x dehnen und falten', duration: 90, type: 'resting' },
-    { instruction: 'Teig formen', duration: 10, type: 'shaping' },
-    { instruction: 'Gare 1h im Gärkorb', duration: 60, type: 'proofing' },
-    { instruction: 'Bei 250°C 45 Min backen', duration: 45, type: 'baking' }
-  );
-}
+    recipeData.steps = steps;
+    console.log(`✅ ${steps.length} Schritte final`);
 
-// ============================================================
-// DEDUPLICATE STEPS (Nummern kommen mehrfach vor!)
-// ============================================================
-const uniqueSteps = [];
-const seenInstructions = new Set();
+    // ============================================================
+    // FIX 3: DETECT PHASE TYPE & Convert to dough_sections
+    // ============================================================
+    let phaseName = 'Hauptteig'; // Default
+    let isParallel = false;
 
-steps.forEach(step => {
-  // Normalisiere Text (erste 50 Zeichen)
-  const key = step.instruction.substring(0, 50).toLowerCase().trim();
-  
-  if (!seenInstructions.has(key)) {
-    seenInstructions.add(key);
-    uniqueSteps.push(step);
-  }
-});
+    // Erkenne Phase-Typ aus dem HTML
+    $('h2, h3, h4').each((i, elem) => {
+      const text = $(elem).text().trim();
+      
+      if (text.match(/Sauerteig/i)) {
+        phaseName = 'Sauerteig';
+        isParallel = true;
+        return false; // Stop loop
+      } else if (text.match(/Vorteig|Poolish/i)) {
+        phaseName = 'Vorteig / Poolish';
+        isParallel = true;
+        return false;
+      } else if (text.match(/Quellstück|Kochstück/i)) {
+        phaseName = 'Quellstück / Kochstück';
+        isParallel = true;
+        return false;
+      } else if (text.match(/Autolyse/i)) {
+        phaseName = 'Autolyse';
+        isParallel = false;
+        return false;
+      } else if (text.match(/Hauptteig/i)) {
+        phaseName = 'Hauptteig';
+        isParallel = false;
+        return false;
+      }
+    });
 
-console.log(`🔄 Dedupliziert: ${steps.length} → ${uniqueSteps.length} Steps`);
+    recipeData.dough_sections = [{
+      name: phaseName,
+      is_parallel: isParallel,
+      ingredients: recipeData.ingredients || [],
+      steps: (recipeData.steps || []).map(step => ({
+        instruction: step.instruction || '',
+        duration: step.duration || 0,
+        type: step.type || 'other'
+      }))
+    }];
 
-recipeData.steps = uniqueSteps;
-console.log(`✅ ${uniqueSteps.length} Schritte final`);
-
-// ============================================================
-// FIX 3: Convert to dough_sections format
-// ============================================================
-if (!recipeData.dough_sections || recipeData.dough_sections.length === 0) {
-  recipeData.dough_sections = [{
-    name: 'Hauptteig',
-    is_parallel: false,
-    steps: recipeData.steps.map(step => ({
-      instruction: step.instruction,
-      duration: step.duration,
-      type: step.type
-    }))
-  }];
-  console.log('✅ Converted to dough_sections format');
-}
+    console.log(`✅ Phase erkannt: ${phaseName} (parallel: ${isParallel})`);
 
     // ============================================================
     // BILD DOWNLOAD
@@ -508,12 +531,6 @@ if (!recipeData.dough_sections || recipeData.dough_sections.length === 0) {
       }
     }
 
-    console.log('✅ HTML erfolgreich geparst:', {
-      title: recipeData.title,
-      ingredients: recipeData.ingredients?.length || 0,
-      steps: recipeData.steps?.length || 0
-    });
-
     // ============================================================
     // CRITICAL: Ensure all required fields exist
     // ============================================================
@@ -531,10 +548,12 @@ if (!recipeData.dough_sections || recipeData.dough_sections.length === 0) {
       title: finalData.title,
       ingredients: finalData.ingredients.length,
       steps: finalData.steps.length,
-      dough_sections: finalData.dough_sections.length
+      dough_sections: finalData.dough_sections.length,
+      phase: finalData.dough_sections[0]?.name
     });
 
-    res.json(finalData);    
+    res.json(finalData);
+    
   } catch (error) {
     console.error("🚨 HTML PARSE FEHLER:", error.message);
     res.status(500).json({ error: 'Failed to parse HTML file: ' + error.message });
