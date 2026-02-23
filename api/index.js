@@ -460,17 +460,25 @@ if (imgCandidates.length > 0) {
   const imgSrc = imgCandidates[0].src;
   console.log('🖼️ Gewähltes Bild:', imgSrc.substring(0, 80));
   
+  // Base64
   if (imgSrc.startsWith('data:image') && !imgSrc.startsWith('data:image/svg')) {
     imageUrl = imgSrc;
     console.log('✅ Base64 Bild');
   }
-  else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
-    imageUrl = 'https://archive.is' + imgSrc;
+  // Archive.is relative URL (mit /WQIRB/ ODER Dinkelbrot-Dateien/)
+  else if (imgSrc.match(/^\/[A-Z0-9]+\//) || imgSrc.includes('-Dateien/')) {
+    imageUrl = 'https://archive.is/' + imgSrc.replace(/^\//, '');
     console.log('✅ Archive.is URL:', imageUrl);
   }
+  // Absolute URL
   else if (imgSrc.startsWith('http')) {
     imageUrl = imgSrc;
     console.log('✅ Absolute URL');
+  }
+  // Relative ohne / am Anfang
+  else if (!imgSrc.startsWith('data:')) {
+    imageUrl = 'https://archive.is/' + imgSrc;
+    console.log('✅ Archive.is relative URL:', imageUrl);
   }
 } else {
   console.log('⚠️ Kein Bild gefunden');
