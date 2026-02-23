@@ -297,18 +297,17 @@ function extractDuration(text) {
 }
 
 function detectStepType(text) {
-  if (!text) return 'other';
+  if (!text) return 'Aktion';
   
   const lower = text.toLowerCase();
   
-  if (lower.match(/misch|kneten|rühr|verarbeit|verbind/)) return 'mixing';
-  if (lower.match(/ruhen|reifen|gare|gehen|aufgehen|stockgare|stückgare/)) return 'resting';
-  if (lower.match(/form|wirk|rund|einschlag|schluss/)) return 'shaping';
-  if (lower.match(/back|ofen|temperatur|dampf/)) return 'baking';
-  if (lower.match(/dehn|falt|stretch/)) return 'folding';
-  if (lower.match(/kühl|kalt|refriger/)) return 'cold_proof';
+  // WARTEN = Zeitangaben mit "reifen", "ruhen", "gehen", etc.
+  if (lower.match(/reifen|ruhen|gehen|aufgehen|stockgare|stückgare|gare\s/)) return 'Warten';
+  if (lower.match(/\d+\s*(stunden?|minuten?|std|min|h)\s+(bei|reifen|ruhen|gehen)/i)) return 'Warten';
+  if (lower.match(/^\d+[,.]?\d*\s*stunden?\s+bei/i)) return 'Warten';
   
-  return 'other';
+  // AKTION = alles andere
+  return 'Aktion';
 }
 
 // Parse recipe from uploaded HTML file
@@ -343,13 +342,29 @@ app.post('/api/import/html', async (req, res) => {
     console.log('🔍 Starte HTML-Parsing für:', recipeData.title);
 
     // ============================================================
-    // ZUTATEN aus Tabellen extrahieren
+    // ZUTATEN aus Tabellen extrahieren (MIT TEMPERATUR & NOTES)
     // ============================================================
     $('table tr').each((i, tr) => {
       const cells = $(tr).find('td');
       if (cells.length >= 2) {
         const amount = $(cells[0]).text().trim();
-        const name = $(cells[1]).text().trim();
+        let name = $(cells[1]).text().trim();
+        
+        // Extrahiere Temperatur aus Name (z.B. "20 °C")
+        let temperature = '';
+        const tempMatch = name.match(/(\d+)\s*°C/);
+        if (tempMatch) {
+          temperature = tempMatch[1];
+          name = name.replace(/\d+\s*°C/g, '').trim();
+        }
+        
+        // Extrahiere Note/Kommentar aus Klammern
+        let note = '';
+        const noteMatch = name.match(/\(([^)]+)\)/);
+        if (noteMatch) {
+          note = noteMatch[1];
+          name = name.replace(/\([^)]+\)/g, '').trim();
+        }
         
         // Nur wenn Amount eine Menge enthält und Name nicht leer
         if (amount.match(/\d+[,.]?\d*\s*(g|kg|ml|l|%|EL|TL|Prise)/i) && name && name.length > 2) {
@@ -357,7 +372,8 @@ app.post('/api/import/html', async (req, res) => {
             name: name,
             amount: amount,
             unit: '',
-            notes: ''
+            temperature: temperature,
+            note: note
           });
         }
       }
@@ -435,12 +451,13 @@ app.post('/api/import/html', async (req, res) => {
           
           if (stepText && stepText.length > 20) {
             const duration = extractDuration(stepText);
+            const type = detectStepType(stepText);
             stepsMap.set(stepNumber, {
               instruction: stepText,
               duration: duration || 0,
-              type: detectStepType(stepText)
+              type: type
             });
-            console.log(`  ✓ ${stepText.substring(0, 60)}...`);
+            console.log(`  ✓ ${stepText.substring(0, 60)}... [${type}, ${duration}min]`);
           }
         }
       }
@@ -455,11 +472,11 @@ app.post('/api/import/html', async (req, res) => {
     if (steps.length === 0) {
       console.log('⚠️ Keine Steps gefunden - nutze Defaults');
       steps.push(
-        { instruction: 'Alle Zutaten mischen', duration: 10, type: 'mixing' },
-        { instruction: 'Teig 1,5h ruhen lassen, dabei 3x dehnen und falten', duration: 90, type: 'resting' },
-        { instruction: 'Teig formen', duration: 10, type: 'shaping' },
-        { instruction: 'Gare 1h im Gärkorb', duration: 60, type: 'proofing' },
-        { instruction: 'Bei 250°C 45 Min backen', duration: 45, type: 'baking' }
+        { instruction: 'Alle Zutaten mischen', duration: 10, type: 'Aktion' },
+        { instruction: 'Teig 1,5h ruhen lassen, dabei 3x dehnen und falten', duration: 90, type: 'Warten' },
+        { instruction: 'Teig formen', duration: 10, type: 'Aktion' },
+        { instruction: 'Gare 1h im Gärkorb', duration: 60, type: 'Warten' },
+        { instruction: 'Bei 250°C 45 Min backen', duration: 45, type: 'Aktion' }
       );
     }
 
@@ -506,7 +523,7 @@ app.post('/api/import/html', async (req, res) => {
       steps: (recipeData.steps || []).map(step => ({
         instruction: step.instruction || '',
         duration: step.duration || 0,
-        type: step.type || 'other'
+        type: step.type || 'Aktion'
       }))
     }];
 
