@@ -311,21 +311,29 @@ function detectStepType(text) {
 }
 
 // ============================================================
-// HELPER: Parse wiederholende Aktionen
+// HELPER: Parse wiederholende Aktionen (MIT "und" Support!)
 // ============================================================
 function parseRepeatingActions(instruction, totalDuration) {
   const steps = [];
   
-  // Check: "Dabei nach 30, 60 und 90 Minuten ..."
-  const pattern = /dabei\s+nach\s+([\d,\s]+)\s*minuten?\s+(.+)/i;
+  // Check: "Dabei nach 30, 60 und 90 Minuten ..." (mit "und"!)
+  const pattern = /dabei\s+nach\s+([\d,\sund]+)\s*minuten?\s+(.+)/i;
   const match = instruction.match(pattern);
   
   if (match) {
-    const intervals = match[1].split(/[,\s]+/).map(n => parseInt(n)).filter(n => !isNaN(n));
+    // Entferne "und" und parse Zahlen
+    const intervals = match[1]
+      .replace(/\s*und\s*/g, ',')
+      .split(/[,\s]+/)
+      .map(n => parseInt(n))
+      .filter(n => !isNaN(n));
+    
     const action = match[2].trim();
     
     // Haupt-Anweisung ohne "Dabei..." Teil
     const mainInstruction = instruction.replace(pattern, '').trim().replace(/\.$/, '');
+    
+    console.log(`🔄 Wiederholende Aktion erkannt: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
     
     let lastTime = 0;
     intervals.forEach((time, idx) => {
@@ -361,7 +369,7 @@ function parseRepeatingActions(instruction, totalDuration) {
     return steps;
   }
   
-  return null; // Keine wiederholenden Aktionen gefunden
+  return null;
 }
 
 // Parse recipe from uploaded HTML file
@@ -379,7 +387,7 @@ app.post('/api/import/html', async (req, res) => {
     const fname = filename || 'uploaded.html';
     
     // ============================================================
-    // Direktes HTML-Parsing (NICHT URL-Scraper nutzen!)
+    // Direktes HTML-Parsing
     // ============================================================
     let recipeData = {
       title: $('h1.entry-title').first().text().trim() || 
@@ -396,40 +404,70 @@ app.post('/api/import/html', async (req, res) => {
     console.log('🔍 Starte HTML-Parsing für:', recipeData.title);
 
     // ============================================================
-    // BILD EXTRAKTION (Archive.is Support)
+    // BILD EXTRAKTION - IMPROVED (kein scr.png!)
     // ============================================================
-    let imageUrl = $('meta[property="og:image"]').attr('content') || '';
+    let imageUrl = '';
+    const imgCandidates = [];
 
-    // Wenn kein og:image, suche erstes img
-    if (!imageUrl) {
-      const imgSrc = $('.wp-post-image, img.entry-thumbnail, .entry-content img').first().attr('src');
-      if (imgSrc) {
-        console.log('🖼️ Bild gefunden:', imgSrc.substring(0, 100));
-        
-        // Wenn base64
-        if (imgSrc.startsWith('data:image')) {
-          imageUrl = imgSrc;
-          console.log('✅ Base64 Bild erkannt');
+    // 1. og:image (aber nicht scr.png)
+    const ogImage = $('meta[property="og:image"]').attr('content');
+    if (ogImage && !ogImage.includes('scr.png')) {
+      imgCandidates.push(ogImage);
+    }
+
+    // 2. Content-Bilder (nicht scr.png, nicht icons/logos)
+    $('.entry-content img, .wp-post-image, img[class*="attachment"]').each((i, img) => {
+      const src = $(img).attr('src');
+      if (src && 
+          !src.includes('scr.png') && 
+          !src.includes('/scr/') &&
+          !src.includes('icon') &&
+          !src.includes('logo') &&
+          (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp'))) {
+        imgCandidates.push(src);
+      }
+    });
+
+    // 3. Alle img tags als Fallback
+    if (imgCandidates.length === 0) {
+      $('img').each((i, img) => {
+        const src = $(img).attr('src');
+        if (src && !src.includes('scr.png') && !src.includes('icon') && !src.includes('logo')) {
+          imgCandidates.push(src);
         }
-        // Wenn relative URL von archive.is (z.B. /WQIRB/abc.jpg)
-        else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
-          imageUrl = 'https://archive.is' + imgSrc;
-          console.log('✅ Archive.is Bild URL:', imageUrl);
-        }
-        // Wenn absolute URL
-        else if (imgSrc.startsWith('http')) {
-          imageUrl = imgSrc;
-          console.log('✅ Absolute Bild URL');
-        }
+      });
+    }
+
+    console.log(`🖼️ ${imgCandidates.length} Bild-Kandidaten gefunden`);
+
+    // Nimm erstes gültiges Bild
+    if (imgCandidates.length > 0) {
+      const imgSrc = imgCandidates[0];
+      console.log('🖼️ Gewähltes Bild:', imgSrc.substring(0, 80));
+      
+      // Wenn base64
+      if (imgSrc.startsWith('data:image')) {
+        imageUrl = imgSrc;
+        console.log('✅ Base64 Bild');
+      }
+      // Wenn relative Archive.is URL (z.B. /WQIRB/abc.jpg)
+      else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
+        imageUrl = 'https://archive.is' + imgSrc;
+        console.log('✅ Archive.is URL:', imageUrl);
+      }
+      // Wenn absolute URL
+      else if (imgSrc.startsWith('http')) {
+        imageUrl = imgSrc;
+        console.log('✅ Absolute URL');
       }
     } else {
-      console.log('✅ og:image gefunden:', imageUrl.substring(0, 100));
+      console.log('⚠️ Kein Bild gefunden');
     }
 
     recipeData.image_url = imageUrl;
 
     // ============================================================
-    // ZUTATEN aus Tabellen extrahieren (MIT TEMPERATUR & NOTES)
+    // ZUTATEN aus Tabellen extrahieren
     // ============================================================
     $('table tr').each((i, tr) => {
       const cells = $(tr).find('td');
@@ -437,7 +475,7 @@ app.post('/api/import/html', async (req, res) => {
         const amount = $(cells[0]).text().trim();
         let name = $(cells[1]).text().trim();
         
-        // Extrahiere Temperatur aus Name (z.B. "20 °C")
+        // Extrahiere Temperatur
         let temperature = '';
         const tempMatch = name.match(/(\d+)\s*°C/);
         if (tempMatch) {
@@ -445,7 +483,7 @@ app.post('/api/import/html', async (req, res) => {
           name = name.replace(/\d+\s*°C/g, '').trim();
         }
         
-        // Extrahiere Note/Kommentar aus Klammern
+        // Extrahiere Note
         let note = '';
         const noteMatch = name.match(/\(([^)]+)\)/);
         if (noteMatch) {
@@ -453,7 +491,6 @@ app.post('/api/import/html', async (req, res) => {
           name = name.replace(/\([^)]+\)/g, '').trim();
         }
         
-        // Nur wenn Amount eine Menge enthält und Name nicht leer
         if (amount.match(/\d+[,.]?\d*\s*(g|kg|ml|l|%|EL|TL|Prise)/i) && name && name.length > 2) {
           recipeData.ingredients.push({
             name: name,
@@ -469,7 +506,7 @@ app.post('/api/import/html', async (req, res) => {
     console.log(`🥖 Aus Tabellen extrahiert: ${recipeData.ingredients.length} Zutaten`);
 
     // ============================================================
-    // FIX 1: DEDUPLICATE INGREDIENTS
+    // DEDUPLICATE INGREDIENTS
     // ============================================================
     if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
       const seen = new Map();
@@ -489,12 +526,11 @@ app.post('/api/import/html', async (req, res) => {
     }
 
     // ============================================================
-    // FIX 2: EXTRACT STEPS - Nutze Nummern-DIVs
+    // EXTRACT STEPS - Nummern-DIVs
     // ============================================================
     console.log('📋 Versuche Schritte zu extrahieren...');
     const stepsMap = new Map();
 
-    // Finde alle nummerierten Steps
     $('div').each((i, elem) => {
       const $div = $(elem);
       const bgColor = $div.attr('style');
@@ -544,19 +580,17 @@ app.post('/api/import/html', async (req, res) => {
       }
     });
 
-    // Konvertiere Map zu Array (in numerischer Reihenfolge)
     let steps = Array.from(stepsMap.entries())
       .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
       .map(([num, step]) => step);
 
     // ============================================================
-    // FIX: EXPAND REPEATING ACTIONS
+    // EXPAND REPEATING ACTIONS
     // ============================================================
     const expandedSteps = [];
     steps.forEach(step => {
       const repeating = parseRepeatingActions(step.instruction, step.duration);
       if (repeating) {
-        console.log(`🔄 Wiederholende Aktion erkannt: ${repeating.length} Schritte generiert`);
         expandedSteps.push(...repeating);
       } else {
         expandedSteps.push(step);
@@ -564,15 +598,15 @@ app.post('/api/import/html', async (req, res) => {
     });
     steps = expandedSteps;
 
-    // Fallback: Defaults
+    // Fallback
     if (steps.length === 0) {
       console.log('⚠️ Keine Steps gefunden - nutze Defaults');
       steps.push(
         { instruction: 'Alle Zutaten mischen', duration: 10, type: 'Aktion' },
-        { instruction: 'Teig 1,5h ruhen lassen, dabei 3x dehnen und falten', duration: 90, type: 'Warten' },
+        { instruction: 'Teig ruhen lassen', duration: 90, type: 'Warten' },
         { instruction: 'Teig formen', duration: 10, type: 'Aktion' },
-        { instruction: 'Gare 1h im Gärkorb', duration: 60, type: 'Warten' },
-        { instruction: 'Bei 250°C 45 Min backen', duration: 45, type: 'Aktion' }
+        { instruction: 'Gare im Gärkorb', duration: 60, type: 'Warten' },
+        { instruction: 'Backen', duration: 45, type: 'Aktion' }
       );
     }
 
@@ -580,7 +614,7 @@ app.post('/api/import/html', async (req, res) => {
     console.log(`✅ ${steps.length} Schritte final`);
 
     // ============================================================
-    // FIX 3: DETECT PHASE TYPE & Convert to dough_sections
+    // DETECT PHASE TYPE
     // ============================================================
     let phaseName = 'Hauptteig';
     let isParallel = false;
@@ -647,7 +681,7 @@ app.post('/api/import/html', async (req, res) => {
     }
 
     // ============================================================
-    // CRITICAL: Ensure all required fields exist
+    // FINAL DATA
     // ============================================================
     const finalData = {
       title: recipeData.title || 'Importiertes Rezept',
@@ -661,7 +695,7 @@ app.post('/api/import/html', async (req, res) => {
 
     console.log('📤 Sending to frontend:', {
       title: finalData.title,
-      image: finalData.image_url ? finalData.image_url.substring(0, 50) + '...' : 'none',
+      image: finalData.image_url ? (finalData.image_url.includes('scr.png') ? '⚠️ scr.png!' : '✅ OK') : 'none',
       ingredients: finalData.ingredients.length,
       steps: finalData.steps.length,
       dough_sections: finalData.dough_sections.length,
