@@ -583,31 +583,31 @@ recipeData.description = description;
 // ============================================================
 console.log('📋 Extrahiere Phasen und Schritte...');
 
+// WICHTIG: Original-HTML verwenden, NICHT $.html() – cheerio re-serialisiert
+// und kann dabei rgba()-Spacing normalisieren, was die Regex bricht.
 const rawHtml = html;
 
 // ---- HELPERS ------------------------------------------------
 
-/**
- * Wandelt HTML-Chunk in sauberen Text um (Tags entfernen, Whitespace normalisieren).
- */
-function htmlToText(html) {
-  return (html || '')
+function htmlToText(str) {
+  return (str || '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
+    .replace(/\u202f/g, ' ')   // schmales Leerzeichen (z.B. "181 g")
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
- * Findet das Ende eines <div>-Inhalts durch korrekte Tag-Tiefenverfolgung.
- * Nutzt Regex statt char-by-char, um false-positives in style-Attributen zu vermeiden.
+ * Findet das Ende eines <div>-Inhalts per Regex (kein char-by-char,
+ * damit CSS-Attributwerte wie "border-radius:..." nicht als Tags zählen).
  */
-function findDivContentEnd(html, startPos) {
+function findDivContentEnd(str, startPos) {
   const tagRe = /(<\/div>|<div(?:\s[^>]*)?>)/gi;
   tagRe.lastIndex = startPos;
   let depth = 0;
   let m;
-  while ((m = tagRe.exec(html)) !== null) {
+  while ((m = tagRe.exec(str)) !== null) {
     if (m[1].startsWith('</')) {
       if (depth === 0) return m.index;
       depth--;
@@ -615,23 +615,23 @@ function findDivContentEnd(html, startPos) {
       depth++;
     }
   }
-  return html.length;
+  return str.length;
 }
 
-// ---- 1. PHASEN aus <h4>-Tags ermitteln ----------------------
+// ---- 1. PHASEN aus <h4>-Tags -----------------------------------
 
 const KNOWN_PHASES = {
-  'Kochstück':        { is_parallel: true  },
-  'Brühstück':        { is_parallel: true  },
-  'Quellstück':       { is_parallel: true  },
-  'Roggensauerteig':  { is_parallel: true  },
-  'Weizensauerteig':  { is_parallel: true  },
-  'Sauerteig':        { is_parallel: true  },
-  'Vorteig':          { is_parallel: true  },
-  'Poolish':          { is_parallel: true  },
-  'Levain':           { is_parallel: true  },
-  'Autolyse':         { is_parallel: false },
-  'Hauptteig':        { is_parallel: false },
+  'Kochstück':       { is_parallel: true  },
+  'Brühstück':       { is_parallel: true  },
+  'Quellstück':      { is_parallel: true  },
+  'Roggensauerteig': { is_parallel: true  },
+  'Weizensauerteig': { is_parallel: true  },
+  'Sauerteig':       { is_parallel: true  },
+  'Vorteig':         { is_parallel: true  },
+  'Poolish':         { is_parallel: true  },
+  'Levain':          { is_parallel: true  },
+  'Autolyse':        { is_parallel: false },
+  'Hauptteig':       { is_parallel: false },
 };
 
 const detectedPhases = [];
@@ -645,25 +645,21 @@ while ((h4Match = h4Re.exec(rawHtml)) !== null) {
         name: phaseName,
         is_parallel: opts.is_parallel,
         charPos: h4Match.index,
-        endPos: h4Match.index + h4Match[0].length,
       });
       break;
     }
   }
 }
 
-// Deduplizierung (gleicher Name direkt nacheinander)
+// Deduplizierung (gleicher Name direkt hintereinander)
 const uniquePhases = detectedPhases.filter(
   (p, i) => i === 0 || p.name !== detectedPhases[i - 1].name
 );
 
 console.log(`🗂️  Erkannte Phasen: ${uniquePhases.map(p => p.name).join(', ')}`);
 
-// ---- 2. ZUTATEN pro Phase aus Tabellen extrahieren ----------
+// ---- 2. ZUTATEN pro Phase aus Tabellen -------------------------
 
-/**
- * Extrahiert Zutaten aus dem HTML-Chunk einer Phase.
- */
 function extractIngredientsFromChunk(chunk) {
   const ingredients = [];
   const seen = new Set();
@@ -679,79 +675,77 @@ function extractIngredientsFromChunk(chunk) {
     if (cells.length < 2) continue;
 
     const amount = cells[0].trim();
-    let name = cells[1].trim();
+    let name    = cells[1].trim();
+    // Temperatur steht in cell[2] (z.B. "20 °C")
+    const temperature = cells[2] ? cells[2].replace('°C', '').trim() : '';
 
-    // Nur echte Mengenangaben (g, ml, kg, EL, TL, Prise, Stück …)
-    if (!amount.match(/\d+[,.]?\d*\s*(g|kg|ml|l|EL|TL|Prise|St[üu]ck|%)/i)) continue;
-    // Prozentwerte (Baker's %) überspringen
-    if (amount.match(/^\d+\s*%/)) continue;
-    if (!name || name.length < 2 || name.length > 100) continue;
+    // Zeilen ohne Mengenangabe: "gesamtes Kochstück" etc. → als Verweis behalten
+    const hasAmount = /\d/.test(amount);
 
-    // Temperatur extrahieren
-    let temperature = '';
-    const tempMatch = name.match(/(\d+)\s*°C/);
-    if (tempMatch) {
-      temperature = tempMatch[1];
-      name = name.replace(/\d+\s*°C/g, '').trim();
-    }
-
-    // Hinweis in Klammern
+    // Hinweis in Klammern aus dem Namen ziehen
     let note = '';
     const noteMatch = name.match(/\(([^)]+)\)/);
     if (noteMatch) {
       note = noteMatch[1];
       name = name.replace(/\([^)]+\)/g, '').trim();
     }
-
     name = name.replace(/\s+/g, ' ').trim();
+
+    if (!name || name.length < 2 || name.length > 120) continue;
+
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
 
-    ingredients.push({ name, amount, unit: '', temperature, note });
+    ingredients.push({
+      name,
+      amount: hasAmount ? amount : '',
+      unit: '',
+      temperature,
+      note,
+    });
   }
   return ingredients;
 }
 
-// ---- 3. STEPS (Flex-Kreise) extrahieren --------------------
+// ---- 3. SCHRITTE extrahieren -----------------------------------
 
-/**
- * Gibt alle sichtbaren (display:flex) Step-Kreise mit Position + Text zurück.
- */
-function extractAllSteps(html) {
+function extractAllSteps(str) {
   const steps = [];
+  // Suche den rgba-Hintergrund der Schritt-Kreise
+  // Format im Original-HTML: rgba(196, 173, 130, 0.2) – mit Leerzeichen
   const rgbaRe = /rgba\(196,\s*173,\s*130[^)]*\)/g;
   let m;
-  while ((m = rgbaRe.exec(html)) !== null) {
+
+  while ((m = rgbaRe.exec(str)) !== null) {
     const pos = m.index;
 
-// Prüfe ob nächster sichtbarer display-Wert "flex" ist
-const before = html.slice(Math.max(0, pos - 700), pos);
-const displays = before.match(/display:\s*(none|block|flex|grid)/g) || [];
-const lastDisplay = displays.length
-  ? displays[displays.length - 1].replace(/display:\s*/, '')
-  : '';
-if (lastDisplay !== 'flex') continue;
+    // Letzten display-Wert in den 800 Zeichen vor dieser Position bestimmen
+    const before = str.slice(Math.max(0, pos - 800), pos);
+    const displayMatches = before.match(/display:\s*(none|block|flex|grid)/g) || [];
+    if (!displayMatches.length) continue;
+    const lastDisplay = displayMatches[displayMatches.length - 1]
+      .replace(/display:\s*/, '').trim();
+    if (lastDisplay !== 'flex') continue;
 
-    // Schrittnummer aus dem Kreis-div
-    const after = html.slice(pos, pos + 500);
+    // Schritt-Nummer aus dem Kreis-div
+    const after = str.slice(pos, pos + 600);
     const numMatch = after.match(/>(\d+)<\/div>\s*<\/div>/);
     if (!numMatch) continue;
     const stepNum = parseInt(numMatch[1]);
 
     // Instruktions-div: kommt direkt nach dem Kreis-div
     const circleEndAbs = pos + numMatch.index + numMatch[0].length;
-    const restStart = circleEndAbs;
-    const rest = html.slice(restStart, restStart + 8000);
+    const rest = str.slice(circleEndAbs, circleEndAbs + 8000);
 
     const divStart = rest.indexOf('<div');
     if (divStart === -1) continue;
 
-    const tagEnd = rest.indexOf('>', divStart + 4);
-    if (tagEnd === -1) continue;
+    const tagEndInRest = rest.indexOf('>', divStart + 4);
+    if (tagEndInRest === -1) continue;
 
-    const contentStart = tagEnd + 1;
-    const contentEnd = findDivContentEnd(rest, contentStart);
+    const contentStart = tagEndInRest + 1;
+    const contentEnd   = findDivContentEnd(rest, contentStart);
     const instructionHtml = rest.slice(contentStart, contentEnd);
 
     const instruction = htmlToText(instructionHtml);
@@ -765,18 +759,16 @@ if (lastDisplay !== 'flex') continue;
 const allSteps = extractAllSteps(rawHtml);
 console.log(`📋 ${allSteps.length} Schritte extrahiert (gesamt)`);
 
-// ---- 4. Steps + Zutaten den Phasen zuweisen ----------------
+// ---- 4. Phasen zusammenbauen -----------------------------------
 
 let dough_sections = [];
 
 if (uniquePhases.length === 0) {
-  // Fallback: alles in Hauptteig
-  console.log('⚠️  Keine Phasen erkannt – Fallback auf Hauptteig');
-  let steps = allSteps.map(s => ({
-    instruction: s.instruction,
-    duration: extractDuration(s.instruction),
-    type: detectStepType(s.instruction),
-  }));
+  console.log('⚠️  Keine Phasen – Fallback Hauptteig');
+  const steps = allSteps.map(s => {
+    const duration = extractDuration(s.instruction);
+    return { instruction: s.instruction, duration, type: detectStepType(s.instruction) };
+  });
   const expanded = [];
   steps.forEach(step => {
     const rep = parseRepeatingActions(step.instruction, step.duration);
@@ -794,28 +786,23 @@ if (uniquePhases.length === 0) {
   }];
 } else {
   for (let i = 0; i < uniquePhases.length; i++) {
-    const phase = uniquePhases[i];
-    const nextPhasePos = i + 1 < uniquePhases.length
+    const phase    = uniquePhases[i];
+    const nextPos  = i + 1 < uniquePhases.length
       ? uniquePhases[i + 1].charPos
       : rawHtml.length;
 
-    // Zutaten: aus dem HTML-Chunk dieser Phase
-    const phaseChunk = rawHtml.slice(phase.charPos, nextPhasePos);
+    // Zutaten aus dem HTML-Chunk dieser Phase
+    const phaseChunk       = rawHtml.slice(phase.charPos, nextPos);
     const phaseIngredients = extractIngredientsFromChunk(phaseChunk);
 
-    // Schritte: alle Steps, deren Position zwischen dieser und der nächsten Phase liegt
+    // Schritte deren Position in diesem Chunk liegt
     const phaseSteps = allSteps
-      .filter(s => s.pos > phase.charPos && s.pos < nextPhasePos)
+      .filter(s => s.pos > phase.charPos && s.pos < nextPos)
       .map(s => {
         const duration = extractDuration(s.instruction);
-        return {
-          instruction: s.instruction,
-          duration,
-          type: detectStepType(s.instruction),
-        };
+        return { instruction: s.instruction, duration, type: detectStepType(s.instruction) };
       });
 
-    // Wiederholende Aktionen auffalten
     const expandedSteps = [];
     phaseSteps.forEach(step => {
       const rep = parseRepeatingActions(step.instruction, step.duration);
@@ -833,17 +820,14 @@ if (uniquePhases.length === 0) {
   }
 }
 
-// Alle Steps flach als recipeData.steps (für Kompatibilität)
-recipeData.steps = allSteps.map(s => ({
+// Flach für Kompatibilität
+recipeData.steps       = allSteps.map(s => ({
   instruction: s.instruction,
-  duration: extractDuration(s.instruction),
-  type: detectStepType(s.instruction),
+  duration:    extractDuration(s.instruction),
+  type:        detectStepType(s.instruction),
 }));
-
 recipeData.dough_sections = dough_sections;
-
-// Globale ingredients = Vereinigung aller Phasenzutaten (für Kompatibilität)
-recipeData.ingredients = dough_sections.flatMap(s => s.ingredients);
+recipeData.ingredients    = dough_sections.flatMap(s => s.ingredients);
 
 console.log(`✅ ${dough_sections.length} Phasen, ${recipeData.steps.length} Schritte, ${recipeData.ingredients.length} Zutaten gesamt`);
     // ============================================================
