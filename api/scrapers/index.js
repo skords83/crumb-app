@@ -1,6 +1,6 @@
-const scrapePloetz = require('./ploetzblog');
-const scrapeHomebaking = require('./homebaking');
-const scrapeBrotdoc = require('./brotdoc');
+const { scrapePloetz } = require('./ploetzblog');  // ← MIT Klammern!
+const { scrapeHomebaking } = require('./homebaking');
+const { scrapeBrotdoc } = require('./brotdoc');
 
 const scrapers = {
   'ploetzblog.de': scrapePloetz,
@@ -8,7 +8,6 @@ const scrapers = {
   'brotdoc.com': scrapeBrotdoc,
 };
 
-// Wir exportieren ein Objekt, das die Funktion enthält
 module.exports = {
   getScraper: (url) => {
     const domain = Object.keys(scrapers).find(d => url.includes(d));

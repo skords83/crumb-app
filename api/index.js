@@ -229,7 +229,6 @@ app.post('/api/import', async (req, res) => {
   if (!url) return res.status(400).json({ error: "Keine URL angegeben" });
 
   try {
-    // Sicherstellen, dass getScraper existiert
     if (typeof getScraper !== 'function') {
         console.error("❌ Kritischer Fehler: getScraper ist keine Funktion!", typeof getScraper);
         return res.status(500).json({ error: "Server Konfigurationsfehler" });
@@ -311,17 +310,15 @@ function detectStepType(text) {
 }
 
 // ============================================================
-// HELPER: Parse wiederholende Aktionen (MIT "und" Support!)
+// HELPER: Parse wiederholende Aktionen - CLEAN TEXT
 // ============================================================
 function parseRepeatingActions(instruction, totalDuration) {
   const steps = [];
   
-  // Check: "Dabei nach 30, 60 und 90 Minuten ..." (mit "und"!)
   const pattern = /dabei\s+nach\s+([\d,\sund]+)\s*minuten?\s+(.+)/i;
   const match = instruction.match(pattern);
   
   if (match) {
-    // Entferne "und" und parse Zahlen
     const intervals = match[1]
       .replace(/\s*und\s*/g, ',')
       .split(/[,\s]+/)
@@ -330,14 +327,21 @@ function parseRepeatingActions(instruction, totalDuration) {
     
     const action = match[2].trim();
     
-    // Haupt-Anweisung ohne "Dabei..." Teil
-    const mainInstruction = instruction.replace(pattern, '').trim().replace(/\.$/, '');
+    // Extrahiere Hauptaktion ohne Zeit/Temp
+    let mainInstruction = instruction.replace(pattern, '').trim().replace(/\.$/, '');
     
-    console.log(`🔄 Wiederholende Aktion erkannt: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
+    // Entferne Zeitangaben aus dem Text
+    mainInstruction = mainInstruction
+      .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
+      .replace(/bei\s+\d+\s*°C\s*/gi, '')
+      .replace(/^\s*,?\s*/, '')
+      .trim();
+    
+    console.log(`🔄 Wiederholende Aktion: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
+    console.log(`   Basis: "${mainInstruction}" | Aktion: "${action}"`);
     
     let lastTime = 0;
     intervals.forEach((time, idx) => {
-      // Warte-Zeit
       const waitDuration = time - lastTime;
       if (waitDuration > 0) {
         steps.push({
@@ -347,7 +351,6 @@ function parseRepeatingActions(instruction, totalDuration) {
         });
       }
       
-      // Aktion
       steps.push({
         instruction: action.charAt(0).toUpperCase() + action.slice(1),
         duration: 5,
@@ -357,7 +360,6 @@ function parseRepeatingActions(instruction, totalDuration) {
       lastTime = time + 5;
     });
     
-    // Rest-Zeit nach letzter Aktion
     if (lastTime < totalDuration) {
       steps.push({
         instruction: mainInstruction,
@@ -372,7 +374,9 @@ function parseRepeatingActions(instruction, totalDuration) {
   return null;
 }
 
+// ============================================================
 // Parse recipe from uploaded HTML file
+// ============================================================
 app.post('/api/import/html', async (req, res) => {
   try {
     const { html, filename } = req.body;
@@ -386,9 +390,6 @@ app.post('/api/import/html', async (req, res) => {
     
     const fname = filename || 'uploaded.html';
     
-    // ============================================================
-    // Direktes HTML-Parsing
-    // ============================================================
     let recipeData = {
       title: $('h1.entry-title').first().text().trim() || 
              $('h1').first().text().trim() || 
@@ -404,58 +405,54 @@ app.post('/api/import/html', async (req, res) => {
     console.log('🔍 Starte HTML-Parsing für:', recipeData.title);
 
     // ============================================================
-    // BILD EXTRAKTION - IMPROVED (kein scr.png!)
+    // BILD EXTRAKTION - Suche VOR "Kommentare" Button
     // ============================================================
     let imageUrl = '';
     const imgCandidates = [];
 
-    // 1. og:image (aber nicht scr.png)
-    const ogImage = $('meta[property="og:image"]').attr('content');
-    if (ogImage && !ogImage.includes('scr.png')) {
-      imgCandidates.push(ogImage);
+    const commentButton = $('a:contains("Kommentare"), button:contains("Kommentare")').first();
+    let searchScope = $('body');
+
+    if (commentButton.length > 0) {
+      searchScope = commentButton.prevAll();
+      console.log('🔍 Suche Bilder VOR Kommentare-Button');
     }
 
-    // 2. Content-Bilder (nicht scr.png, nicht icons/logos)
-    $('.entry-content img, .wp-post-image, img[class*="attachment"]').each((i, img) => {
+    searchScope.find('img').each((i, img) => {
       const src = $(img).attr('src');
       if (src && 
-          !src.includes('scr.png') && 
+          !src.includes('scr.png') &&
           !src.includes('/scr/') &&
           !src.includes('icon') &&
           !src.includes('logo') &&
+          !src.includes('.svg') &&
+          !src.startsWith('data:image/svg') &&
           (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp'))) {
         imgCandidates.push(src);
       }
     });
 
-    // 3. Alle img tags als Fallback
     if (imgCandidates.length === 0) {
-      $('img').each((i, img) => {
-        const src = $(img).attr('src');
-        if (src && !src.includes('scr.png') && !src.includes('icon') && !src.includes('logo')) {
-          imgCandidates.push(src);
-        }
-      });
+      const ogImage = $('meta[property="og:image"]').attr('content');
+      if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) {
+        imgCandidates.push(ogImage);
+      }
     }
 
     console.log(`🖼️ ${imgCandidates.length} Bild-Kandidaten gefunden`);
 
-    // Nimm erstes gültiges Bild
     if (imgCandidates.length > 0) {
       const imgSrc = imgCandidates[0];
       console.log('🖼️ Gewähltes Bild:', imgSrc.substring(0, 80));
       
-      // Wenn base64
-      if (imgSrc.startsWith('data:image')) {
+      if (imgSrc.startsWith('data:image') && !imgSrc.startsWith('data:image/svg')) {
         imageUrl = imgSrc;
         console.log('✅ Base64 Bild');
       }
-      // Wenn relative Archive.is URL (z.B. /WQIRB/abc.jpg)
       else if (imgSrc.match(/^\/[A-Z0-9]+\//)) {
         imageUrl = 'https://archive.is' + imgSrc;
         console.log('✅ Archive.is URL:', imageUrl);
       }
-      // Wenn absolute URL
       else if (imgSrc.startsWith('http')) {
         imageUrl = imgSrc;
         console.log('✅ Absolute URL');
@@ -475,7 +472,6 @@ app.post('/api/import/html', async (req, res) => {
         const amount = $(cells[0]).text().trim();
         let name = $(cells[1]).text().trim();
         
-        // Extrahiere Temperatur
         let temperature = '';
         const tempMatch = name.match(/(\d+)\s*°C/);
         if (tempMatch) {
@@ -483,7 +479,6 @@ app.post('/api/import/html', async (req, res) => {
           name = name.replace(/\d+\s*°C/g, '').trim();
         }
         
-        // Extrahiere Note
         let note = '';
         const noteMatch = name.match(/\(([^)]+)\)/);
         if (noteMatch) {
@@ -526,7 +521,7 @@ app.post('/api/import/html', async (req, res) => {
     }
 
     // ============================================================
-    // EXTRACT STEPS - Nummern-DIVs
+    // EXTRACT STEPS
     // ============================================================
     console.log('📋 Versuche Schritte zu extrahieren...');
     const stepsMap = new Map();
@@ -598,7 +593,6 @@ app.post('/api/import/html', async (req, res) => {
     });
     steps = expandedSteps;
 
-    // Fallback
     if (steps.length === 0) {
       console.log('⚠️ Keine Steps gefunden - nutze Defaults');
       steps.push(
@@ -659,7 +653,7 @@ app.post('/api/import/html', async (req, res) => {
     console.log(`✅ Phase erkannt: ${phaseName} (parallel: ${isParallel})`);
 
     // ============================================================
-    // BILD DOWNLOAD (wenn nicht base64)
+    // BILD DOWNLOAD
     // ============================================================
     if (recipeData.image_url && 
         recipeData.image_url.startsWith('http') && 
@@ -695,7 +689,7 @@ app.post('/api/import/html', async (req, res) => {
 
     console.log('📤 Sending to frontend:', {
       title: finalData.title,
-      image: finalData.image_url ? (finalData.image_url.includes('scr.png') ? '⚠️ scr.png!' : '✅ OK') : 'none',
+      image: finalData.image_url ? '✅ OK' : '❌ none',
       ingredients: finalData.ingredients.length,
       steps: finalData.steps.length,
       dough_sections: finalData.dough_sections.length,
