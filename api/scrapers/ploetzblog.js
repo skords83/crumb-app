@@ -346,7 +346,9 @@ const scrapePloetz = async (url) => {
       let t = text.toLowerCase();
       t = t.replace(/\d+[,.]?\d*\s*(?:stunden?|minuten?|min\.?|std\.?|°\s*c|h\b)/g, '');
       t = t.replace(/bei\s+(?:\d+\s*)?°?\s*c?/g, '');
-      t = t.replace(/\b(den|die|das|dem|der|ein|eine|einem|einer|und|oder|mit|auf|in|an|zu|von|nach|für|über|unter)\b/g, '');
+      // Füllwörter + häufige Backkontext-Substantive entfernen
+      // damit "Dehnen und falten" == "Den Teig dehnen und falten."
+      t = t.replace(/\b(den|die|das|dem|der|ein|eine|einem|einer|und|oder|mit|auf|in|an|zu|von|nach|für|über|unter|teig|teigling|schüssel|wanne|arbeitsfläche|leicht|bemehlte|bemehlten)\b/g, '');
       t = t.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
       return t;
     };
