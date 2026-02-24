@@ -11,8 +11,6 @@ import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 // Beschreibungs-Box Komponente mit Expand/Collapse
 function DescriptionBox({ description }: { description: string }) {
   const [isExpanded, setIsExpanded] = React.useState(false);
-  
-  // Zeige nur erste 2 Zeilen (~150 Zeichen)
   const preview = description.substring(0, 150);
   const needsExpansion = description.length > 150;
   
@@ -21,27 +19,30 @@ function DescriptionBox({ description }: { description: string }) {
       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
         {isExpanded ? description : preview + (needsExpansion ? '...' : '')}
       </p>
-      
       {needsExpansion && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors"
         >
           {isExpanded ? (
-            <>
-              <Icons.ChevronUp size={14} />
-              Weniger anzeigen
-            </>
+            <><Icons.ChevronUp size={14} />Weniger anzeigen</>
           ) : (
-            <>
-              <Icons.ChevronDown size={14} />
-              Mehr lesen
-            </>
+            <><Icons.ChevronDown size={14} />Mehr lesen</>
           )}
         </button>
       )}
     </div>
   );
+}
+
+// Hilfsfunktion: Minuten lesbar formatieren (z.B. 345 → "5h 45min")
+function formatDuration(minutes: number): string {
+  if (!minutes || minutes === 0) return '0 min';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}min`;
 }
 
 export default function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -59,51 +60,34 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     if (!id) return;
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-      }
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
     })
       .then(res => res.json())
-      .then(data => {
-        setRecipe(data);
-        setIsLoading(false);
-      })
+      .then(data => { setRecipe(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));
   }, [id]);
 
-  // 2. STATISTIKEN (Sicher gegen falsche Datentypen)
-const stats = useMemo(() => {
-  if (!recipe?.dough_sections) return { steps: 0, duration: 0 };
-  
-  let steps = 0;
-  let maxParallelDuration = 0;
-  let sequentialDuration = 0;
-
-  recipe.dough_sections.forEach((section: any) => {
-    // Schritte zählen
-    steps += (section.steps?.length || 0);
-
-    // Dauer dieser spezifischen Sektion berechnen
-    let sectionDuration = 0;
-    section.steps?.forEach((st: any) => {
-      const d = parseInt(String(st.duration));
-      if (!isNaN(d)) sectionDuration += d;
+  // 2. STATISTIKEN – parallele Phasen korrekt berechnen
+  const stats = useMemo(() => {
+    if (!recipe?.dough_sections) return { steps: 0, duration: 0 };
+    let steps = 0;
+    let maxParallelDuration = 0;
+    let sequentialDuration = 0;
+    recipe.dough_sections.forEach((section: any) => {
+      steps += (section.steps?.length || 0);
+      let sectionDuration = 0;
+      section.steps?.forEach((st: any) => {
+        const d = parseInt(String(st.duration));
+        if (!isNaN(d)) sectionDuration += d;
+      });
+      if (section.is_parallel) {
+        maxParallelDuration = Math.max(maxParallelDuration, sectionDuration);
+      } else {
+        sequentialDuration += sectionDuration;
+      }
     });
-
-    if (section.is_parallel) {
-      // Wenn parallel: Nur die längste Sektion bestimmt die Zeit (z.B. Sauerteig 12h vs Kochstück 3h)
-      maxParallelDuration = Math.max(maxParallelDuration, sectionDuration);
-    } else {
-      // Wenn nicht parallel (Hauptteig): Zeit wird immer addiert
-      sequentialDuration += sectionDuration;
-    }
-  });
-
-  return { 
-    steps, 
-    duration: maxParallelDuration + sequentialDuration 
-  };
-}, [recipe]);
+    return { steps, duration: maxParallelDuration + sequentialDuration };
+  }, [recipe]);
 
   // 3. LÖSCH-FUNKTION
   const handleDelete = async () => {
@@ -111,40 +95,29 @@ const stats = useMemo(() => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-        }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
       });
-      if (res.ok) {
-        router.push('/');
-        router.refresh();
-      } else {
-        alert("Fehler beim Löschen.");
-      }
+      if (res.ok) { router.push('/'); router.refresh(); }
+      else alert("Fehler beim Löschen.");
     } catch (err) {
       console.error(err);
       alert("Server nicht erreichbar.");
     }
   };
 
-  // 4. ZUTATEN AGGREGIEREN (Einkaufsliste)
+  // 4. ZUTATEN AGGREGIEREN
   const totalIngredients = useMemo(() => {
     if (!recipe?.dough_sections) return [];
     const totals: Record<string, { name: string; amount: string; unit: string }> = {};
-
     recipe.dough_sections.forEach((section: any) => {
       section.ingredients?.forEach((ing: any) => {
         const rawName = (ing.name || "").trim();
-        // Filtert interne Verweise und Phasen-Namen aus der Einkaufsliste
         if (!rawName || 
             rawName.toLowerCase().includes("sauerteigstufe") || 
             rawName.toLowerCase() === "vorteig" || 
-            rawName.toLowerCase() === "quellstück") return; 
-        
+            rawName.toLowerCase() === "quellstück") return;
         const key = rawName.toLowerCase();
-        if (!totals[key]) {
-          totals[key] = { ...ing, name: rawName };
-        }
+        if (!totals[key]) totals[key] = { ...ing, name: rawName };
       });
     });
     return Object.values(totals);
@@ -184,10 +157,8 @@ const stats = useMemo(() => {
         <div className="p-6 md:p-10">
           <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8">{recipe.title}</h1>
 
-          {/* BESCHREIBUNG mit Expand/Collapse */}
-          {recipe.description && (
-            <DescriptionBox description={recipe.description} />
-          )}
+          {/* BESCHREIBUNG */}
+          {recipe.description && <DescriptionBox description={recipe.description} />}
 
           {/* GESAMT-ZUTATENLISTE */}
           {totalIngredients.length > 0 && (
@@ -214,7 +185,7 @@ const stats = useMemo(() => {
               <div className="text-[#8B4513] dark:text-[#C4A484]"><Icons.Clock size={22} /></div>
               <div className="text-center">
                 <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Dauer</p>
-                <p className="font-black text-gray-800 dark:text-gray-100 text-sm">{Math.floor(stats.duration / 60)}h {stats.duration % 60}m</p>
+                <p className="font-black text-gray-800 dark:text-gray-100 text-sm">{formatDuration(stats.duration)}</p>
               </div>
             </div>
             <div className="h-8 w-px bg-gray-100 dark:bg-gray-700"></div>
@@ -252,22 +223,32 @@ const stats = useMemo(() => {
             {recipe.dough_sections?.map((section: any, sIdx: number) => (
               <section key={sIdx}>
                 <div className="flex items-center gap-4 mb-6"> 
-                   <span className="bg-[#8B4513] text-white w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shadow-sm">{sIdx + 1}</span>
-                   <h2 className="text-lg font-black uppercase text-gray-800 dark:text-gray-100 tracking-wide">{section.name}</h2>
-                   <div className="grow h-px bg-gray-100 dark:bg-gray-700"></div>
+                  <span className="bg-[#8B4513] text-white w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shadow-sm">{sIdx + 1}</span>
+                  <h2 className="text-lg font-black uppercase text-gray-800 dark:text-gray-100 tracking-wide">{section.name}</h2>
+                  <div className="grow h-px bg-gray-100 dark:bg-gray-700"></div>
                 </div>
                 
                 <div className="grid lg:grid-cols-2 gap-8"> 
+                  {/* ZUTATEN */}
                   <div className="space-y-2">
                     <span className="text-[10px] font-bold uppercase text-gray-300 dark:text-gray-500 tracking-widest block mb-2">Zutaten</span>
                     {section.ingredients?.map((ing: any, iIdx: number) => (
                       <div key={iIdx} className="flex justify-between border-b border-gray-50 dark:border-gray-700 py-1.5 text-sm">
-                        <span className="text-gray-600 dark:text-gray-300">{ing.name}</span>
+                        <span className="text-gray-600 dark:text-gray-300">
+                          {ing.name}
+                          {/* FIX: Temperatur direkt bei Zutat anzeigen, lesbarer */}
+                          {ing.temperature && (
+                            <span className="ml-2 text-xs font-bold text-blue-500 dark:text-blue-400">
+                              {ing.temperature}°C
+                            </span>
+                          )}
+                        </span>
                         <span className="font-black text-gray-900 dark:text-gray-100">{ing.amount} {ing.unit || ''}</span>
                       </div>
                     ))}
                   </div>
                   
+                  {/* SCHRITTE */}
                   <div className="bg-gray-50/80 dark:bg-gray-700/50 rounded-2xl p-6 border border-gray-100/50 dark:border-gray-700"> 
                     <span className="text-[10px] font-bold uppercase text-gray-400 dark:text-gray-400 tracking-widest block mb-4">Zubereitung</span>
                     <div className="space-y-5">
@@ -276,7 +257,10 @@ const stats = useMemo(() => {
                           <div className={`w-5 h-5 rounded-full border dark:border-gray-600 flex items-center justify-center text-[10px] font-black shrink-0 ${step.type === 'Aktion' ? 'bg-[#8B4513] text-white' : 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-400'}`}>{stIdx + 1}</div>
                           <div>
                             <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{step.instruction}</p>
-                            <span className="text-[9px] font-black uppercase text-[#8B4513]/40 dark:text-[#C4A484]/60 mt-1 block">{step.type} • {step.duration} Min.</span>
+                            {/* FIX: text-[9px] → text-xs, formatDuration statt rohe Minuten */}
+                            <span className="text-xs font-black uppercase text-[#8B4513]/50 dark:text-[#C4A484]/60 mt-1 block">
+                              {step.type} • {formatDuration(step.duration)}
+                            </span>
                           </div>
                         </div>
                       ))}

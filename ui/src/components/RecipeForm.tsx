@@ -36,7 +36,6 @@ export default function RecipeForm({
   isSubmitting
 }: any) {
 
-  // --- HILFSFUNKTIONEN FÜR PHASEN ---
   const addSection = () => {
     setDoughSections([...doughSections, { 
       name: "Neue Phase", 
@@ -115,65 +114,59 @@ export default function RecipeForm({
         {/* HEADER: BILD & TITEL */}
         <div className="bg-gray-50/50 dark:bg-gray-700/50 p-8 border-b border-gray-100 dark:border-gray-600 flex flex-col md:flex-row gap-8 items-start">
           <div className="group relative w-full md:w-32 h-32 bg-white dark:bg-gray-700 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-600 flex items-center justify-center overflow-hidden shrink-0 shadow-inner hover:border-[#8B7355] transition-all">
-  {isUploading ? (
-    <div className="flex flex-col items-center gap-2">
-      <div className="w-6 h-6 border-2 border-[#8B7355] border-t-transparent rounded-full animate-spin"></div>
-      <span className="text-[8px] font-black uppercase text-gray-400">Lädt...</span>
-    </div>
-  ) : imageUrl ? (
-    <>
-      <img src={imageUrl} className="w-full h-full object-cover" alt="Vorschau" />
-      <button 
-        type="button"
-        onClick={() => setImageUrl("")}
-        className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-black uppercase tracking-widest"
-      >
-        Löschen
-      </button>
-    </>
-  ) : (
-    <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
-      <Plus className="text-gray-300 dark:text-gray-500 mb-1" size={24} />
-      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Upload</span>
-      <input 
-        type="file" 
-        className="hidden" 
-        accept="image/*"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
+            {isUploading ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-6 h-6 border-2 border-[#8B7355] border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-[8px] font-black uppercase text-gray-400">Lädt...</span>
+              </div>
+            ) : imageUrl ? (
+              <>
+                <img src={imageUrl} className="w-full h-full object-cover" alt="Vorschau" />
+                <button 
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-black uppercase tracking-widest"
+                >
+                  Löschen
+                </button>
+              </>
+            ) : (
+              <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                <Plus className="text-gray-300 dark:text-gray-500 mb-1" size={24} />
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Upload</span>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsUploading(true);
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    try {
+                      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+                        body: formData,
+                      });
+                      if (response.ok) {
+                        const data = await response.json();
+                        setImageUrl(data.url);
+                      } else {
+                        alert("Upload fehlgeschlagen");
+                      }
+                    } catch (error) {
+                      console.error("Fehler beim Upload:", error);
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }} 
+                />
+              </label>
+            )}
+          </div>
 
-          setIsUploading(true);
-          
-          // FormData vorbereiten für Node.js Backend
-          const formData = new FormData();
-          formData.append('file', file);
-
-          try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-              },
-              body: formData,
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              setImageUrl(data.url); // Das Backend sollte die finale URL zurückgeben
-            } else {
-              alert("Upload fehlgeschlagen");
-            }
-          } catch (error) {
-            console.error("Fehler beim Upload:", error);
-          } finally {
-            setIsUploading(false);
-          }
-        }} 
-      />
-    </label>
-  )}
-</div>
           <div className="flex-1 w-full space-y-4">
             <input 
               className="text-4xl font-black w-full bg-transparent dark:bg-transparent outline-none border-b-2 border-transparent focus:border-[#8B7355] pb-2 transition-all tracking-tight placeholder-gray-300 dark:placeholder-gray-600"
@@ -186,7 +179,7 @@ export default function RecipeForm({
             />
             <input 
               className="w-full bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-4 py-2 text-xs outline-none focus:border-[#8B7355] shadow-sm text-gray-400 dark:text-gray-300"
-              value={imageUrl || ""} // Das || "" verhindert, dass React meckert, wenn der Wert noch leer ist
+              value={imageUrl || ""}
               onChange={(e) => setImageUrl(e.target.value)} 
               placeholder="Bild URL..."
             />
@@ -266,14 +259,26 @@ export default function RecipeForm({
 
                 {/* GRID */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  
+                  {/* ZUTATEN */}
                   <div className="lg:col-span-5 space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8B7355]">Zutaten</p>
                     <div className="space-y-2">
                       {section.ingredients.map((ing: any, iIdx: number) => (
                         <div key={`ing-${sIdx}-${iIdx}`} className="bg-white dark:bg-gray-700 p-3 rounded-xl border border-gray-50 dark:border-gray-600 shadow-sm space-y-2 group/ing relative">
                           <div className="flex gap-2">
-                            <input placeholder="Zutat" className="flex-1 text-sm font-bold bg-transparent dark:bg-transparent outline-none dark:text-gray-100" value={ing.name || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'name', e.target.value)} />
-                            <input placeholder="Menge" className="w-16 text-sm font-black text-center bg-gray-50 dark:bg-gray-600 rounded-lg py-1 dark:text-gray-100" value={ing.amount || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'amount', e.target.value)} />
+                            <input
+                              placeholder="Zutat"
+                              className="flex-1 text-sm font-bold bg-transparent dark:bg-transparent outline-none dark:text-gray-100"
+                              value={ing.name || ""}
+                              onChange={(e) => updateIngredient(sIdx, iIdx, 'name', e.target.value)}
+                            />
+                            <input
+                              placeholder="Menge"
+                              className="w-16 text-sm font-black text-center bg-gray-50 dark:bg-gray-600 rounded-lg py-1 dark:text-gray-100"
+                              value={ing.amount || ""}
+                              onChange={(e) => updateIngredient(sIdx, iIdx, 'amount', e.target.value)}
+                            />
                             <button type="button" onClick={() => {
                               const newS = [...doughSections];
                               newS[sIdx].ingredients.splice(iIdx, 1);
@@ -281,11 +286,23 @@ export default function RecipeForm({
                             }} className="text-gray-300 dark:text-gray-500 hover:text-red-400"><Trash2 size={14} /></button>
                           </div>
                           <div className="flex gap-2">
+                            {/* FIX: text-[9px] → text-xs */}
                             <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-100/30 dark:border-blue-800/30">
-                                <TempIcon size={10} />
-                                <input placeholder="°C" className="text-[9px] font-bold bg-transparent w-6 outline-none dark:text-gray-100" value={ing.temperature || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'temperature', e.target.value)} />
+                              <TempIcon size={11} />
+                              <input
+                                placeholder="°C"
+                                className="text-xs font-bold bg-transparent w-8 outline-none dark:text-gray-100"
+                                value={ing.temperature || ""}
+                                onChange={(e) => updateIngredient(sIdx, iIdx, 'temperature', e.target.value)}
+                              />
                             </div>
-                            <input placeholder="Notiz..." className="text-[9px] bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 px-2 py-1 rounded-md flex-1 outline-none border border-gray-100 dark:border-gray-500" value={ing.note || ""} onChange={(e) => updateIngredient(sIdx, iIdx, 'note', e.target.value)} />
+                            {/* FIX: text-[9px] → text-xs */}
+                            <input
+                              placeholder="Notiz..."
+                              className="text-xs bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 px-2 py-1 rounded-md flex-1 outline-none border border-gray-100 dark:border-gray-500"
+                              value={ing.note || ""}
+                              onChange={(e) => updateIngredient(sIdx, iIdx, 'note', e.target.value)}
+                            />
                           </div>
                         </div>
                       ))}
@@ -293,6 +310,7 @@ export default function RecipeForm({
                     </div>
                   </div>
 
+                  {/* SCHRITTE */}
                   <div className="lg:col-span-7 space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8B7355]">Ablauf</p>
                     <div className="space-y-3">
@@ -300,29 +318,45 @@ export default function RecipeForm({
                         <div key={`step-${sIdx}-${stIdx}`} className="flex gap-3 p-4 bg-white dark:bg-gray-700 rounded-2xl border border-gray-50 dark:border-gray-600 shadow-sm relative group/step">
                           <div className="flex-1 space-y-2">
                             <textarea 
-                              className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100" rows={1} placeholder="Schritt..."
-                              value={step.instruction} onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
+                              className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100"
+                              rows={1}
+                              placeholder="Schritt..."
+                              value={step.instruction}
+                              onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
                             />
                             <div className="flex gap-2">
+                              {/* FIX: text-[8px] → text-xs */}
                               <select 
-                                className={`text-[8px] font-black uppercase px-2 py-1 rounded-md border outline-none ${step.type === 'Aktion' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800' : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800'}`}
-                                value={step.type} onChange={(e) => updateStepInSection(sIdx, stIdx, 'type', e.target.value)}
+                                className={`text-xs font-black uppercase px-2 py-1 rounded-md border outline-none ${
+                                  step.type === 'Aktion'
+                                    ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800'
+                                    : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800'
+                                }`}
+                                value={step.type}
+                                onChange={(e) => updateStepInSection(sIdx, stIdx, 'type', e.target.value)}
                               >
                                 <option value="Aktion">Aktion</option>
                                 <option value="Warten">Warten</option>
                               </select>
-                              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-[8px] font-black text-gray-400 dark:text-gray-300">
-                                <Clock size={10} />
-                                <input className="bg-transparent dark:bg-transparent w-6 text-center outline-none text-gray-700 dark:text-gray-200" type="number" value={step.duration} onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)} /> Min.
+                              {/* FIX: text-[8px] → text-xs, w-6 → w-10 für mehr Platz */}
+                              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
+                                <Clock size={11} />
+                                <input
+                                  className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                  type="number"
+                                  value={step.duration}
+                                  onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)}
+                                /> Min.
                               </div>
                             </div>
                           </div>
                           <button type="button" onClick={() => removeStepFromSection(sIdx, stIdx)} className="text-gray-300 dark:text-gray-500 hover:text-red-400 self-start"><Trash2 size={14} /></button>
                         </div>
                       ))}
+                      {/* FIX: text-[9px] → text-xs */}
                       <div className="flex gap-2">
-                         <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-[9px] font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>
-                         <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-[9px] font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Warten</button>
+                        <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>
+                        <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Warten</button>
                       </div>
                     </div>
                   </div>
@@ -341,12 +375,7 @@ export default function RecipeForm({
           </div>
 
           <div className="pt-10 border-t border-gray-100 flex justify-end">
-            {/* <button 
-              type="submit" disabled={!title.trim() || isSubmitting}
-              className="flex items-center justify-center gap-4 px-14 py-5 rounded-2xl font-black text-sm bg-[#8B7355] text-white hover:bg-[#766248] transition-all shadow-xl shadow-[#8B7355]/20 disabled:opacity-50 active:scale-95 uppercase tracking-widest"
-            >
-              <Save size={20} /> {isSubmitting ? "Speichert..." : "Rezept speichern"}
-            </button> */}
+            {/* Gespeicherter Button extern via SaveButton */}
           </div>
         </div>
       </div>
