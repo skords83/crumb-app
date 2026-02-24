@@ -27,6 +27,7 @@ services:
       NTFY_TOKEN: ${NTFY_TOKEN}
       NTFY_VORLAUF: ${NTFY_VORLAUF:-5}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
+      TZ: Europe/Berlin
     volumes:
       - api_uploads:/usr/src/app/uploads
     depends_on:

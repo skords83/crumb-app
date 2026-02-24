@@ -460,7 +460,9 @@ export default function BackplanPage() {
                     </span>
                   </div>
                   <div className="flex-1 rounded-2xl border-2 border-green-100 dark:border-green-800 bg-green-50 dark:bg-green-900/30 p-4">
-                    <span className="text-green-700 dark:text-green-300 font-bold text-[14px]">Brot fertig!</span>
+                    <span className="text-green-700 dark:text-green-300 font-bold text-[14px]">
+                      {recipe.title} fertig!
+                    </span>
                   </div>
                 </div>
 

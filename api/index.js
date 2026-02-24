@@ -797,7 +797,7 @@ let dough_sections = [];
 if (uniquePhases.length === 0) {
   console.log('⚠️  Keine Phasen – Fallback Hauptteig');
   const steps = allSteps.map(s => {
-    const duration = extractDuration(s.instruction);
+    const duration = extractDuration(s.instruction) || 5;
     return { instruction: s.instruction, duration, type: detectStepType(s.instruction) };
   });
   const expanded = [];
@@ -830,7 +830,7 @@ if (uniquePhases.length === 0) {
     const phaseSteps = allSteps
       .filter(s => s.pos > phase.charPos && s.pos < nextPos)
       .map(s => {
-        const duration = extractDuration(s.instruction);
+        const duration = extractDuration(s.instruction) || 5;
         return { instruction: s.instruction, duration, type: detectStepType(s.instruction) };
       });
 
