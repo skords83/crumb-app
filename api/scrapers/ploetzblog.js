@@ -363,6 +363,15 @@ const scrapePloetz = async (url) => {
       if (tag === 'p' && currentSection) {
         if (/^\d+$/.test(text)) return;
         if (!isValidStepText(text)) return;
+        // Einsteiger-exklusive Steps filtern: wenn data-step-count-beginner
+        // und data-step-count-expert unterschiedlich sind, ist es ein
+        // Einsteiger-Zusatzschritt der auf der Website per Toggle versteckt wird
+        const parentDiv = $(el).closest('[data-step-count-beginner]');
+        if (parentDiv.length) {
+          const beginner = parentDiv.attr('data-step-count-beginner');
+          const expert = parentDiv.attr('data-step-count-expert');
+          if (beginner && expert && beginner !== expert) return;
+        }
         // Exakter Key verhindert wortgleiche Duplikate
         const stepKey = `${currentSection.name}::${text}`;
         if (seenSteps.has(stepKey)) return;
