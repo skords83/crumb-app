@@ -267,32 +267,39 @@ app.post('/api/import', async (req, res) => {
 // ============================================================
 // HELPER FUNCTIONS für Step-Extraktion
 // ============================================================
+// ============================================================
+// ERSATZ FÜR extractDuration in index.js
+// Fix: Intervall-Minuten ("dabei nach 45 Minuten") werden nicht
+//      mehr zur Gesamtdauer addiert → "1,5 Stunden... nach 45 Min"
+//      ergibt jetzt korrekt 90 min statt 135 min
+// ============================================================
 function extractDuration(text) {
   if (!text) return 0;
-  
-  const patterns = [
-    { regex: /(\d+[,.]?\d*)\s*Stunden?/i, multiplier: 60 },
-    { regex: /(\d+[,.]?\d*)\s*h\b/i, multiplier: 60 },
-    { regex: /(\d+)\s*Minuten?/i, multiplier: 1 },
-    { regex: /(\d+)\s*min\b/i, multiplier: 1 },
-    { regex: /(\d+):(\d+)\s*(Uhr|Stunden)?/i, special: 'time' }
-  ];
-  
-  for (const pattern of patterns) {
-    const match = text.match(pattern.regex);
-    if (match) {
-      if (pattern.special === 'time') {
-        const hours = parseInt(match[1]);
-        const mins = parseInt(match[2]);
-        return hours * 60 + mins;
-      } else {
-        const value = parseFloat(match[1].replace(',', '.'));
-        return Math.round(value * pattern.multiplier);
-      }
-    }
+  const lower = text.toLowerCase();
+
+  // Bereich: "2-3 Stunden" → oberen Wert nehmen
+  const hourRangeMatch = lower.match(/(\d+[,.]?\d*)\s*[-–]\s*(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
+  if (hourRangeMatch) {
+    return Math.round(parseFloat(hourRangeMatch[2].replace(',', '.')) * 60);
   }
-  
-  return 0;
+
+  const hourMatch = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
+
+  // FIX: Intervall-Minuten ("dabei nach 45 Minuten") nicht zur Gesamtdauer addieren
+  const hasDabei = /dabei|nach\s+\d+\s*min/i.test(text);
+  const minMatch = !hasDabei ? lower.match(/(\d+)\s*(?:minuten?|min\.?|min\b)/) : null;
+
+  let total = 0;
+  if (hourMatch) total += Math.round(parseFloat(hourMatch[1].replace(',', '.')) * 60);
+  if (minMatch) total += parseInt(minMatch[1]);
+
+  if (total === 0) {
+    // Fallback: "X:YY"-Format
+    const timeMatch = text.match(/(\d+):(\d+)\s*(?:Uhr|Stunden)?/i);
+    if (timeMatch) total = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
+  }
+
+  return total === 0 ? 0 : total;
 }
 
 function detectStepType(text) {
@@ -314,34 +321,35 @@ function detectStepType(text) {
 // ============================================================
 function parseRepeatingActions(instruction, totalDuration) {
   const steps = [];
-  
+
   const pattern = /dabei\s+nach\s+([\d,\sund]+)\s*minuten?\s+(.+)/i;
   const match = instruction.match(pattern);
-  
+
   if (match) {
     const intervals = match[1]
       .replace(/\s*und\s*/g, ',')
       .split(/[,\s]+/)
       .map(n => parseInt(n))
-      .filter(n => !isNaN(n));
-    
-    const action = match[2].trim();
-    
-    // Extrahiere Hauptaktion ohne Zeit/Temp
-    let mainInstruction = instruction.replace(pattern, '').trim().replace(/\.$/, '');
-    
-    // Entferne Zeitangaben aus dem Text
+      .filter(n => !isNaN(n) && n > 0);
+
+    if (intervals.length === 0) return null;
+
+    const action = match[2].trim().replace(/\.$/, '');
+
+    // FIX: Haupttext vor "Dabei" nehmen, dann Zeit/Temp entfernen
+    let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
     mainInstruction = mainInstruction
       .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
       .replace(/bei\s+\d+\s*°C\s*/gi, '')
-      .replace(/^\s*,?\s*/, '')
+      .replace(/^\s*[,.]?\s*/, '')
       .trim();
-    
+    if (!mainInstruction) mainInstruction = instruction.split(',')[0].trim();
+
     console.log(`🔄 Wiederholende Aktion: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
     console.log(`   Basis: "${mainInstruction}" | Aktion: "${action}"`);
-    
+
     let lastTime = 0;
-    intervals.forEach((time, idx) => {
+    intervals.forEach((time) => {
       const waitDuration = time - lastTime;
       if (waitDuration > 0) {
         steps.push({
@@ -350,16 +358,14 @@ function parseRepeatingActions(instruction, totalDuration) {
           type: 'Warten'
         });
       }
-      
       steps.push({
         instruction: action.charAt(0).toUpperCase() + action.slice(1),
         duration: 5,
         type: 'Aktion'
       });
-      
       lastTime = time + 5;
     });
-    
+
     if (lastTime < totalDuration) {
       steps.push({
         instruction: mainInstruction,
@@ -367,10 +373,10 @@ function parseRepeatingActions(instruction, totalDuration) {
         type: 'Warten'
       });
     }
-    
+
     return steps;
   }
-  
+
   return null;
 }
 
