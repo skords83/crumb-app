@@ -183,14 +183,16 @@ const scrapePloetz = async (url) => {
       // Bereich: "2-3 Stunden" → nimm oberen Wert (3)
       const hourRangeMatch = lower.match(/(\d+[,.]?\d*)\s*[-–]\s*(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
       if (hourRangeMatch) {
-        const hours = parseFloat(hourRangeMatch[2].replace(',', '.'));
-        const minMatch = lower.match(/(\d+)\s*(?:minuten?|min\.?)/);
-        const mins = minMatch ? parseInt(minMatch[1]) : 0;
-        return Math.round(hours * 60) + mins;
+        return Math.round(parseFloat(hourRangeMatch[2].replace(',', '.')) * 60);
       }
 
       const hourMatch = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
-      const minMatch = lower.match(/(\d+)\s*(?:minuten?|min\.?)/);
+
+      // FIX: Minuten NUR addieren wenn kein "dabei/nach"-Kontext vorhanden.
+      // Sonst würde "1,5 Stunden... nach 45 Minuten dehnen" fälschlich
+      // 90 + 45 = 135 min ergeben statt korrekt 90 min.
+      const hasDabei = /dabei|nach\s+\d+\s*min/i.test(text);
+      const minMatch = !hasDabei ? lower.match(/(\d+)\s*(?:minuten?|min\.?)/) : null;
 
       let totalMinutes = 0;
       if (hourMatch) totalMinutes += Math.round(parseFloat(hourMatch[1].replace(',', '.')) * 60);
@@ -228,9 +230,14 @@ const scrapePloetz = async (url) => {
         if (intervals.length === 0) return null;
 
         const action = matchA[2].trim().replace(/\.$/, '');
-        const mainInstruction = instruction
-          .replace(patternA, '').trim()
-          .replace(/,?\s*$/, '').trim() || instruction.split(',')[0].trim();
+        // FIX: Haupttext sauber kürzen – Zeitangabe und Temperatur entfernen,
+        // sodass nur die eigentliche Tätigkeit bleibt (z.B. "Reifen lassen")
+        let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
+        mainInstruction = mainInstruction
+          .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
+          .replace(/bei\s+\d+\s*°C\s*/gi, '')
+          .replace(/^\s*[,.]?\s*/, '')
+          .trim() || instruction.split(',')[0].trim();
 
         const steps = [];
         let lastTime = 0;
@@ -263,9 +270,12 @@ const scrapePloetz = async (url) => {
           ? parseInt(matchB[3])
           : Math.max(1, Math.floor(totalDuration / interval) - 1);
 
-        const mainInstruction = instruction
-          .replace(patternB, '').trim()
-          .replace(/,?\s*$/, '').trim() || instruction.split(',')[0].trim();
+        let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
+        mainInstruction = mainInstruction
+          .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
+          .replace(/bei\s+\d+\s*°C\s*/gi, '')
+          .replace(/^\s*[,.]?\s*/, '')
+          .trim() || instruction.split(',')[0].trim();
 
         const steps = [];
         let lastTime = 0;
