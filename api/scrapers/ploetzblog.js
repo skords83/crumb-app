@@ -339,6 +339,18 @@ const scrapePloetz = async (url) => {
       }
     });
 
+    // Normalisiert Schritt-Text für semantische Deduplizierung:
+    // "reifen lassen" == "45 Minuten bei 20 °C reifen lassen."
+    // "Dehnen und falten" == "Den Teig dehnen und falten."
+    const normalizeStepText = (text) => {
+      let t = text.toLowerCase();
+      t = t.replace(/\d+[,.]?\d*\s*(?:stunden?|minuten?|min\.?|std\.?|°\s*c|h\b)/g, '');
+      t = t.replace(/bei\s+(?:\d+\s*)?°?\s*c?/g, '');
+      t = t.replace(/\b(den|die|das|dem|der|ein|eine|einem|einer|und|oder|mit|auf|in|an|zu|von|nach|für|über|unter)\b/g, '');
+      t = t.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      return t;
+    };
+
     const seenSteps = new Set();
     $('h4, h3, h5, table, p').each((_, el) => {
       const tag = (el.tagName || el.name || '').toLowerCase();
@@ -349,9 +361,15 @@ const scrapePloetz = async (url) => {
       if (tag === 'p' && currentSection) {
         if (/^\d+$/.test(text)) return;
         if (!isValidStepText(text)) return;
+        // Exakter Key verhindert wortgleiche Duplikate
         const stepKey = `${currentSection.name}::${text}`;
         if (seenSteps.has(stepKey)) return;
         seenSteps.add(stepKey);
+        // Normalisierter Key verhindert semantische Duplikate:
+        // "reifen lassen" vs "45 Minuten bei 20 °C reifen lassen."
+        const normKey = `${currentSection.name}::norm::${normalizeStepText(text)}`;
+        if (seenSteps.has(normKey)) return;
+        seenSteps.add(normKey);
 
         const duration = extractDurationMinutes(text);
         const type = classifyStep(text);
