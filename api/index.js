@@ -762,30 +762,29 @@ function extractAllSteps(str) {
   return steps;
 }
 
+// KORREKT:
 const allSteps = (() => {
   const raw = extractAllSteps(rawHtml);
   console.log(`📋 ${raw.length} Schritte extrahiert (roh)`);
 
-  // Pro Phase-Chunk nur den ersten Schritt je Nummer behalten.
-  // Da wir noch keine Phasen haben, deduplizieren wir global
-  // über einen fortlaufenden Zähler: sobald eine Nummer kleiner
-  // wird als die vorherige, starten wir den Zähler neu (neue Phase).
   const deduped = [];
-// NEU - Reset bei jeder kleineren oder gleichen Nummer
-const seenInBlock = new Set();
-let lastNum = -1;
+  const seenInBlock = new Set();
+  let lastNum = -1;
 
-raw.forEach(step => {
-  // Neue Phase: Nummer geht zurück → Block-Reset
-  if (step.stepNum <= lastNum) {
-    seenInBlock.clear();
-  }
-  if (!seenInBlock.has(step.stepNum)) {
-    seenInBlock.add(step.stepNum);
-    deduped.push(step);
-  }
-  lastNum = step.stepNum;
-});
+  raw.forEach(step => {
+    if (step.stepNum <= lastNum) {
+      seenInBlock.clear();
+    }
+    if (!seenInBlock.has(step.stepNum)) {
+      seenInBlock.add(step.stepNum);
+      deduped.push(step);
+    }
+    lastNum = step.stepNum;
+  });
+
+  console.log(`📋 ${deduped.length} Schritte nach Deduplizierung`);
+  return deduped;   // ← fehlt!
+})();               // ← fehlt!
 
 // ---- 4. Phasen zusammenbauen -----------------------------------
 
