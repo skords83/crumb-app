@@ -41,14 +41,23 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     }
   }, [selectedTime, mode]);
 
-  // Gesamtzeit aus allen Steps berechnen
+  // FIX: Gesamtzeit korrekt berechnen – parallele Phasen (Vorteige) laufen gleichzeitig,
+  // nur die längste zählt. Sequentielle Phasen (Hauptteig etc.) werden addiert.
   const totalMinutes = useMemo(() => {
     if (!recipe?.dough_sections) return 0;
-    return recipe.dough_sections.reduce((total: number, section: any) => {
-      return total + (section.steps || []).reduce(
+    let parallelMax = 0;
+    let sequential = 0;
+    recipe.dough_sections.forEach((section: any) => {
+      const dur = (section.steps || []).reduce(
         (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
       );
-    }, 0);
+      if (section.is_parallel) {
+        parallelMax = Math.max(parallelMax, dur);
+      } else {
+        sequential += dur;
+      }
+    });
+    return parallelMax + sequential;
   }, [recipe]);
 
   const totalHours = Math.floor(totalMinutes / 60);
@@ -80,23 +89,35 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     return new Date(y, m - 1, day, h, min);
   };
 
+  // FIX: Lokalen ISO-String mit Timezone-Offset erzeugen.
+  // Ohne Offset würde "2025-01-05T09:00" vom Server (UTC) als 09:00 UTC interpretiert,
+  // was in Deutschland 10:00 Uhr ergibt – daher die konstante Stunde Versatz.
+  const toLocalISOString = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const offsetMinutes = -d.getTimezoneOffset(); // z.B. +60 für UTC+1
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const absOffset = Math.abs(offsetMinutes);
+    const tz = `${sign}${pad(Math.floor(absOffset / 60))}:${pad(absOffset % 60)}`;
+    return `${date}T${time}${tz}`; // z.B. "2025-01-05T09:00+01:00"
+  };
+
   // Validation function for end time
   const validateEndTime = (timeStr: string): string | null => {
     if (!timeStr || mode !== "end") return null;
     const endTime = parseTimeInput(timeStr);
     const now = new Date();
-    
-    // Check if end time is in the past
+
     if (endTime <= now) {
       return "Die Endzeit liegt in der Vergangenheit. Bitte wähle eine Zeit in der Zukunft.";
     }
-    
-    // Check if there's enough time for the recipe
+
     const timeDiffMinutes = (endTime.getTime() - now.getTime()) / 60000;
     if (timeDiffMinutes < totalMinutes) {
       return `Für dieses Rezept werden ${totalHours}h ${totalMins}m benötigt. Die gewählte Zeit ist zu nah.`;
     }
-    
+
     return null;
   };
 
@@ -108,33 +129,27 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const gestern = new Date(today);
-    gestern.setDate(gestern.getDate() - 1);
 
     if (date.toDateString() === today.toDateString()) return `Heute, ${formatTime(date)}`;
     if (date.toDateString() === tomorrow.toDateString()) return `Morgen, ${formatTime(date)}`;
-    
+
     const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
     return `${days[date.getDay()]}, ${date.getDate()}.${(date.getMonth() + 1).toString().padStart(2, "0")}. ${formatTime(date)}`;
   };
 
-  // Berechne Zeitpunkt basierend auf dem Modus
+  // FIX: Alle drei Modi geben jetzt einen String MIT Timezone-Offset zurück.
   const getTargetTimeString = (): string | null => {
     const now = new Date();
 
     if (mode === "now") {
-      const end = new Date(now.getTime() + totalMinutes * 60000);
-      const val = `${end.getFullYear()}-${(end.getMonth() + 1).toString().padStart(2, "0")}-${end.getDate().toString().padStart(2, "0")}T${formatTime(end)}`;
-      return val;
+      return toLocalISOString(new Date(now.getTime() + totalMinutes * 60000));
     }
     if (mode === "start" && selectedTime) {
       const start = parseTimeInput(selectedTime);
-      const end = new Date(start.getTime() + totalMinutes * 60000);
-      const val = `${end.getFullYear()}-${(end.getMonth() + 1).toString().padStart(2, "0")}-${end.getDate().toString().padStart(2, "0")}T${formatTime(end)}`;
-      return val;
+      return toLocalISOString(new Date(start.getTime() + totalMinutes * 60000));
     }
     if (mode === "end" && selectedTime) {
-      return selectedTime;
+      return toLocalISOString(parseTimeInput(selectedTime));
     }
     return null;
   };
@@ -210,7 +225,6 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const target = getTargetTimeString();
     if (!target) return;
 
-    // Validate end time before confirming
     if (mode === "end") {
       const validationError = validateEndTime(selectedTime);
       if (validationError) {

@@ -10,55 +10,38 @@ const scrapePloetz = async (url) => {
 
     const $ = cheerio.load(data);
 
-    // ============================================================
-    // AB HIER DEIN ORIGINALER CODE (UNGEKÜRZT)
-    // ============================================================
-
     // 1. TITEL & UNTERTITEL
     const title = $('h1').first().text().trim().replace(/\u00AD/g, '');
     const subtitle = $('h2').first().text().trim();
 
-    // 2. BILD (Spezial-Logik für Plötzblog / Cloudimg)
+    // 2. BILD
     let imageUrl = '';
-
-    // Prio 1: Meta-Tags (Der sicherste Weg)
     imageUrl = $('meta[property="og:image"]').attr('content') || 
                $('meta[name="twitter:image"]').attr('content') || '';
 
-    // Prio 2: Gezielte Suche nach dem Hauptbild in der Figure/Gallery
     if (!imageUrl || imageUrl.includes('placeholder')) {
-      // Suche nach dem ersten Bild in einem Link, der zur Gallery führt
       const galleryImg = $('a[href*="/gallery/"] img, figure img').first();
       imageUrl = galleryImg.attr('data-src') || galleryImg.attr('src') || '';
     }
 
-    // Prio 3: Alle Bilder durchsuchen, falls noch nichts gefunden wurde
     if (!imageUrl) {
       $('img').each((_, el) => {
         const $el = $(el);
         const src = $el.attr('data-src') || $el.attr('src') || '';
-        
-        // Filter: Ignoriere Logos, Partner und Avatare
         if (src && 
             !src.includes('Logo') && 
             !src.includes('Ploetz-Partner') && 
             (src.includes('cloudimg') || src.includes('entity') || src.includes('rezept'))) {
           imageUrl = src;
-          return false; // Schleife abbrechen
+          return false;
         }
       });
     }
 
-    // Bereinigung und absolute URL
     if (imageUrl) {
-      // Entferne eventuelle Zusätze wie " 800w" bei srcset-Resten
       imageUrl = imageUrl.split(' ')[0];
-
-      // Sicherstellen, dass es eine https-URL ist
       if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
       if (imageUrl.startsWith('/')) imageUrl = 'https://www.ploetzblog.de' + imageUrl;
-      
-      // Cloudimg-Parameter für gute Qualität erzwingen
       if (imageUrl.includes('cloudimg.io')) {
         imageUrl = imageUrl.replace(/\?p=w\d+/, '?p=w800');
       }
@@ -83,13 +66,11 @@ const scrapePloetz = async (url) => {
     // 4. METADATEN
     const bodyText = $('body').text();
     const sourceUrl = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '';
-    const totalTimeMatch = bodyText.match(/Gesamtzubereitungszeit:\s*(.+?)(?:\n|$)/);
 
     // 5. ZUTATEN & PHASEN MIT STEPS
     const ingredientOverview = [];
     const doughSections = [];
 
-    // Prüft ob eine Tabelle Zutaten enthält
     const isIngredientTable = (table) => {
       const text = $(table).text().toLowerCase();
       if ((text.includes('amazon') || text.includes('otto')) &&
@@ -99,7 +80,6 @@ const scrapePloetz = async (url) => {
       if (text.includes('uhr') && text.includes('vorheizen')) return false;
       const uhrCount = (text.match(/uhr/gi) || []).length;
       if (uhrCount >= 3) return false;
-
       let hasGrams = false;
       $(table).find('tr').each((_, row) => {
         if (/^\d+[\.,]?\d*\s*g/.test($(row).find('td').first().text().trim())) hasGrams = true;
@@ -107,34 +87,25 @@ const scrapePloetz = async (url) => {
       return hasGrams;
     };
 
-    // Parst eine Zutatentabelle
     const parseIngredientTable = (table) => {
       const ingredients = [];
       $(table).find('tr').each((_, row) => {
         const cells = $(row).find('td');
         if (cells.length < 2) return;
-
         const amountCell = $(cells[0]).text().trim();
         const nameCell = $(cells[1]).text().trim();
         let tempCell = '';
         let percentCell = '';
-
         if (cells.length >= 4) {
           tempCell = $(cells[2]).text().trim();
           percentCell = $(cells[3]).text().trim();
         } else if (cells.length === 3) {
           const thirdCell = $(cells[2]).text().trim();
-          if (/\d+\s*\u00b0\s*C/.test(thirdCell)) {
-            tempCell = thirdCell;
-          } else {
-            percentCell = thirdCell;
-          }
+          if (/\d+\s*\u00b0\s*C/.test(thirdCell)) tempCell = thirdCell;
+          else percentCell = thirdCell;
         }
-
         if (!nameCell) return;
-
         const amountMatch = amountCell.match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|ml|l|Stk\.?|EL|TL|Prise)?(.*)$/);
-
         if (amountMatch) {
           const ing = {
             amount: amountMatch[1].replace(',', '.'),
@@ -158,14 +129,12 @@ const scrapePloetz = async (url) => {
       return ingredients;
     };
 
-    // Bekannte Abschnitts-Keywords
     const sectionKeywords = [
-      'sauerteig', 'vorteig', 'hauptteig', 'quellst\u00fcck', 'br\u00fchst\u00fcck',
-      'autolyseteig', 'autolyse', 'kochst\u00fcck', 'mehlkochst\u00fcck', 'poolish',
-      'biga', 'teig', 'dekoration', 'f\u00fcllung', 'glasur', 'weizensauerteig',
-      'roggensauerteig', 'lievito madre', 'starter', 'aromast\u00fcck',
-      'altbrot', 'einlage', 'streusel', 'belag', 'p\u00e2te ferment\u00e9e',
-      'backen'
+      'sauerteig', 'vorteig', 'hauptteig', 'quellstück', 'brühstück',
+      'autolyseteig', 'autolyse', 'kochstück', 'mehlkochstück', 'poolish',
+      'biga', 'teig', 'dekoration', 'füllung', 'glasur', 'weizensauerteig',
+      'roggensauerteig', 'lievito madre', 'starter', 'aromastück',
+      'altbrot', 'einlage', 'streusel', 'belag', 'pâte fermentée', 'backen'
     ];
 
     const isSectionHeading = (text) => {
@@ -173,7 +142,16 @@ const scrapePloetz = async (url) => {
       return sectionKeywords.some(kw => lower.includes(kw));
     };
 
-    // STEP KLASSIFIZIERUNG
+    // FIX 4: is_parallel korrekt – alle Vorteig-/Quellphasen, nicht nur Vorteig/Poolish/Biga
+    const parallelKeywords = [
+      'vorteig', 'poolish', 'biga', 'sauerteig', 'levain', 'lievito',
+      'kochstück', 'brühstück', 'quellstück', 'aromastück', 'mehlkochstück'
+    ];
+    const isParallelSection = (name) => {
+      const lower = (name || '').toLowerCase();
+      return parallelKeywords.some(kw => lower.includes(kw));
+    };
+
     const waitKeywords = [
       'reifen lassen', 'ruhen lassen', 'gehen lassen', 'gare', 'gehzeit',
       'stockgare', 'stückgare', 'über nacht', 'kühlschrank', 'quellen lassen',
@@ -193,23 +171,31 @@ const scrapePloetz = async (url) => {
 
     const classifyStep = (text) => {
       const lower = text.toLowerCase();
-      const isWait = waitKeywords.some(kw => lower.includes(kw));
-      return isWait ? 'Warten' : 'Aktion';
+      return waitKeywords.some(kw => lower.includes(kw)) ? 'Warten' : 'Aktion';
     };
 
+    // FIX 1: Dezimalstunden korrekt parsen – alte Regex \d+ stoppte vor dem Komma,
+    // sodass "1,5 Stunden" als "5 Stunden" → 300 min gelesen wurde.
+    // Neue Regex (\d+[,.]?\d*) matcht "1,5" als ganzes → 1.5 * 60 = 90 min ✓
     const extractDurationMinutes = (text) => {
       const lower = text.toLowerCase();
-      const hourMatch = lower.match(/(\d+)(?:\s*[-–]\s*(\d+))?\s*(?:stunden?|std\.?)/);
-      const minMatch = lower.match(/(\d+)(?:\s*[-–]\s*(\d+))?\s*(?:minuten?|min\.?)/);
+
+      // Bereich: "2-3 Stunden" → nimm oberen Wert (3)
+      const hourRangeMatch = lower.match(/(\d+[,.]?\d*)\s*[-–]\s*(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
+      if (hourRangeMatch) {
+        const hours = parseFloat(hourRangeMatch[2].replace(',', '.'));
+        const minMatch = lower.match(/(\d+)\s*(?:minuten?|min\.?)/);
+        const mins = minMatch ? parseInt(minMatch[1]) : 0;
+        return Math.round(hours * 60) + mins;
+      }
+
+      const hourMatch = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
+      const minMatch = lower.match(/(\d+)\s*(?:minuten?|min\.?)/);
+
       let totalMinutes = 0;
-      if (hourMatch) {
-        const hours = hourMatch[2] ? parseInt(hourMatch[2]) : parseInt(hourMatch[1]);
-        totalMinutes += hours * 60;
-      }
-      if (minMatch) {
-        const mins = minMatch[2] ? parseInt(minMatch[2]) : parseInt(minMatch[1]);
-        totalMinutes += mins;
-      }
+      if (hourMatch) totalMinutes += Math.round(parseFloat(hourMatch[1].replace(',', '.')) * 60);
+      if (minMatch) totalMinutes += parseInt(minMatch[1]);
+
       if (totalMinutes === 0) {
         const genericTime = lower.match(/(\d+)\s*(?:min|stunde)/);
         if (genericTime) totalMinutes = parseInt(genericTime[1]);
@@ -221,6 +207,88 @@ const scrapePloetz = async (url) => {
       if (!text || text.length < 15) return false;
       if (skipStepPatterns.some(p => p.test(text))) return false;
       return true;
+    };
+
+    // FIX 2 & 3: parseRepeatingActions – "dehnen und falten"-Steps aufteilen.
+    // Unterstützt beide Plötzblog-Formate:
+    //   "dabei nach 30 und 60 Minuten dehnen und falten"
+    //   "dabei alle 20 Minuten dehnen und falten (3x)"
+    const parseRepeatingActions = (instruction, totalDuration) => {
+      // Format A: "dabei nach X, Y und Z Minuten <Aktion>"
+      const patternA = /dabei\s+nach\s+([\d,.\s]+(?:und\s+[\d,.]+)?)\s*minuten?\s+(.+)/i;
+      const matchA = instruction.match(patternA);
+
+      if (matchA) {
+        const intervals = matchA[1]
+          .replace(/\s*und\s*/gi, ',')
+          .split(/[,\s]+/)
+          .map(n => parseInt(n))
+          .filter(n => !isNaN(n) && n > 0);
+
+        if (intervals.length === 0) return null;
+
+        const action = matchA[2].trim().replace(/\.$/, '');
+        const mainInstruction = instruction
+          .replace(patternA, '').trim()
+          .replace(/,?\s*$/, '').trim() || instruction.split(',')[0].trim();
+
+        const steps = [];
+        let lastTime = 0;
+        intervals.forEach((time) => {
+          const waitDuration = time - lastTime;
+          if (waitDuration > 0) {
+            steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
+          }
+          steps.push({
+            instruction: action.charAt(0).toUpperCase() + action.slice(1),
+            duration: 5,
+            type: 'Aktion'
+          });
+          lastTime = time + 5;
+        });
+        if (lastTime < totalDuration) {
+          steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
+        }
+        return steps;
+      }
+
+      // Format B: "dabei alle X Minuten <Aktion> (Nx)"
+      const patternB = /dabei\s+alle\s+(\d+)\s*minuten?\s+(.+?)(?:\s*\((\d+)x\))?\.?\s*$/i;
+      const matchB = instruction.match(patternB);
+
+      if (matchB) {
+        const interval = parseInt(matchB[1]);
+        const action = matchB[2].trim().replace(/\.$/, '');
+        const count = matchB[3]
+          ? parseInt(matchB[3])
+          : Math.max(1, Math.floor(totalDuration / interval) - 1);
+
+        const mainInstruction = instruction
+          .replace(patternB, '').trim()
+          .replace(/,?\s*$/, '').trim() || instruction.split(',')[0].trim();
+
+        const steps = [];
+        let lastTime = 0;
+        for (let i = 0; i < count; i++) {
+          const nextTime = (i + 1) * interval;
+          const waitDuration = nextTime - lastTime;
+          if (waitDuration > 0) {
+            steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
+          }
+          steps.push({
+            instruction: action.charAt(0).toUpperCase() + action.slice(1),
+            duration: 5,
+            type: 'Aktion'
+          });
+          lastTime = nextTime + 5;
+        }
+        if (lastTime < totalDuration) {
+          steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
+        }
+        return steps;
+      }
+
+      return null;
     };
 
     // SEQUENTIELLER PARSER
@@ -236,7 +304,7 @@ const scrapePloetz = async (url) => {
       const lower = text.toLowerCase();
       if (stopKeywords.some(kw => lower.includes(kw))) return false;
       if (tag === 'h4' || tag === 'h3' || tag === 'h5') {
-        if (isSectionHeading(text)) { lastSectionHeading = text; } 
+        if (isSectionHeading(text)) { lastSectionHeading = text; }
         else if (lower.includes('zutatenübersicht')) { lastSectionHeading = '__overview__'; }
         else { lastSectionHeading = null; }
         return;
@@ -252,9 +320,8 @@ const scrapePloetz = async (url) => {
           ingredientOverview.push(...ingredients);
         } else {
           const sectionName = lastSectionHeading || (doughSections.length === 0 ? 'Teig' : 'Teig ' + (doughSections.length + 1));
-          const sectionLower = (lastSectionHeading || '').toLowerCase();
-          const isParallel = sectionLower.includes('vorteig') || sectionLower.includes('poolish') || sectionLower.includes('biga');
-          const section = { name: sectionName, ingredients: ingredients, steps: [], is_parallel: isParallel };
+          // FIX 4: isParallelSection statt inline-Check
+          const section = { name: sectionName, ingredients, steps: [], is_parallel: isParallelSection(sectionName) };
           doughSections.push(section);
           sectionMap.set(el, section);
         }
@@ -275,11 +342,17 @@ const scrapePloetz = async (url) => {
         const stepKey = `${currentSection.name}::${text}`;
         if (seenSteps.has(stepKey)) return;
         seenSteps.add(stepKey);
-        currentSection.steps.push({
-          type: classifyStep(text),
-          duration: extractDurationMinutes(text),
-          instruction: text,
-        });
+
+        const duration = extractDurationMinutes(text);
+        const type = classifyStep(text);
+
+        // FIX 2+3: Dehnen-und-Falten Steps aufteilen
+        const repeated = parseRepeatingActions(text, duration);
+        if (repeated) {
+          repeated.forEach(s => currentSection.steps.push(s));
+        } else {
+          currentSection.steps.push({ type, duration, instruction: text });
+        }
       }
     });
 
@@ -337,11 +410,9 @@ const scrapePloetz = async (url) => {
 // Parse from pre-loaded cheerio $
 const parseHtml = async ($, filename) => {
   try {
-    // 1. TITEL & UNTERTITEL
     const title = $('h1').first().text().trim().replace(/\uAD/g, '');
     const subtitle = $('h2').first().text().trim();
 
-    // 2. BILD
     let imageUrl = $('meta[property="og:image"]').attr('content') || 
                    $('meta[name="twitter:image"]').attr('content') || '';
     
@@ -359,7 +430,6 @@ const parseHtml = async ($, filename) => {
       }
     }
 
-    // 3. BESCHREIBUNG
     const descParagraphs = [];
     let foundTitle = false, reachedTable = false;
     $('h1, h2, p, table').each((_, el) => {
@@ -377,7 +447,6 @@ const parseHtml = async ($, filename) => {
 
     const description = descParagraphs.join('\n\n');
 
-    // 4. ZUTATEN & PHASEN
     const isIngredientTable = (table) => {
       const text = $(table).text().toLowerCase();
       if ((text.includes('amazon') || text.includes('otto')) &&
@@ -413,6 +482,16 @@ const parseHtml = async ($, filename) => {
       return ingredients;
     };
 
+    // FIX 4: parallelKeywords auch in parseHtml
+    const parallelKeywords = [
+      'vorteig', 'poolish', 'biga', 'sauerteig', 'levain', 'lievito',
+      'kochstück', 'brühstück', 'quellstück', 'aromastück', 'mehlkochstück'
+    ];
+    const isParallelSection = (name) => {
+      const lower = (name || '').toLowerCase();
+      return parallelKeywords.some(kw => lower.includes(kw));
+    };
+
     const doughSections = [];
     const ingredientTables = $('table').filter((_, table) => isIngredientTable(table));
 
@@ -420,7 +499,6 @@ const parseHtml = async ($, filename) => {
       ingredientTables.each((i, table) => {
         const tableText = $(table).text().toLowerCase();
         let sectionName = 'Zutaten';
-        
         if (tableText.includes('vorteig') || tableText.includes('poolish')) sectionName = 'Vorteig / Poolish';
         else if (tableText.includes('sauer')) sectionName = 'Sauerteig';
         else if (tableText.includes('quell') || tableText.includes('koch')) sectionName = 'Quellstück / Kochstück';
@@ -428,22 +506,17 @@ const parseHtml = async ($, filename) => {
         else if (tableText.includes('haupt')) sectionName = 'Hauptteig';
         else if (tableText.includes('stock')) sectionName = 'Stockgare';
         else if (tableText.includes('stück')) sectionName = 'Stückgare';
-        
+
         doughSections.push({
           name: sectionName,
-          is_parallel: sectionName !== 'Hauptteig',
+          // FIX 4: isParallelSection statt hartcodiertem Vergleich
+          is_parallel: isParallelSection(sectionName),
           ingredients: parseIngredientTable(table)
         });
       });
     }
 
-    return {
-      title,
-      subtitle,
-      description,
-      image_url: imageUrl,
-      dough_sections: doughSections
-    };
+    return { title, subtitle, description, image_url: imageUrl, dough_sections: doughSections };
   } catch (error) {
     console.error("Ploetzblog HTML Parse Error:", error.message);
     return null;
