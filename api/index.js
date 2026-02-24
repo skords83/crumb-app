@@ -727,7 +727,7 @@ function extractAllSteps(str) {
     const pos = m.index;
 
     // Letzten display-Wert in den 800 Zeichen vor dieser Position bestimmen
-    const before = str.slice(Math.max(0, pos - 800), pos);
+    const before = str.slice(Math.max(0, pos - 2000), pos);
     const displayMatches = before.match(/display:\s*(none|block|flex|grid)/g) || [];
     if (!displayMatches.length) continue;
     const lastDisplay = displayMatches[displayMatches.length - 1]
@@ -762,8 +762,33 @@ function extractAllSteps(str) {
   return steps;
 }
 
-const allSteps = extractAllSteps(rawHtml);
-console.log(`📋 ${allSteps.length} Schritte extrahiert (gesamt)`);
+const allSteps = (() => {
+  const raw = extractAllSteps(rawHtml);
+  console.log(`📋 ${raw.length} Schritte extrahiert (roh)`);
+
+  // Pro Phase-Chunk nur den ersten Schritt je Nummer behalten.
+  // Da wir noch keine Phasen haben, deduplizieren wir global
+  // über einen fortlaufenden Zähler: sobald eine Nummer kleiner
+  // wird als die vorherige, starten wir den Zähler neu (neue Phase).
+  const deduped = [];
+  const seenInBlock = new Set();
+  let lastNum = -1;
+
+  raw.forEach(step => {
+    // Neue Phase beginnt wenn Nummer zurückspringt (z.B. 13 → 0)
+    if (step.stepNum <= lastNum - 3) {
+      seenInBlock.clear();
+    }
+    if (!seenInBlock.has(step.stepNum)) {
+      seenInBlock.add(step.stepNum);
+      deduped.push(step);
+    }
+    lastNum = step.stepNum;
+  });
+
+  console.log(`📋 ${deduped.length} Schritte nach Deduplizierung`);
+  return deduped;
+})();
 
 // ---- 4. Phasen zusammenbauen -----------------------------------
 
