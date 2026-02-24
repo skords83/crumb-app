@@ -379,7 +379,13 @@ const scrapePloetz = async (url) => {
         // FIX 2+3: Dehnen-und-Falten Steps aufteilen
         const repeated = parseRepeatingActions(text, duration);
         if (repeated) {
-          repeated.forEach(s => currentSection.steps.push(s));
+          repeated.forEach(s => {
+            currentSection.steps.push(s);
+            // normKey der generierten Sub-Steps speichern, damit die
+            // entsprechenden Original-HTML-Steps danach gefiltert werden
+            const subNormKey = `${currentSection.name}::norm::${normalizeStepText(s.instruction)}`;
+            seenSteps.add(subNormKey);
+          });
         } else {
           currentSection.steps.push({ type, duration, instruction: text });
         }
