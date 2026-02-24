@@ -89,19 +89,13 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     return new Date(y, m - 1, day, h, min);
   };
 
-  // FIX: Lokalen ISO-String mit Timezone-Offset erzeugen.
-  // Ohne Offset würde "2025-01-05T09:00" vom Server (UTC) als 09:00 UTC interpretiert,
-  // was in Deutschland 10:00 Uhr ergibt – daher die konstante Stunde Versatz.
-  const toLocalISOString = (d: Date): string => {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    const offsetMinutes = -d.getTimezoneOffset(); // z.B. +60 für UTC+1
-    const sign = offsetMinutes >= 0 ? "+" : "-";
-    const absOffset = Math.abs(offsetMinutes);
-    const tz = `${sign}${pad(Math.floor(absOffset / 60))}:${pad(absOffset % 60)}`;
-    return `${date}T${time}${tz}`; // z.B. "2025-01-05T09:00+01:00"
-  };
+// toLocalISOString in PlanModal.tsx – Offset WEGLASSEN
+const toLocalISOString = (d: Date): string => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${date}T${time}`; // z.B. "2025-01-05T09:00" – kein +01:00
+};
 
   // Validation function for end time
   const validateEndTime = (timeStr: string): string | null => {
