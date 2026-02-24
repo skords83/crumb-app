@@ -771,24 +771,21 @@ const allSteps = (() => {
   // über einen fortlaufenden Zähler: sobald eine Nummer kleiner
   // wird als die vorherige, starten wir den Zähler neu (neue Phase).
   const deduped = [];
-  const seenInBlock = new Set();
-  let lastNum = -1;
+// NEU - Reset bei jeder kleineren oder gleichen Nummer
+const seenInBlock = new Set();
+let lastNum = -1;
 
-  raw.forEach(step => {
-    // Neue Phase beginnt wenn Nummer zurückspringt (z.B. 13 → 0)
-    if (step.stepNum <= lastNum - 3) {
-      seenInBlock.clear();
-    }
-    if (!seenInBlock.has(step.stepNum)) {
-      seenInBlock.add(step.stepNum);
-      deduped.push(step);
-    }
-    lastNum = step.stepNum;
-  });
-
-  console.log(`📋 ${deduped.length} Schritte nach Deduplizierung`);
-  return deduped;
-})();
+raw.forEach(step => {
+  // Neue Phase: Nummer geht zurück → Block-Reset
+  if (step.stepNum <= lastNum) {
+    seenInBlock.clear();
+  }
+  if (!seenInBlock.has(step.stepNum)) {
+    seenInBlock.add(step.stepNum);
+    deduped.push(step);
+  }
+  lastNum = step.stepNum;
+});
 
 // ---- 4. Phasen zusammenbauen -----------------------------------
 
