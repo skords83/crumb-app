@@ -106,22 +106,38 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   };
 
   // 4. ZUTATEN AGGREGIEREN
-  const totalIngredients = useMemo(() => {
-    if (!recipe?.dough_sections) return [];
-    const totals: Record<string, { name: string; amount: string; unit: string }> = {};
-    recipe.dough_sections.forEach((section: any) => {
-      section.ingredients?.forEach((ing: any) => {
-        const rawName = (ing.name || "").trim();
-        if (!rawName || 
-            rawName.toLowerCase().includes("sauerteigstufe") || 
-            rawName.toLowerCase() === "vorteig" || 
-            rawName.toLowerCase() === "quellstück") return;
-        const key = rawName.toLowerCase();
-        if (!totals[key]) totals[key] = { ...ing, name: rawName };
-      });
+const totalIngredients = useMemo(() => {
+  if (!recipe?.dough_sections) return [];
+  const totals: Record<string, { name: string; amount: number; unit: string }> = {};
+
+  recipe.dough_sections.forEach((section: any) => {
+    section.ingredients?.forEach((ing: any) => {
+      const rawName = (ing.name || "").trim();
+      if (!rawName ||
+          rawName.toLowerCase().includes("sauerteigstufe") ||
+          rawName.toLowerCase() === "vorteig" ||
+          rawName.toLowerCase() === "quellstück") return;
+
+      const key = rawName.toLowerCase();
+      // Menge parsen: "0,24 g" → 0.24
+      const parsed = parseFloat(String(ing.amount || '0').replace(',', '.'));
+      const num = isNaN(parsed) ? 0 : parsed;
+
+      if (!totals[key]) {
+        totals[key] = { name: rawName, amount: num, unit: ing.unit || '' };
+      } else {
+        // FIX Floating Point: auf 3 Dezimalstellen runden
+        totals[key].amount = Math.round((totals[key].amount + num) * 1000) / 1000;
+      }
     });
-    return Object.values(totals);
-  }, [recipe]);
+  });
+
+  // Zurück in lesbares Format: 0.24 → "0,24"
+  return Object.values(totals).map(ing => ({
+    ...ing,
+    amount: ing.amount === 0 ? '' : String(ing.amount).replace('.', ',')
+  }));
+}, [recipe]);
 
   if (isLoading) return <RecipeDetailSkeleton />;
   if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
