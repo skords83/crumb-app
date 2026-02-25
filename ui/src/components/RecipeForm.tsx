@@ -98,7 +98,7 @@ export default function RecipeForm({
         const amount = parseFloat(ing.amount.toString().replace(',', '.')) || 0;
         const unit = ing.unit || "g";
         if (totals[key]) {
-          totals[key].amount += amount;
+          totals[key].amount = Math.round((totals[key].amount + amount) * 1000) / 1000;
         } else {
           totals[key] = { name: ing.name, amount, unit };
         }
@@ -198,7 +198,9 @@ export default function RecipeForm({
                 {totalIngredients.map((ing, idx) => (
                   <div key={`total-${idx}`} className="flex flex-col bg-white/60 dark:bg-gray-700/60 px-4 py-2 rounded-2xl border border-white dark:border-gray-600 shadow-sm">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{ing.name}</span>
-                    <span className="text-sm font-black text-[#8B7355]">{ing.amount} {ing.unit}</span>
+                    <span className="text-sm font-black text-[#8B7355]">
+                      {String(ing.amount).replace('.', ',')} {ing.unit}
+                    </span>
                   </div>
                 ))}
               </div>
