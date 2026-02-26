@@ -533,11 +533,12 @@ app.post('/api/import/html', async (req, res) => {
     console.log(`Erkannte Phasen: ${uniquePhases.map(p => p.name).join(', ')}`);
 
 
-    function extractIngredientsFromChunk(chunk) {
+    function extractIngredientsFromChunk(chunk, phaseName) {
       const ingredients = [], seen = new Set();
       const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-      let row;
+      let row, rowCount = 0;
       while ((row = rowRe.exec(chunk)) !== null) {
+        rowCount++;
         const cells = [];
         const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
         let cell;
@@ -558,6 +559,7 @@ app.post('/api/import/html', async (req, res) => {
         seen.add(key);
         ingredients.push({ name, amount: hasAmount ? amount : '', unit: '', temperature, note });
       }
+      if (phaseName) console.log(`  [${phaseName}] rows=${rowCount} found=${ingredients.length} names=${JSON.stringify(ingredients.map(i=>i.name))}`);
       return ingredients;
     }
 
@@ -640,7 +642,7 @@ app.post('/api/import/html', async (req, res) => {
         console.log(`  CHUNK ${phase.name}: charPos=${phase.charPos}, nextPos=${nextPos}, len=${phaseChunk.length}, hasGesamter=${phaseChunk.includes('gesamter')}`);
         // FIX: Chunk auf max 100000 Zeichen begrenzen (2.2MB Chunks verursachen Regex-Probleme)
         const limitedChunk = phaseChunk.slice(0, 100000);
-        const phaseIngredients = extractIngredientsFromChunk(limitedChunk);
+        const phaseIngredients = extractIngredientsFromChunk(limitedChunk, phase.name);
         const expandedSteps = [];
         allSteps
           .filter(s => s.pos > phase.charPos && s.pos < nextPos)
