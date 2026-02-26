@@ -543,12 +543,14 @@ app.post('/api/import/html', async (req, res) => {
         const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
         let cell;
         while ((cell = cellRe.exec(row[1])) !== null) cells.push(htmlToText(cell[1]));
-        if (cells.length < 2) continue;
+        // Leere Zellen entfernen
+        const filteredCells = cells.filter(c => c.trim().length > 0);
+        if (filteredCells.length < 2) continue;
         // Zutaten ohne Mengenangabe (z.B. "gesamter Roggensauerteig") haben kein Gewicht in cells[0]
-        const hasAmount = /^\d/.test(cells[0].trim());
-        const amount = hasAmount ? cells[0].trim() : '';
-        let name = hasAmount ? cells[1].trim() : cells[0].trim();
-        const temperature = (hasAmount ? cells[2] : cells[1]) ? (hasAmount ? cells[2] : cells[1]).replace('°C', '').trim() : '';
+        const hasAmount = /^\d/.test(filteredCells[0].trim());
+        const amount = hasAmount ? filteredCells[0].trim() : '';
+        let name = hasAmount ? filteredCells[1].trim() : filteredCells[0].trim();
+        const temperature = (hasAmount ? filteredCells[2] : filteredCells[1]) ? (hasAmount ? filteredCells[2] : filteredCells[1]).replace('°C', '').trim() : '';
         let note = '';
         const noteMatch = name.match(/\(([^)]+)\)/);
         if (noteMatch) { note = noteMatch[1]; name = name.replace(/\([^)]+\)/g, '').trim(); }
