@@ -1,56 +1,106 @@
-// src/lib/backplan-utils.ts
+// ============================================================
+// BACKPLAN UTILS
+// Berechnet die Timeline für ein Rezept rückwärts vom Zielzeitpunkt.
+//
+// Variante B: Wenn start_offset_minutes in dough_sections vorhanden
+// (aus importiertem Planungsbeispiel), werden diese exakten Versätze
+// genutzt. Andernfalls Fallback auf is_parallel-Logik.
+// ============================================================
 
-export interface TimelineStep {
+export interface BackplanStep {
   phase: string;
   instruction: string;
+  type: string;
+  duration: number;
   start: Date;
   end: Date;
-  duration: number;
+  isParallel?: boolean;
+  ingredients?: any[];
 }
 
-/**
- * Berechnet die Timeline rückwärts ausgehend von einer Zielzeit.
- * Verwendet manuelle Zeitzerlegung, um Docker/Browser-Zeitzonenfehler zu vermeiden.
- */
-export const calculateBackplan = (targetTimeStr: string, doughSections: any[]): TimelineStep[] => {
-  if (!targetTimeStr || !doughSections) return [];
+export function calculateBackplan(targetDate: Date, sections: any[]): BackplanStep[] {
+  if (!sections || sections.length === 0) return [];
 
-  // 1. Manueller Split für absolute lokale Präzision
-  const [datePart, timePart] = targetTimeStr.split('T');
-  const [year, month, day] = datePart.split('-').map(Number);
-  const [hours, minutes] = timePart.split(':').map(Number);
+  const target = new Date(targetDate.getTime());
+  const timeline: BackplanStep[] = [];
 
-  // Monat - 1 weil JS Monate 0-basiert sind
-  let currentMoment = new Date(year, month - 1, day, hours, minutes);
-  
-  const timeline: TimelineStep[] = [];
-  const reversedSections = [...doughSections].reverse();
+  // Variante B: start_offset_minutes aus Planungsbeispiel
+  const hasOffsets = sections.some((s: any) => s.start_offset_minutes != null);
 
-  reversedSections.forEach((section) => {
-    const reversedSteps = [...(section.steps || [])].reverse();
-    reversedSteps.forEach((step) => {
-      const duration = parseInt(step.duration) || 0;
-      const endTime = new Date(currentMoment.getTime());
-      const startTime = new Date(currentMoment.getTime() - duration * 60000);
-      
-      timeline.push({
-        phase: section.name,
-        instruction: step.instruction,
-        start: startTime,
-        end: endTime,
-        duration
+  if (hasOffsets) {
+    // Exakte Startzeiten: Jede Phase startet offset Minuten VOR dem Zielzeitpunkt
+    sections.forEach((section: any) => {
+      const offset: number = section.start_offset_minutes ?? 0;
+      const sectionStart = new Date(target.getTime() - offset * 60000);
+      let stepMoment = new Date(sectionStart.getTime());
+
+      (section.steps || []).forEach((step: any) => {
+        const duration = parseInt(step.duration) || 0;
+        const stepStart = new Date(stepMoment.getTime());
+        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+        timeline.push({
+          phase: section.name,
+          instruction: step.instruction,
+          type: step.type || 'Aktion',
+          duration,
+          start: stepStart,
+          end: stepEnd,
+          isParallel: section.is_parallel,
+          ingredients: section.ingredients || [],
+        });
+        stepMoment = stepEnd;
+      });
+    });
+
+  } else {
+    // Fallback: is_parallel Logik – rückwärts vom Ziel
+    let currentMoment = new Date(target.getTime());
+    const reversedSections = [...sections].reverse();
+    let mergePoint = new Date(currentMoment.getTime());
+
+    reversedSections.forEach((section: any) => {
+      const steps = section.steps || [];
+      const totalDuration = steps.reduce(
+        (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
+      );
+      const isParallel =
+        (section.name || '').toLowerCase().includes('vorteig') || section.is_parallel;
+      const endTime = isParallel
+        ? new Date(mergePoint.getTime())
+        : new Date(currentMoment.getTime());
+      const startTime = new Date(endTime.getTime() - totalDuration * 60000);
+      let stepMoment = new Date(startTime.getTime());
+
+      steps.forEach((step: any) => {
+        const duration = parseInt(step.duration) || 0;
+        const stepStart = new Date(stepMoment.getTime());
+        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+        timeline.push({
+          phase: section.name,
+          instruction: step.instruction,
+          type: step.type || 'Aktion',
+          duration,
+          start: stepStart,
+          end: stepEnd,
+          isParallel,
+          ingredients: section.ingredients || [],
+        });
+        stepMoment = stepEnd;
       });
 
-      currentMoment = startTime;
+      if (!isParallel) {
+        currentMoment = startTime;
+        mergePoint = startTime;
+      }
     });
-  });
+  }
 
-  return timeline.reverse();
-};
+  timeline.sort((a, b) => a.start.getTime() - b.start.getTime());
+  return timeline;
+}
 
-/**
- * Formatiert ein Datum sauber als HH:mm ohne Zeitzonen-Shifting.
- */
-export const formatTimeManual = (date: Date): string => {
-  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-};
+export function formatTimeManual(date: Date): string {
+  const h = date.getHours().toString().padStart(2, '0');
+  const m = date.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}

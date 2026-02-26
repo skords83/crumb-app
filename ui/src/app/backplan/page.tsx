@@ -87,42 +87,73 @@ export default function BackplanPage() {
   const calculateStepTimeline = (targetDateTime: string, sections: any[]) => {
     if (!sections || sections.length === 0) return [];
 
-    let currentMoment = parseLocalDate(targetDateTime);
+    const target = parseLocalDate(targetDateTime);
     const timeline: any[] = [];
-    const reversedSections = [...sections].reverse();
-    let mergePoint = new Date(currentMoment.getTime());
 
-    reversedSections.forEach((section) => {
-      const totalDuration = (section.steps || []).reduce(
-        (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
-      );
-      const isParallel = (section.name || '').toLowerCase().includes('vorteig') || section.is_parallel;
-      const sectionEnd = isParallel ? new Date(mergePoint.getTime()) : new Date(currentMoment.getTime());
-      const sectionStart = new Date(sectionEnd.getTime() - totalDuration * 60000);
+    // Variante B: start_offset_minutes aus Planungsbeispiel
+    const hasOffsets = sections.some((s: any) => s.start_offset_minutes != null);
 
-      let stepMoment = new Date(sectionStart.getTime());
-      (section.steps || []).forEach((step: any) => {
-        const duration = parseInt(step.duration) || 0;
-        const stepStart = new Date(stepMoment.getTime());
-        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-        timeline.push({
-          phase: section.name,
-          ingredients: section.ingredients || [],
-          instruction: step.instruction,
-          type: step.type || 'Aktion',
-          duration,
-          start: stepStart,
-          end: stepEnd,
-          isParallel,
+    if (hasOffsets) {
+      sections.forEach((section: any) => {
+        const offset = section.start_offset_minutes ?? 0;
+        const sectionStart = new Date(target.getTime() - offset * 60000);
+        let stepMoment = new Date(sectionStart.getTime());
+
+        (section.steps || []).forEach((step: any) => {
+          const duration = parseInt(step.duration) || 0;
+          const stepStart = new Date(stepMoment.getTime());
+          const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+          timeline.push({
+            phase: section.name,
+            ingredients: section.ingredients || [],
+            instruction: step.instruction,
+            type: step.type || 'Aktion',
+            duration,
+            start: stepStart,
+            end: stepEnd,
+            isParallel: section.is_parallel,
+          });
+          stepMoment = stepEnd;
         });
-        stepMoment = stepEnd;
       });
+    } else {
+      // Fallback: bisherige is_parallel Logik
+      let currentMoment = new Date(target.getTime());
+      const reversedSections = [...sections].reverse();
+      let mergePoint = new Date(currentMoment.getTime());
 
-      if (!isParallel) {
-        currentMoment = sectionStart;
-        mergePoint = sectionStart;
-      }
-    });
+      reversedSections.forEach((section: any) => {
+        const totalDuration = (section.steps || []).reduce(
+          (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
+        );
+        const isParallel = (section.name || '').toLowerCase().includes('vorteig') || section.is_parallel;
+        const sectionEnd = isParallel ? new Date(mergePoint.getTime()) : new Date(currentMoment.getTime());
+        const sectionStart = new Date(sectionEnd.getTime() - totalDuration * 60000);
+
+        let stepMoment = new Date(sectionStart.getTime());
+        (section.steps || []).forEach((step: any) => {
+          const duration = parseInt(step.duration) || 0;
+          const stepStart = new Date(stepMoment.getTime());
+          const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+          timeline.push({
+            phase: section.name,
+            ingredients: section.ingredients || [],
+            instruction: step.instruction,
+            type: step.type || 'Aktion',
+            duration,
+            start: stepStart,
+            end: stepEnd,
+            isParallel,
+          });
+          stepMoment = stepEnd;
+        });
+
+        if (!isParallel) {
+          currentMoment = sectionStart;
+          mergePoint = sectionStart;
+        }
+      });
+    }
 
     timeline.sort((a, b) => a.start.getTime() - b.start.getTime());
     return timeline;
