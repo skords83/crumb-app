@@ -637,6 +637,7 @@ app.post('/api/import/html', async (req, res) => {
         const phase   = uniquePhases[i];
         const nextPos = i + 1 < uniquePhases.length ? uniquePhases[i + 1].charPos : rawHtml.length;
         const phaseChunk = rawHtml.slice(phase.charPos, nextPos);
+        console.log(`  CHUNK ${phase.name}: charPos=${phase.charPos}, nextPos=${nextPos}, len=${phaseChunk.length}, hasGesamter=${phaseChunk.includes('gesamter')}`);
         const phaseIngredients = extractIngredientsFromChunk(phaseChunk);
         const expandedSteps = [];
         allSteps
