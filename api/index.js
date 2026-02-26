@@ -638,7 +638,9 @@ app.post('/api/import/html', async (req, res) => {
         const nextPos = i + 1 < uniquePhases.length ? uniquePhases[i + 1].charPos : rawHtml.length;
         const phaseChunk = rawHtml.slice(phase.charPos, nextPos);
         console.log(`  CHUNK ${phase.name}: charPos=${phase.charPos}, nextPos=${nextPos}, len=${phaseChunk.length}, hasGesamter=${phaseChunk.includes('gesamter')}`);
-        const phaseIngredients = extractIngredientsFromChunk(phaseChunk);
+        // FIX: Chunk auf max 100000 Zeichen begrenzen (2.2MB Chunks verursachen Regex-Probleme)
+        const limitedChunk = phaseChunk.slice(0, 100000);
+        const phaseIngredients = extractIngredientsFromChunk(limitedChunk);
         const expandedSteps = [];
         allSteps
           .filter(s => s.pos > phase.charPos && s.pos < nextPos)
