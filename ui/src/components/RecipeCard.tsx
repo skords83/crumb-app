@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Clock, Layers, Utensils, Heart } from 'lucide-react';
+import { calcTotalDuration } from "@/lib/backplan-utils";
 
 interface RecipeCardProps {
   recipe: any;
@@ -11,32 +12,13 @@ interface RecipeCardProps {
 }
 
 const getStats = (recipe: any) => {
-  let maxParallelDuration = 0;
-  let sequentialDuration = 0;
-  let totalSteps = 0;
-
-  if (recipe.dough_sections && Array.isArray(recipe.dough_sections)) {
-    recipe.dough_sections.forEach((section: any) => {
-      totalSteps += (section.steps?.length || 0);
-      let sectionDuration = 0;
-      section.steps?.forEach((step: any) => {
-        const d = parseInt(String(step.duration));
-        if (!isNaN(d)) sectionDuration += d;
-      });
-
-      if (section.is_parallel) {
-        maxParallelDuration = Math.max(maxParallelDuration, sectionDuration);
-      } else {
-        sequentialDuration += sectionDuration;
-      }
-    });
-  }
-
-  const totalMinutes = maxParallelDuration + sequentialDuration;
+  const totalMinutes = calcTotalDuration(recipe.dough_sections || []);
+  const totalSteps = (recipe.dough_sections || []).reduce(
+    (s: number, sec: any) => s + (sec.steps?.length || 0), 0
+  );
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
   const timeString = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-
   return { timeString, totalSteps };
 };
 

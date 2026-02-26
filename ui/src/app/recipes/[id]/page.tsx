@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Icons from 'lucide-react';
-import { calculateBackplan, formatTimeManual } from '@/lib/backplan-utils';
+import { calculateBackplan, formatTimeManual, calcTotalDuration } from '@/lib/backplan-utils';
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 
@@ -67,26 +67,14 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       .catch(() => setIsLoading(false));
   }, [id]);
 
-  // 2. STATISTIKEN – parallele Phasen korrekt berechnen
-  const stats = useMemo(() => {
+// 2. STATISTIKEN – Dependency Graph (kein is_parallel mehr)
+const stats = useMemo(() => {
     if (!recipe?.dough_sections) return { steps: 0, duration: 0 };
-    let steps = 0;
-    let maxParallelDuration = 0;
-    let sequentialDuration = 0;
-    recipe.dough_sections.forEach((section: any) => {
-      steps += (section.steps?.length || 0);
-      let sectionDuration = 0;
-      section.steps?.forEach((st: any) => {
-        const d = parseInt(String(st.duration));
-        if (!isNaN(d)) sectionDuration += d;
-      });
-      if (section.is_parallel) {
-        maxParallelDuration = Math.max(maxParallelDuration, sectionDuration);
-      } else {
-        sequentialDuration += sectionDuration;
-      }
-    });
-    return { steps, duration: maxParallelDuration + sequentialDuration };
+    const steps = recipe.dough_sections.reduce(
+      (s: number, sec: any) => s + (sec.steps?.length || 0), 0
+    );
+    const duration = calcTotalDuration(recipe.dough_sections);
+    return { steps, duration };
   }, [recipe]);
 
   // 3. LÖSCH-FUNKTION

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { X, Play, Clock, Target, Sun, Utensils, Moon, Plus, Minus } from "lucide-react";
-import { calculateBackplan, formatTimeManual } from "@/lib/backplan-utils";
+import { calculateBackplan, formatTimeManual, calcTotalDuration } from "@/lib/backplan-utils";
 
 interface PlanModalProps {
   isOpen: boolean;
@@ -44,20 +44,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   // FIX: Gesamtzeit korrekt berechnen – parallele Phasen (Vorteige) laufen gleichzeitig,
   // nur die längste zählt. Sequentielle Phasen (Hauptteig etc.) werden addiert.
   const totalMinutes = useMemo(() => {
-    if (!recipe?.dough_sections) return 0;
-    let parallelMax = 0;
-    let sequential = 0;
-    recipe.dough_sections.forEach((section: any) => {
-      const dur = (section.steps || []).reduce(
-        (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
-      );
-      if (section.is_parallel) {
-        parallelMax = Math.max(parallelMax, dur);
-      } else {
-        sequential += dur;
-      }
-    });
-    return parallelMax + sequential;
+    return calcTotalDuration(recipe?.dough_sections || []);
   }, [recipe]);
 
   const totalHours = Math.floor(totalMinutes / 60);
