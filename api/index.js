@@ -492,11 +492,13 @@ app.post('/api/import/html', async (req, res) => {
     }
 
     function findDivContentEnd(str, startPos) {
+      // depth=1: wir sind bereits innerhalb des öffnenden <div> (nach dem >)
       const tagRe = /(<\/div>|<div(?:\s[^>]*)?>)/gi;
       tagRe.lastIndex = startPos;
-      let depth = 0, m;
+      let depth = 1, m;
       while ((m = tagRe.exec(str)) !== null) {
-        if (m[1].startsWith('</')) { if (depth === 0) return m.index; depth--; } else depth++;
+        if (m[1].startsWith('</')) { depth--; if (depth === 0) return m.index; }
+        else depth++;
       }
       return str.length;
     }
