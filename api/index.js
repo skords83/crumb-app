@@ -543,10 +543,11 @@ app.post('/api/import/html', async (req, res) => {
         let cell;
         while ((cell = cellRe.exec(row[1])) !== null) cells.push(htmlToText(cell[1]));
         if (cells.length < 2) continue;
-        const amount = cells[0].trim();
-        let name = cells[1].trim();
-        const temperature = cells[2] ? cells[2].replace('°C', '').trim() : '';
-        const hasAmount = /\d/.test(amount);
+        // Zutaten ohne Mengenangabe (z.B. "gesamter Roggensauerteig") haben kein Gewicht in cells[0]
+        const hasAmount = /^\d/.test(cells[0].trim());
+        const amount = hasAmount ? cells[0].trim() : '';
+        let name = hasAmount ? cells[1].trim() : cells[0].trim();
+        const temperature = (hasAmount ? cells[2] : cells[1]) ? (hasAmount ? cells[2] : cells[1]).replace('°C', '').trim() : '';
         let note = '';
         const noteMatch = name.match(/\(([^)]+)\)/);
         if (noteMatch) { note = noteMatch[1]; name = name.replace(/\([^)]+\)/g, '').trim(); }
