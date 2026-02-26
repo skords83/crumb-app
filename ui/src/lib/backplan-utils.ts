@@ -18,10 +18,10 @@ export interface BackplanStep {
   ingredients?: any[];
 }
 
-export function calculateBackplan(targetDate: Date, sections: any[]): BackplanStep[] {
+export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
   if (!sections || sections.length === 0) return [];
 
-  const target = new Date(targetDate.getTime());
+  const target = new Date(typeof targetDate === 'string' ? targetDate : targetDate.getTime());
   const timeline: BackplanStep[] = [];
 
   // Variante B: start_offset_minutes aus Planungsbeispiel
