@@ -553,7 +553,10 @@ app.post('/api/import/html', async (req, res) => {
         const noteMatch = name.match(/\(([^)]+)\)/);
         if (noteMatch) { note = noteMatch[1]; name = name.replace(/\([^)]+\)/g, '').trim(); }
         name = name.replace(/\s+/g, ' ').trim();
-        if (!name || name.length < 2 || name.length > 120) continue;
+        if (!name || name.length < 2 || name.length > 120) {
+          console.log(`  SKIP LEN: "${name}" len=${name.length} hasAmount=${hasAmount} cells0="${cells[0].slice(0,30)}"`);
+          continue;
+        }
         const key = name.toLowerCase();
         if (seen.has(key)) { console.log(`  SKIP DUPLIKAT: "${name}"`); continue; }
         seen.add(key);
