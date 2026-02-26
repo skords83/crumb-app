@@ -554,7 +554,7 @@ app.post('/api/import/html', async (req, res) => {
         name = name.replace(/\s+/g, ' ').trim();
         if (!name || name.length < 2 || name.length > 120) continue;
         const key = name.toLowerCase();
-        if (seen.has(key)) continue;
+        if (seen.has(key)) { console.log(`  SKIP DUPLIKAT: "${name}"`); continue; }
         seen.add(key);
         ingredients.push({ name, amount: hasAmount ? amount : '', unit: '', temperature, note });
       }
