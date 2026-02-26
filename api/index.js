@@ -129,64 +129,89 @@ const calculateTimeline = (plannedAt, sections) => {
   const target = new Date(plannedAt);
   const timeline = [];
 
-  // Prüfen ob start_offset_minutes vorhanden (Variante B: Planungsbeispiel)
-  const hasOffsets = sections.some(s => s.start_offset_minutes != null);
-
-  if (hasOffsets) {
-    // VARIANTE B: Exakte Startzeiten aus Planungsbeispiel
-    // start_offset_minutes = Minuten vor dem Zielzeitpunkt (Hauptteig-Start + Hauptteig-Dauer = Ziel)
-    // Hauptteig hat start_offset_minutes = 0 → startet direkt vor dem Ziel
-    sections.forEach((section) => {
-      const steps = section.steps || [];
-      const totalDuration = steps.reduce((sum, s) => sum + (parseInt(s.duration) || 0), 0);
-      const offset = section.start_offset_minutes != null ? section.start_offset_minutes : 0;
-      // Endzeit der Phase = Zielzeit - offset + totalDuration
-      // Startzeit = Zielzeit - offset - totalDuration... nein:
-      // Startzeit = Zielzeit - offset_to_section_end
-      // offset ist Minuten vor Zielzeit wo die Phase STARTET
-      const sectionStart = new Date(target.getTime() - offset * 60000);
-      let stepMoment = new Date(sectionStart.getTime());
-
-      steps.forEach((step) => {
-        const duration = parseInt(step.duration) || 0;
-        const stepStart = new Date(stepMoment.getTime());
-        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-        stepMoment = stepEnd;
-        timeline.push({ phase: section.name, instruction: step.instruction, type: step.type, duration, start: stepStart, end: stepEnd, isParallel: section.is_parallel });
+  // --- Dependency Graph aufbauen ---
+  // Erkennt "gesamte Sauerteigstufe 1" in Zutaten → Phase hängt von "Sauerteigstufe 1" ab
+  const phaseNames = sections.map(s => s.name);
+  const deps = {};
+  sections.forEach(section => {
+    deps[section.name] = [];
+    (section.ingredients || []).forEach(ing => {
+      const ingName = (ing.name || '').toLowerCase();
+      phaseNames.forEach(otherName => {
+        if (otherName !== section.name && ingName.includes(otherName.toLowerCase())) {
+          if (!deps[section.name].includes(otherName)) {
+            deps[section.name].push(otherName);
+          }
+        }
       });
     });
-  } else {
-    // FALLBACK: bisherige is_parallel Logik
-    let currentMoment = new Date(target.getTime());
-    const reversedSections = [...sections].reverse();
-    let mergePoint = new Date(currentMoment.getTime());
+  });
 
-    reversedSections.forEach((section) => {
-      const steps = section.steps || [];
-      const totalDuration = steps.reduce((sum, step) => sum + (parseInt(step.duration) || 0), 0);
-      const isParallel = (section.name || '').toLowerCase().includes('vorteig') || section.is_parallel;
-      const endTime = isParallel ? new Date(mergePoint.getTime()) : new Date(currentMoment.getTime());
-      const startTime = new Date(endTime.getTime() - totalDuration * 60000);
-      let stepMoment = new Date(startTime.getTime());
+  // --- Start/End-Offsets berechnen (Minuten vor Zielzeit) ---
+  const sectionMap = Object.fromEntries(sections.map(s => [s.name, s]));
+  const endOffsets = {};
+  const startOffsets = {};
 
-      const detailedSteps = steps.map((step) => {
-        const duration = parseInt(step.duration) || 0;
-        const stepStart = new Date(stepMoment.getTime());
-        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-        stepMoment = stepEnd;
-        return { phase: section.name, instruction: step.instruction, type: step.type, duration, start: stepStart, end: stepEnd };
-      });
-      timeline.push(...detailedSteps);
-      if (!isParallel) {
-        currentMoment = startTime;
-        mergePoint = startTime;
-      }
-    });
+  function calcEndOffset(name, visited = new Set()) {
+    if (name in endOffsets) return endOffsets[name];
+    if (visited.has(name)) return 0; // Zyklusschutz
+    visited.add(name);
+
+    // Wer braucht diese Phase als Input?
+    const dependents = sections
+      .map(s => s.name)
+      .filter(n => deps[n] && deps[n].includes(name));
+
+    if (dependents.length === 0) {
+      // Niemand braucht diese Phase explizit → endet beim Ziel (offset 0)
+      endOffsets[name] = 0;
+    } else {
+      // Endet wenn der früheste Dependent startet
+      const minStart = Math.min(...dependents.map(d => calcStartOffset(d, new Set(visited))));
+      endOffsets[name] = minStart;
+    }
+    return endOffsets[name];
   }
+
+  function calcStartOffset(name, visited = new Set()) {
+    if (name in startOffsets) return startOffsets[name];
+    const end = calcEndOffset(name, visited);
+    const dur = (sectionMap[name].steps || []).reduce(
+      (sum, s) => sum + (parseInt(s.duration) || 0), 0
+    );
+    startOffsets[name] = end + dur;
+    return startOffsets[name];
+  }
+
+  sections.forEach(s => calcStartOffset(s.name));
+
+  // --- Timeline aufbauen ---
+  sections.forEach(section => {
+    const offset = startOffsets[section.name] || 0;
+    const sectionStart = new Date(target.getTime() - offset * 60000);
+    let stepMoment = new Date(sectionStart.getTime());
+
+    (section.steps || []).forEach(step => {
+      const duration = parseInt(step.duration) || 0;
+      const stepStart = new Date(stepMoment.getTime());
+      const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+      timeline.push({
+        phase: section.name,
+        instruction: step.instruction,
+        type: step.type || 'Aktion',
+        duration,
+        start: stepStart,
+        end: stepEnd,
+        isParallel: (endOffsets[section.name] || 0) > 0,
+      });
+      stepMoment = stepEnd;
+    });
+  });
 
   timeline.sort((a, b) => a.start.getTime() - b.start.getTime());
   return timeline;
 };
+
 
 // FIX: Nur Aktions-Steps notifizieren, Warteschritte ignorieren
 // Title = Aktion, Body = Kontext (Rezept · Phase · Uhrzeit)
@@ -505,58 +530,6 @@ app.post('/api/import/html', async (req, res) => {
     const uniquePhases = detectedPhases.filter((p, i) => i === 0 || p.name !== detectedPhases[i - 1].name);
     console.log(`Erkannte Phasen: ${uniquePhases.map(p => p.name).join(', ')}`);
 
-    // ---- 1b. PLANUNGSBEISPIEL parsen -> start_offset_minutes ---------
-    function parsePlanningExample(str) {
-      const offsets = {};
-      const rowRe = /<tr[^>]*>([\/\s\S]*?)<\/tr>/gi;
-      const entries = [];
-      let currentDay = 1;
-      let row;
-
-      while ((row = rowRe.exec(str)) !== null) {
-        const cells = [];
-        const cellRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-        let cell;
-        while ((cell = cellRe.exec(row[1])) !== null) {
-          cells.push(htmlToText(cell[1]).trim());
-        }
-
-        const tagMatch = cells.join(' ').match(/Tag\s+(\d+)/i);
-        if (tagMatch) currentDay = parseInt(tagMatch[1]);
-
-        const timeCell = cells.find(c => /^\d{1,2}:\d{2}/.test(c));
-        if (!timeCell) continue;
-        const timeMatch = timeCell.match(/(\d{1,2}):(\d{2})/);
-        if (!timeMatch) continue;
-        const timeMin = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
-
-        const phaseName = Object.keys(KNOWN_PHASES).find(p =>
-          cells.some(c => c.toLowerCase().includes(p.toLowerCase()))
-        );
-        if (!phaseName) continue;
-
-        entries.push({ day: currentDay, timeMin, phaseName });
-      }
-
-      if (entries.length < 2) return null;
-
-      const hauptteigEntry = entries.find(e => e.phaseName === 'Hauptteig');
-      if (!hauptteigEntry) return null;
-
-      const refDay = hauptteigEntry.day;
-      const refTimeMin = hauptteigEntry.timeMin;
-
-      entries.forEach(({ day, timeMin, phaseName }) => {
-        const dayDiff = refDay - day;
-        const offset = dayDiff * 24 * 60 + (refTimeMin - timeMin);
-        offsets[phaseName] = Math.max(0, offset);
-      });
-
-      console.log('Planungsbeispiel erkannt:', JSON.stringify(offsets));
-      return offsets;
-    }
-
-    const planningOffsets = parsePlanningExample(rawHtml);
 
     function extractIngredientsFromChunk(chunk) {
       const ingredients = [], seen = new Set();
@@ -671,16 +644,11 @@ app.post('/api/import/html', async (req, res) => {
             const rep = parseRepeatingActions(step.instruction, step.duration);
             rep ? expandedSteps.push(...rep) : expandedSteps.push(step);
           });
-        // start_offset_minutes aus Planungsbeispiel (Variante B)
-        const startOffset = planningOffsets ? (planningOffsets[phase.name] ?? null) : null;
-
-        console.log(`  -> ${phase.name}: ${phaseIngredients.length} Zutaten, ${expandedSteps.length} Schritte${startOffset !== null ? ', offset: ' + startOffset + ' min' : ''}`);
+        console.log(`  -> ${phase.name}: ${phaseIngredients.length} Zutaten, ${expandedSteps.length} Schritte`);
         dough_sections.push({
           name: phase.name,
-          is_parallel: phase.is_parallel,
           ingredients: phaseIngredients,
           steps: expandedSteps,
-          ...(startOffset !== null && { start_offset_minutes: startOffset }),
         });
       }
     }

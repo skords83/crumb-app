@@ -2,9 +2,9 @@
 // BACKPLAN UTILS
 // Berechnet die Timeline für ein Rezept rückwärts vom Zielzeitpunkt.
 //
-// Variante B: Wenn start_offset_minutes in dough_sections vorhanden
-// (aus importiertem Planungsbeispiel), werden diese exakten Versätze
-// genutzt. Andernfalls Fallback auf is_parallel-Logik.
+// Dependency Graph: Wenn eine Phase "gesamte Sauerteigstufe 1" als
+// Zutat enthält, wird automatisch erkannt dass sie von "Sauerteigstufe 1"
+// abhängt. Kein is_parallel oder start_offset_minutes nötig.
 // ============================================================
 
 export interface BackplanStep {
@@ -20,87 +20,76 @@ export interface BackplanStep {
 
 export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
   if (!sections || sections.length === 0) return [];
-
   const target = new Date(typeof targetDate === 'string' ? targetDate : targetDate.getTime());
   const timeline: BackplanStep[] = [];
+  const phaseNames = sections.map((s: any) => s.name as string);
 
-  // Variante B: start_offset_minutes aus Planungsbeispiel
-  const hasOffsets = sections.some((s: any) => s.start_offset_minutes != null);
-
-  if (hasOffsets) {
-    // Exakte Startzeiten: Jede Phase startet offset Minuten VOR dem Zielzeitpunkt
-    sections.forEach((section: any) => {
-      const offset: number = section.start_offset_minutes ?? 0;
-      const sectionStart = new Date(target.getTime() - offset * 60000);
-      let stepMoment = new Date(sectionStart.getTime());
-
-      (section.steps || []).forEach((step: any) => {
-        const duration = parseInt(step.duration) || 0;
-        const stepStart = new Date(stepMoment.getTime());
-        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-        timeline.push({
-          phase: section.name,
-          instruction: step.instruction,
-          type: step.type || 'Aktion',
-          duration,
-          start: stepStart,
-          end: stepEnd,
-          isParallel: section.is_parallel,
-          ingredients: section.ingredients || [],
-        });
-        stepMoment = stepEnd;
+  // Dependency Graph aufbauen
+  const deps: Record<string, string[]> = {};
+  sections.forEach((section: any) => {
+    deps[section.name] = [];
+    (section.ingredients || []).forEach((ing: any) => {
+      const ingName = (ing.name || '').toLowerCase();
+      phaseNames.forEach(otherName => {
+        if (otherName !== section.name && ingName.includes(otherName.toLowerCase())) {
+          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        }
       });
     });
+  });
 
-  } else {
-    // Fallback: is_parallel Logik – rückwärts vom Ziel
-    let currentMoment = new Date(target.getTime());
-    const reversedSections = [...sections].reverse();
-    let mergePoint = new Date(currentMoment.getTime());
+  const sectionMap: Record<string, any> = Object.fromEntries(sections.map((s: any) => [s.name, s]));
+  const endOffsets: Record<string, number> = {};
+  const startOffsets: Record<string, number> = {};
 
-    reversedSections.forEach((section: any) => {
-      const steps = section.steps || [];
-      const totalDuration = steps.reduce(
-        (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
-      );
-      const isParallel =
-        (section.name || '').toLowerCase().includes('vorteig') || section.is_parallel;
-      const endTime = isParallel
-        ? new Date(mergePoint.getTime())
-        : new Date(currentMoment.getTime());
-      const startTime = new Date(endTime.getTime() - totalDuration * 60000);
-      let stepMoment = new Date(startTime.getTime());
-
-      steps.forEach((step: any) => {
-        const duration = parseInt(step.duration) || 0;
-        const stepStart = new Date(stepMoment.getTime());
-        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-        timeline.push({
-          phase: section.name,
-          instruction: step.instruction,
-          type: step.type || 'Aktion',
-          duration,
-          start: stepStart,
-          end: stepEnd,
-          isParallel,
-          ingredients: section.ingredients || [],
-        });
-        stepMoment = stepEnd;
-      });
-
-      if (!isParallel) {
-        currentMoment = startTime;
-        mergePoint = startTime;
-      }
-    });
+  function calcEndOffset(name: string, visited = new Set<string>()): number {
+    if (name in endOffsets) return endOffsets[name];
+    if (visited.has(name)) return 0;
+    visited.add(name);
+    const dependents = phaseNames.filter(n => deps[n]?.includes(name));
+    endOffsets[name] = dependents.length === 0 ? 0
+      : Math.min(...dependents.map(d => calcStartOffset(d, new Set(visited))));
+    return endOffsets[name];
   }
+
+  function calcStartOffset(name: string, visited = new Set<string>()): number {
+    if (name in startOffsets) return startOffsets[name];
+    const end = calcEndOffset(name, visited);
+    const dur = (sectionMap[name]?.steps || []).reduce(
+      (sum: number, s: any) => sum + (parseInt(s.duration) || 0), 0
+    );
+    startOffsets[name] = end + dur;
+    return startOffsets[name];
+  }
+
+  phaseNames.forEach(name => calcStartOffset(name));
+
+  sections.forEach((section: any) => {
+    const offset = startOffsets[section.name] || 0;
+    const sectionStart = new Date(target.getTime() - offset * 60000);
+    let stepMoment = new Date(sectionStart.getTime());
+    (section.steps || []).forEach((step: any) => {
+      const duration = parseInt(step.duration) || 0;
+      const stepStart = new Date(stepMoment.getTime());
+      const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+      timeline.push({
+        phase: section.name,
+        instruction: step.instruction,
+        type: step.type || 'Aktion',
+        duration,
+        start: stepStart,
+        end: stepEnd,
+        isParallel: (endOffsets[section.name] || 0) > 0,
+        ingredients: section.ingredients || [],
+      });
+      stepMoment = stepEnd;
+    });
+  });
 
   timeline.sort((a, b) => a.start.getTime() - b.start.getTime());
   return timeline;
 }
 
 export function formatTimeManual(date: Date): string {
-  const h = date.getHours().toString().padStart(2, '0');
-  const m = date.getMinutes().toString().padStart(2, '0');
-  return `${h}:${m}`;
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }

@@ -86,78 +86,76 @@ export default function BackplanPage() {
 
   const calculateStepTimeline = (targetDateTime: string, sections: any[]) => {
     if (!sections || sections.length === 0) return [];
-
     const target = parseLocalDate(targetDateTime);
     const timeline: any[] = [];
+    const phaseNames = sections.map((s: any) => s.name as string);
 
-    // Variante B: start_offset_minutes aus Planungsbeispiel
-    const hasOffsets = sections.some((s: any) => s.start_offset_minutes != null);
-
-    if (hasOffsets) {
-      sections.forEach((section: any) => {
-        const offset = section.start_offset_minutes ?? 0;
-        const sectionStart = new Date(target.getTime() - offset * 60000);
-        let stepMoment = new Date(sectionStart.getTime());
-
-        (section.steps || []).forEach((step: any) => {
-          const duration = parseInt(step.duration) || 0;
-          const stepStart = new Date(stepMoment.getTime());
-          const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-          timeline.push({
-            phase: section.name,
-            ingredients: section.ingredients || [],
-            instruction: step.instruction,
-            type: step.type || 'Aktion',
-            duration,
-            start: stepStart,
-            end: stepEnd,
-            isParallel: section.is_parallel,
-          });
-          stepMoment = stepEnd;
+    // Dependency Graph
+    const deps: Record<string, string[]> = {};
+    sections.forEach((section: any) => {
+      deps[section.name] = [];
+      (section.ingredients || []).forEach((ing: any) => {
+        const ingName = (ing.name || '').toLowerCase();
+        phaseNames.forEach(otherName => {
+          if (otherName !== section.name && ingName.includes(otherName.toLowerCase())) {
+            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+          }
         });
       });
-    } else {
-      // Fallback: bisherige is_parallel Logik
-      let currentMoment = new Date(target.getTime());
-      const reversedSections = [...sections].reverse();
-      let mergePoint = new Date(currentMoment.getTime());
+    });
 
-      reversedSections.forEach((section: any) => {
-        const totalDuration = (section.steps || []).reduce(
-          (sum: number, step: any) => sum + (parseInt(step.duration) || 0), 0
-        );
-        const isParallel = (section.name || '').toLowerCase().includes('vorteig') || section.is_parallel;
-        const sectionEnd = isParallel ? new Date(mergePoint.getTime()) : new Date(currentMoment.getTime());
-        const sectionStart = new Date(sectionEnd.getTime() - totalDuration * 60000);
+    const sectionMap: Record<string, any> = Object.fromEntries(sections.map((s: any) => [s.name, s]));
+    const endOffsets: Record<string, number> = {};
+    const startOffsets: Record<string, number> = {};
 
-        let stepMoment = new Date(sectionStart.getTime());
-        (section.steps || []).forEach((step: any) => {
-          const duration = parseInt(step.duration) || 0;
-          const stepStart = new Date(stepMoment.getTime());
-          const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-          timeline.push({
-            phase: section.name,
-            ingredients: section.ingredients || [],
-            instruction: step.instruction,
-            type: step.type || 'Aktion',
-            duration,
-            start: stepStart,
-            end: stepEnd,
-            isParallel,
-          });
-          stepMoment = stepEnd;
-        });
-
-        if (!isParallel) {
-          currentMoment = sectionStart;
-          mergePoint = sectionStart;
-        }
-      });
+    function calcEndOffset(name: string, visited = new Set<string>()): number {
+      if (name in endOffsets) return endOffsets[name];
+      if (visited.has(name)) return 0;
+      visited.add(name);
+      const dependents = phaseNames.filter(n => deps[n]?.includes(name));
+      endOffsets[name] = dependents.length === 0 ? 0
+        : Math.min(...dependents.map(d => calcStartOffset(d, new Set(visited))));
+      return endOffsets[name];
     }
+
+    function calcStartOffset(name: string, visited = new Set<string>()): number {
+      if (name in startOffsets) return startOffsets[name];
+      const end = calcEndOffset(name, visited);
+      const dur = (sectionMap[name]?.steps || []).reduce(
+        (sum: number, s: any) => sum + (parseInt(s.duration) || 0), 0
+      );
+      startOffsets[name] = end + dur;
+      return startOffsets[name];
+    }
+
+    phaseNames.forEach(name => calcStartOffset(name));
+
+    sections.forEach((section: any) => {
+      const offset = startOffsets[section.name] || 0;
+      const sectionStart = new Date(target.getTime() - offset * 60000);
+      let stepMoment = new Date(sectionStart.getTime());
+      (section.steps || []).forEach((step: any) => {
+        const duration = parseInt(step.duration) || 0;
+        const stepStart = new Date(stepMoment.getTime());
+        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
+        timeline.push({
+          phase: section.name,
+          ingredients: section.ingredients || [],
+          instruction: step.instruction,
+          type: step.type || 'Aktion',
+          duration,
+          start: stepStart,
+          end: stepEnd,
+          isParallel: (endOffsets[section.name] || 0) > 0,
+        });
+        stepMoment = stepEnd;
+      });
+    });
 
     timeline.sort((a, b) => a.start.getTime() - b.start.getTime());
     return timeline;
   };
+
 
   // ============================================================
   // TIMELINE IN ZEITGRUPPEN GRUPPIEREN
