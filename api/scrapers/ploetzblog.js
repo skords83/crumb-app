@@ -211,90 +211,66 @@ const scrapePloetz = async (url) => {
       return true;
     };
 
-    // FIX 2 & 3: parseRepeatingActions – "dehnen und falten"-Steps aufteilen.
-    // Unterstützt beide Plötzblog-Formate:
-    //   "dabei nach 30 und 60 Minuten dehnen und falten"
-    //   "dabei alle 20 Minuten dehnen und falten (3x)"
+    // parseRepeatingActions – unterstützt beide Plötzblog-Formate inkl. Stunden
     const parseRepeatingActions = (instruction, totalDuration) => {
-      // Format A: "dabei nach X, Y und Z Minuten <Aktion>"
-      const patternA = /dabei\s+nach\s+([\d,.\s]+(?:und\s+[\d,.]+)?)\s*minuten?\s+(.+)/i;
-      const matchA = instruction.match(patternA);
+      const buildMainInstruction = (text) => {
+        let main = text.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
+        main = main
+          .replace(/\d+[,.]?\d*\s*(?:Stunden?|Minuten?|h\b|min\.?)/gi, '')
+          .replace(/bei\s+\d+\s*°C\s*/gi, '')
+          .replace(/^[,.]?\s*/, '')
+          .trim();
+        if (!main) main = text.split(',')[0].trim();
+        return main ? main.charAt(0).toUpperCase() + main.slice(1) : main;
+      };
 
+      const capitalizeAction = (raw) =>
+        raw.trim().replace(/\.$/, '').replace(/\bund\s+(\w)/g, (_, c) => 'und ' + c.toUpperCase());
+
+      // Format A: "dabei nach X, Y und Z Minuten/Stunden <Aktion>"
+      const isStunden = /stunden?/i.test(instruction);
+      const matchA = instruction.match(/dabei\s+nach\s+([\d,.\sund]+)\s*(?:minuten?|stunden?)\s+(.+)/i);
       if (matchA) {
         const intervals = matchA[1]
           .replace(/\s*und\s*/gi, ',')
           .split(/[,\s]+/)
           .map(n => parseInt(n))
-          .filter(n => !isNaN(n) && n > 0);
+          .filter(n => !isNaN(n) && n > 0)
+          .map(n => isStunden ? n * 60 : n);
 
-        if (intervals.length === 0) return null;
-
-        const action = matchA[2].trim().replace(/\.$/, '');
-        // FIX: Haupttext sauber kürzen – Zeitangabe und Temperatur entfernen,
-        // sodass nur die eigentliche Tätigkeit bleibt (z.B. "Reifen lassen")
-        let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
-        mainInstruction = mainInstruction
-          .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
-          .replace(/bei\s+\d+\s*°C\s*/gi, '')
-          .replace(/^\s*[,.]?\s*/, '')
-          .trim() || instruction.split(',')[0].trim();
-
-        const steps = [];
-        let lastTime = 0;
-        intervals.forEach((time) => {
-          const waitDuration = time - lastTime;
-          if (waitDuration > 0) {
-            steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
-          }
-          steps.push({
-            instruction: action.charAt(0).toUpperCase() + action.slice(1),
-            duration: 5,
-            type: 'Aktion'
+        if (intervals.length > 0) {
+          const action = capitalizeAction(matchA[2]);
+          const mainInstruction = buildMainInstruction(instruction);
+          const steps = [];
+          let lastTime = 0;
+          intervals.forEach((time) => {
+            const waitDuration = time - lastTime;
+            if (waitDuration > 0) steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
+            steps.push({ instruction: action, duration: 5, type: 'Aktion' });
+            lastTime = time + 5;
           });
-          lastTime = time + 5;
-        });
-        if (lastTime < totalDuration) {
-          steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
+          if (lastTime < totalDuration) steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
+          return steps;
         }
-        return steps;
       }
 
       // Format B: "dabei alle X Minuten <Aktion> (Nx)"
-      const patternB = /dabei\s+alle\s+(\d+)\s*minuten?\s+(.+?)(?:\s*\((\d+)x\))?\.?\s*$/i;
-      const matchB = instruction.match(patternB);
-
+      const matchB = instruction.match(/dabei\s+alle\s+(\d+)\s*minuten?\s+(.+?)(?:\s*\((\d+)x\))?\.?\s*$/i);
       if (matchB) {
         const interval = parseInt(matchB[1]);
-        const action = matchB[2].trim().replace(/\.$/, '');
-        const count = matchB[3]
-          ? parseInt(matchB[3])
-          : Math.max(1, Math.floor(totalDuration / interval) - 1);
-
-        let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
-        mainInstruction = mainInstruction
-          .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
-          .replace(/bei\s+\d+\s*°C\s*/gi, '')
-          .replace(/^\s*[,.]?\s*/, '')
-          .trim() || instruction.split(',')[0].trim();
-
+        const action = capitalizeAction(matchB[2]);
+        const count = matchB[3] ? parseInt(matchB[3]) : Math.max(1, Math.floor(totalDuration / interval) - 1);
+        const mainInstruction = buildMainInstruction(instruction);
         const steps = [];
         let lastTime = 0;
         for (let i = 0; i < count; i++) {
           const nextTime = (i + 1) * interval;
           const waitDuration = nextTime - lastTime;
-          if (waitDuration > 0) {
-            steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
-          }
-          steps.push({
-            instruction: action.charAt(0).toUpperCase() + action.slice(1),
-            duration: 5,
-            type: 'Aktion'
-          });
+          if (waitDuration > 0) steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
+          steps.push({ instruction: action, duration: 5, type: 'Aktion' });
           lastTime = nextTime + 5;
         }
-        if (lastTime < totalDuration) {
-          steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
-        }
+        if (lastTime < totalDuration) steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
         return steps;
       }
 
@@ -376,7 +352,7 @@ const scrapePloetz = async (url) => {
         if (seenSteps.has(normKey)) return;
         seenSteps.add(normKey);
 
-        const duration = extractDurationMinutes(text);
+        const duration = extractDurationMinutes(text) || 5;
         const type = classifyStep(text);
 
         // FIX 2+3: Dehnen-und-Falten Steps aufteilen

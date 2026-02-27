@@ -337,50 +337,70 @@ function detectStepType(text) {
 // FIX: Haupttext wird vor "Dabei" abgeschnitten und von Zeit/Temp bereinigt
 function parseRepeatingActions(instruction, totalDuration) {
   const steps = [];
-    const isStunden = /stunden?/i.test(instruction);
-  const pattern = /dabei\s+nach\s+([\d,\sund]+)\s*(?:minuten?|stunden?)\s+(.+)/i;;
-  const match = instruction.match(pattern);
 
-  if (match) {
-    const intervals = match[1]
-      .replace(/\s*und\s*/g, ',')
+  const buildMainInstruction = (text) => {
+    let main = text.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
+    main = main
+      .replace(/\d+[,.]?\d*\s*(?:Stunden?|Minuten?|h\b|min\.?)/gi, '')
+      .replace(/bei\s+\d+\s*°C\s*/gi, '')
+      .replace(/^[,.]?\s*/, '')
+      .trim();
+    if (!main) main = text.split(',')[0].trim();
+    return main ? main.charAt(0).toUpperCase() + main.slice(1) : main;
+  };
+
+  const capitalizeAction = (raw) =>
+    raw.trim().replace(/\.$/, '').replace(/\bund\s+(\w)/g, (_, c) => 'und ' + c.toUpperCase());
+
+  // Format A: "dabei nach X, Y und Z Minuten/Stunden <Aktion>"
+  const isStunden = /stunden?/i.test(instruction);
+  const matchA = instruction.match(/dabei\s+nach\s+([\d,.\sund]+)\s*(?:minuten?|stunden?)\s+(.+)/i);
+  if (matchA) {
+    const intervals = matchA[1]
+      .replace(/\s*und\s*/gi, ',')
       .split(/[,\s]+/)
       .map(n => parseInt(n))
       .filter(n => !isNaN(n) && n > 0)
       .map(n => isStunden ? n * 60 : n);
 
-    if (intervals.length === 0) return null;
+    if (intervals.length > 0) {
+      const action = capitalizeAction(matchA[2]);
+      const mainInstruction = buildMainInstruction(instruction);
+      console.log(`🔄 Format A: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
+      let lastTime = 0;
+      intervals.forEach((time) => {
+        const waitDuration = time - lastTime;
+        if (waitDuration > 0) steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
+        steps.push({ instruction: action, duration: 5, type: 'Aktion' });
+        lastTime = time + 5;
+      });
+      if (lastTime < totalDuration) steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
+      return steps;
+    }
+  }
 
-    const rawAction = match[2].trim().replace(/\.$/, '');
-    // Jedes Wort nach 'und' großschreiben
-    const action = rawAction.replace(/\bund\s+(\w)/g, (m, c) => 'und ' + c.toUpperCase());
-
-    // Kurze Wartephase-Beschreibung: Verb + Objekt aus dem Hauptsatz extrahieren
-    // z.B. "3 Stunden bei 20 °C reifen lassen" → "Teig reifen lassen"
-    let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
-    // Zeitangaben und Temperatur entfernen, nur Verb-Phrase behalten
-    mainInstruction = mainInstruction
-      .replace(/\d+[,.]?\d*\s*(?:Stunden?|Minuten?|h|min)\s*/gi, '')
-      .replace(/bei\s+\d+\s*°C\s*/gi, '')
-      .replace(/^[,.]?\s*/, '')
-      .trim();
-    // Erstes Wort großschreiben
-    if (mainInstruction) mainInstruction = mainInstruction.charAt(0).toUpperCase() + mainInstruction.slice(1);
-    if (!mainInstruction) mainInstruction = instruction.split(',')[0].trim();
-
-    console.log(`🔄 Wiederholende Aktion: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
-
+  // Format B: "dabei alle X Minuten <Aktion> (Nx)"
+  const matchB = instruction.match(/dabei\s+alle\s+(\d+)\s*minuten?\s+(.+?)(?:\s*\((\d+)x\))?\.?\s*$/i);
+  if (matchB) {
+    const interval = parseInt(matchB[1]);
+    const action = capitalizeAction(matchB[2]);
+    const count = matchB[3]
+      ? parseInt(matchB[3])
+      : Math.max(1, Math.floor(totalDuration / interval) - 1);
+    const mainInstruction = buildMainInstruction(instruction);
+    console.log(`🔄 Format B: alle ${interval} Min × ${count} → ${count * 2 + 1} Schritte`);
     let lastTime = 0;
-    intervals.forEach((time) => {
-      const waitDuration = time - lastTime;
+    for (let i = 0; i < count; i++) {
+      const nextTime = (i + 1) * interval;
+      const waitDuration = nextTime - lastTime;
       if (waitDuration > 0) steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
-      steps.push({ instruction: action.charAt(0).toUpperCase() + action.slice(1), duration: 5, type: 'Aktion' });
-      lastTime = time + 5;
-    });
+      steps.push({ instruction: action, duration: 5, type: 'Aktion' });
+      lastTime = nextTime + 5;
+    }
     if (lastTime < totalDuration) steps.push({ instruction: mainInstruction, duration: totalDuration - lastTime, type: 'Warten' });
-
     return steps;
   }
+
   return null;
 }
 
