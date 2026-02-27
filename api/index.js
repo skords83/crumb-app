@@ -349,8 +349,11 @@ function parseRepeatingActions(instruction, totalDuration) {
     return main ? main.charAt(0).toUpperCase() + main.slice(1) : main;
   };
 
-  const capitalizeAction = (raw) =>
-    raw.trim().replace(/\.$/, '').replace(/\bund\s+(\w)/g, (_, c) => 'und ' + c.toUpperCase());
+  const capitalizeAction = (raw) => {
+    const s = raw.trim().replace(/\.$/, '');
+    // Nur erstes Wort groß (Satzanfang), Rest unverändert
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
 
   // Format A: "dabei nach X, Y und Z Minuten/Stunden <Aktion>"
   const isStunden = /stunden?/i.test(instruction);
