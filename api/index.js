@@ -609,6 +609,22 @@ app.post('/api/import/html', async (req, res) => {
       }
       if (steps.length > 0) {
         console.log('📋 smry.app Struktur erkannt');
+        // Fallback: prose-divs mit Schritten die durch Werbung aus der Nummerierung gefallen sind
+        const proseRe = /class="[^"]*prose[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+        let proseM;
+        while ((proseM = proseRe.exec(str)) !== null) {
+          // Extrahiere alle <p>-Tags aus dem prose-div
+          const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+          let pM;
+          while ((pM = pRe.exec(proseM[1])) !== null) {
+            const instruction = htmlToText(pM[1]);
+            // Nur wenn nicht schon vorhanden und lang genug
+            if (instruction.length >= 10 && !steps.some(s => s.instruction === instruction)) {
+              steps.push({ pos: proseM.index, stepNum: 0, instruction });
+            }
+          }
+        }
+        steps.sort((a, b) => a.pos - b.pos);
         return steps;
       }
 
