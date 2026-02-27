@@ -552,15 +552,40 @@ app.post('/api/import/html', async (req, res) => {
       'Autolyse':        { is_parallel: false },
       'Hauptteig':       { is_parallel: false },
     };
+    // Muster für unbekannte Phasen-Namen (z.B. "Mischsauerteig", "Roggenpoolish")
+    const PHASE_PATTERNS = [
+      { re: /hauptteig$/i,  is_parallel: false },
+      { re: /teig$/i,       is_parallel: true  },
+      { re: /stück$/i,      is_parallel: true  },
+      { re: /sauerteig/i,   is_parallel: true  },
+      { re: /poolish/i,     is_parallel: true  },
+      { re: /levain/i,      is_parallel: true  },
+      { re: /autolyse/i,    is_parallel: false },
+      { re: /vorteig/i,     is_parallel: true  },
+    ];
+    // h4-Texte die keine Phasen sind
+    const NON_PHASE_H4 = ['zubehör', 'zutatenübersicht', 'planungsbeispiel', 'häufig', 'ähnliche', 'kommentar', 'fragen'];
 
     const detectedPhases = [];
     const h4Re = /<h4[^>]*>([\s\S]*?)<\/h4>/gi;
     let h4Match;
     while ((h4Match = h4Re.exec(rawHtml)) !== null) {
       const h4Text = htmlToText(h4Match[1]);
+      if (!h4Text || h4Text.length > 60) continue;
+      if (NON_PHASE_H4.some(s => h4Text.toLowerCase().includes(s))) continue;
+      // Bekannte Phase?
+      let found = false;
       for (const [phaseName, opts] of Object.entries(KNOWN_PHASES)) {
         if (h4Text.toLowerCase() === phaseName.toLowerCase()) {
           detectedPhases.push({ name: phaseName, is_parallel: opts.is_parallel, charPos: h4Match.index });
+          found = true; break;
+        }
+      }
+      if (found) continue;
+      // Unbekannte Phase via Pattern
+      for (const pat of PHASE_PATTERNS) {
+        if (pat.re.test(h4Text)) {
+          detectedPhases.push({ name: h4Text, is_parallel: pat.is_parallel, charPos: h4Match.index });
           break;
         }
       }
