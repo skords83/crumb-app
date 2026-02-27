@@ -432,15 +432,20 @@ app.post('/api/import/html', async (req, res) => {
       // smry.app: lokale Dateipfade → Plötzblog-Originalbild holen
       if (imageUrl && (imageUrl.includes('_files/') || imageUrl.startsWith('Article%20'))) {
         imageUrl = ''; // wird unten via Plötzblog ersetzt
-        // Beschreibung: erstes div mit >20 Zeichen Text nach dem Hauptbild
+        // Beschreibung: erstes substantielles div nach dem Hauptbild
         if (!recipeData.description) {
           const imgIdx = html.indexOf('_files/IMG_');
           if (imgIdx >= 0) {
-            const afterImg = html.slice(imgIdx, imgIdx + 3000);
-            const divM = afterImg.match(/<div[^>]*>([\s\S]*?)<\/div>/i);
-            if (divM) {
-              const descText = divM[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-              if (descText.length > 20) recipeData.description = descText.slice(0, 500);
+            const afterImg = html.slice(imgIdx, imgIdx + 5000);
+            const divRe = /<div[^>]*>([\s\S]*?)<\/div>/gi;
+            let dm;
+            while ((dm = divRe.exec(afterImg)) !== null) {
+              const descText = dm[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+              if (descText.length > 40 && !descText.toLowerCase().includes('smry') && !descText.includes('ploetzblog.de')) {
+                recipeData.description = descText.slice(0, 500);
+                console.log('📝 Beschreibung gefunden:', descText.slice(0, 80));
+                break;
+              }
             }
           }
         }
@@ -455,9 +460,10 @@ app.post('/api/import/html', async (req, res) => {
             const $p = cheerio.load(ploetzRes.data);
             // Cloudimg-URL aus og:image
             const ploetzOgImage = $p('meta[property="og:image"]').attr('content') || '';
-            if (ploetzOgImage && ploetzOgImage.includes('cloudimg')) {
-              imageUrl = ploetzOgImage.replace(/[?&]p=w\d+/g, '');
-              console.log('✅ Plötzblog-Bild gefunden:', imageUrl.slice(0, 80));
+            console.log('🖼️ Plötzblog og:image:', ploetzOgImage.slice(0, 100));
+            if (ploetzOgImage && ploetzOgImage.startsWith('http') && !ploetzOgImage.includes('.svg')) {
+              imageUrl = ploetzOgImage.replace(/[?&]p=w\d+/g, '').replace(/[?&]width=\d+/g, '');
+              console.log('✅ Plötzblog-Bild:', imageUrl.slice(0, 80));
             }
           } catch(e) {
             console.log('⚠️ Plötzblog-Bild nicht abrufbar:', e.message);
