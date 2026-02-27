@@ -570,10 +570,15 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
       {/* Zeitachse */}
       <div className="relative h-5">
         <span className="absolute text-[10px] text-gray-400 dark:text-gray-500 font-bold left-0">{formatTime(totalStart)}</span>
-        {ticks.map((tk, ti) => (
-          <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2"
-            style={{ left: `${pct(tk)}%` }}>{formatTime(tk)}</span>
-        ))}
+        {ticks.map((tk, ti) => {
+          const p = pct(tk);
+          // Tick unterdrücken wenn zu nah an Start (<4%) oder Ende (>94%)
+          if (p < 4 || p > 94) return null;
+          return (
+            <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2"
+              style={{ left: `${p}%` }}>{formatTime(tk)}</span>
+          );
+        })}
         <span className="absolute text-[10px] text-green-500 font-bold right-0">{formatTime(totalEnd)}</span>
       </div>
 
