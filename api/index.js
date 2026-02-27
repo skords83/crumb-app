@@ -429,10 +429,40 @@ app.post('/api/import/html', async (req, res) => {
         const ogImage = $('meta[property="og:image"]').attr('content');
         if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) imageUrl = ogImage;
       }
-      // smry.app: lokale Dateipfade überspringen, og:image bevorzugen
+      // smry.app: lokale Dateipfade → Plötzblog-Originalbild holen
       if (imageUrl && (imageUrl.includes('_files/') || imageUrl.startsWith('Article%20'))) {
-        const ogImage = $('meta[property="og:image"]').attr('content');
-        imageUrl = (ogImage && !ogImage.includes('scr.png')) ? ogImage : '';
+        imageUrl = ''; // wird unten via Plötzblog ersetzt
+        // Beschreibung: erstes div mit >20 Zeichen Text nach dem Hauptbild
+        if (!recipeData.description) {
+          const imgIdx = html.indexOf('_files/IMG_');
+          if (imgIdx >= 0) {
+            const afterImg = html.slice(imgIdx, imgIdx + 3000);
+            const divM = afterImg.match(/<div[^>]*>([\s\S]*?)<\/div>/i);
+            if (divM) {
+              const descText = divM[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+              if (descText.length > 20) recipeData.description = descText.slice(0, 500);
+            }
+          }
+        }
+        // Plötzblog-URL aus og:url extrahieren
+        const ogUrl = $('meta[property="og:url"]').attr('content') || '';
+        const ploetzMatch = ogUrl.match(/https?:\/\/(?:smry\.ai\/)?(.+ploetzblog\.de.+)/);
+        if (ploetzMatch) {
+          const ploetzUrl = ploetzMatch[1].startsWith('http') ? ploetzMatch[1] : 'https://' + ploetzMatch[1];
+          try {
+            console.log('🔍 Hole Plötzblog-Seite für Bild:', ploetzUrl);
+            const ploetzRes = await axios.get(ploetzUrl, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const $p = cheerio.load(ploetzRes.data);
+            // Cloudimg-URL aus og:image
+            const ploetzOgImage = $p('meta[property="og:image"]').attr('content') || '';
+            if (ploetzOgImage && ploetzOgImage.includes('cloudimg')) {
+              imageUrl = ploetzOgImage.replace(/[?&]p=w\d+/g, '');
+              console.log('✅ Plötzblog-Bild gefunden:', imageUrl.slice(0, 80));
+            }
+          } catch(e) {
+            console.log('⚠️ Plötzblog-Bild nicht abrufbar:', e.message);
+          }
+        }
       }
     }
     recipeData.image_url = imageUrl;
