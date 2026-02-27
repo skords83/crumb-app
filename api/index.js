@@ -429,6 +429,11 @@ app.post('/api/import/html', async (req, res) => {
         const ogImage = $('meta[property="og:image"]').attr('content');
         if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) imageUrl = ogImage;
       }
+      // smry.app: lokale Dateipfade überspringen, og:image bevorzugen
+      if (imageUrl && (imageUrl.includes('_files/') || imageUrl.startsWith('Article%20'))) {
+        const ogImage = $('meta[property="og:image"]').attr('content');
+        imageUrl = (ogImage && !ogImage.includes('scr.png')) ? ogImage : '';
+      }
     }
     recipeData.image_url = imageUrl;
 
@@ -570,6 +575,22 @@ app.post('/api/import/html', async (req, res) => {
 
     function extractAllSteps(str) {
       const steps = [];
+
+      // Methode 2: smry.app Struktur – <div><div><p>ZAHL</p></div><p>INSTRUCTION</p></div>
+      const smryRe = /<div>\s*<div>\s*<p>\s*(\d+)\s*<\/p>\s*<\/div>\s*<p>\s*([\s\S]*?)\s*<\/p>\s*<\/div>/gi;
+      let smryM;
+      while ((smryM = smryRe.exec(str)) !== null) {
+        const instruction = htmlToText(smryM[2]);
+        if (instruction.length >= 5) {
+          steps.push({ pos: smryM.index, stepNum: parseInt(smryM[1]), instruction });
+        }
+      }
+      if (steps.length > 0) {
+        console.log('📋 smry.app Struktur erkannt');
+        return steps;
+      }
+
+      // Methode 1: archive.ph / Plötzblog Originalstruktur (rgba Kreise)
       const rgbaRe = /rgba\(196,\s*173,\s*130[^)]*\)/g;
       let m;
       while ((m = rgbaRe.exec(str)) !== null) {
