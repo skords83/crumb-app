@@ -337,7 +337,8 @@ function detectStepType(text) {
 // FIX: Haupttext wird vor "Dabei" abgeschnitten und von Zeit/Temp bereinigt
 function parseRepeatingActions(instruction, totalDuration) {
   const steps = [];
-  const pattern = /dabei\s+nach\s+([\d,\sund]+)\s*minuten?\s+(.+)/i;
+    const isStunden = /stunden?/i.test(instruction);
+  const pattern = /dabei\s+nach\s+([\d,\sund]+)\s*(?:minuten?|stunden?)\s+(.+)/i;;
   const match = instruction.match(pattern);
 
   if (match) {
@@ -345,7 +346,8 @@ function parseRepeatingActions(instruction, totalDuration) {
       .replace(/\s*und\s*/g, ',')
       .split(/[,\s]+/)
       .map(n => parseInt(n))
-      .filter(n => !isNaN(n) && n > 0);
+      .filter(n => !isNaN(n) && n > 0)
+      .map(n => isStunden ? n * 60 : n);
 
     if (intervals.length === 0) return null;
 
@@ -599,7 +601,7 @@ app.post('/api/import/html', async (req, res) => {
       const steps = [];
 
       // Methode 2: smry.app Struktur – <div><div><p>ZAHL</p></div><p>INSTRUCTION</p></div>
-      const smryRe = /<div>\s*<div>\s*<p>\s*(\d+)\s*<\/p>\s*<\/div>\s*<p>\s*([\s\S]*?)\s*<\/p>\s*<\/div>/gi;
+      const smryRe = /<div[^>]*>\s*<div>\s*<p>\s*(\d+)\s*<\/p>\s*<\/div>\s*<p>\s*([\s\S]*?)\s*<\/p>\s*<\/div>/gi;
       let smryM;
       while ((smryM = smryRe.exec(str)) !== null) {
         const instruction = htmlToText(smryM[2]);
