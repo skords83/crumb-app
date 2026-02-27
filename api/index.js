@@ -494,7 +494,7 @@ app.post('/api/import/html', async (req, res) => {
         }
       });
     }
-    recipeData.description = description;
+    if (!recipeData.description) recipeData.description = description;
 
     // ---- ZUTATEN ---------------------------------------------
     $('table tr').each((i, tr) => {
