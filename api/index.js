@@ -432,44 +432,7 @@ app.post('/api/import/html', async (req, res) => {
       // smry.app: lokale Dateipfade → Plötzblog-Originalbild holen
       if (imageUrl && (imageUrl.includes('_files/') || imageUrl.startsWith('Article%20'))) {
         imageUrl = ''; // wird unten via Plötzblog ersetzt
-        // Beschreibung: erstes substantielles div nach dem Hauptbild
-        if (!recipeData.description) {
-          const imgIdx = html.indexOf('_files/IMG_');
-          if (imgIdx >= 0) {
-            const afterImg = html.slice(imgIdx, imgIdx + 5000);
-            const divRe = /<div[^>]*>([\s\S]*?)<\/div>/gi;
-            let dm;
-            while ((dm = divRe.exec(afterImg)) !== null) {
-              const descText = dm[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-              if (descText.length > 40 && !descText.toLowerCase().includes('smry') && !descText.includes('ploetzblog.de')) {
-                recipeData.description = descText.slice(0, 500);
-                console.log('📝 Beschreibung gefunden:', descText.slice(0, 80));
-                break;
-              }
-            }
-          }
-        }
-        // Plötzblog-URL aus og:url extrahieren
-        const ogUrl = $('meta[property="og:url"]').attr('content') || '';
-        const ploetzMatch = ogUrl.match(/https?:\/\/(?:smry\.ai\/)?(.+ploetzblog\.de.+)/);
-        if (ploetzMatch) {
-          const ploetzUrl = ploetzMatch[1].startsWith('http') ? ploetzMatch[1] : 'https://' + ploetzMatch[1];
-          try {
-            console.log('🔍 Hole Plötzblog-Seite für Bild:', ploetzUrl);
-            const ploetzRes = await axios.get(ploetzUrl, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-            const $p = cheerio.load(ploetzRes.data);
-            // Cloudimg-URL aus og:image
-            const ploetzOgImage = $p('meta[property="og:image"]').attr('content') || '';
-            console.log('🖼️ Plötzblog og:image:', ploetzOgImage.slice(0, 100));
-            if (ploetzOgImage && ploetzOgImage.startsWith('http') && !ploetzOgImage.includes('.svg')) {
-              imageUrl = ploetzOgImage.replace(/[?&]p=w\d+/g, '').replace(/[?&]width=\d+/g, '');
-              console.log('✅ Plötzblog-Bild:', imageUrl.slice(0, 80));
-            }
-          } catch(e) {
-            console.log('⚠️ Plötzblog-Bild nicht abrufbar:', e.message);
-          }
-        }
-      }
+         }
     }
     recipeData.image_url = imageUrl;
 
