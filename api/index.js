@@ -356,9 +356,9 @@ function parseRepeatingActions(instruction, totalDuration) {
   };
 
   // Format A: "dabei nach X, Y und Z Minuten/Stunden <Aktion>"
-  const isStunden = /stunden?/i.test(instruction);
-  const matchA = instruction.match(/dabei\s+nach\s+([\d,.\sund]+)\s*(?:minuten?|stunden?)\s+(.+)/i);
+  const matchA = instruction.match(/dabei\s+nach\s+([\d,.\sund]+)\s*(minuten?|stunden?)\s+(.+)/i);
   if (matchA) {
+    const isStunden = /stunden?/i.test(matchA[2]);
     const intervals = matchA[1]
       .replace(/\s*und\s*/gi, ',')
       .split(/[,\s]+/)
@@ -367,7 +367,7 @@ function parseRepeatingActions(instruction, totalDuration) {
       .map(n => isStunden ? n * 60 : n);
 
     if (intervals.length > 0) {
-      const action = capitalizeAction(matchA[2]);
+      const action = capitalizeAction(matchA[3]);
       const mainInstruction = buildMainInstruction(instruction);
       console.log(`🔄 Format A: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
       let lastTime = 0;
