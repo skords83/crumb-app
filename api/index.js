@@ -351,14 +351,21 @@ function parseRepeatingActions(instruction, totalDuration) {
 
     if (intervals.length === 0) return null;
 
-    const action = match[2].trim().replace(/\.$/, '');
+    const rawAction = match[2].trim().replace(/\.$/, '');
+    // Jedes Wort nach 'und' großschreiben
+    const action = rawAction.replace(/\bund\s+(\w)/g, (m, c) => 'und ' + c.toUpperCase());
 
+    // Kurze Wartephase-Beschreibung: Verb + Objekt aus dem Hauptsatz extrahieren
+    // z.B. "3 Stunden bei 20 °C reifen lassen" → "Teig reifen lassen"
     let mainInstruction = instruction.split(/\.\s*[Dd]abei\b|,\s*[Dd]abei\b/)[0].trim();
+    // Zeitangaben und Temperatur entfernen, nur Verb-Phrase behalten
     mainInstruction = mainInstruction
-      .replace(/\d+[,.]?\d*\s*Stunden?\s*/gi, '')
+      .replace(/\d+[,.]?\d*\s*(?:Stunden?|Minuten?|h|min)\s*/gi, '')
       .replace(/bei\s+\d+\s*°C\s*/gi, '')
-      .replace(/^\s*[,.]?\s*/, '')
+      .replace(/^[,.]?\s*/, '')
       .trim();
+    // Erstes Wort großschreiben
+    if (mainInstruction) mainInstruction = mainInstruction.charAt(0).toUpperCase() + mainInstruction.slice(1);
     if (!mainInstruction) mainInstruction = instruction.split(',')[0].trim();
 
     console.log(`🔄 Wiederholende Aktion: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
