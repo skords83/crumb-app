@@ -429,10 +429,33 @@ app.post('/api/import/html', async (req, res) => {
         const ogImage = $('meta[property="og:image"]').attr('content');
         if (ogImage && !ogImage.includes('scr.png') && !ogImage.includes('.svg')) imageUrl = ogImage;
       }
-      // smry.app: lokale Dateipfade → Plötzblog-Originalbild holen
+      // smry.app: lokale Dateipfade → Plötzblog-Originalbild + Beschreibung holen
       if (imageUrl && (imageUrl.includes('_files/') || imageUrl.startsWith('Article%20'))) {
-        imageUrl = ''; // wird unten via Plötzblog ersetzt
-         }
+        imageUrl = '';
+        const ogUrl = $('meta[property="og:url"]').attr('content') || '';
+        const ploetzMatch = ogUrl.match(/https?:\/\/(?:smry\.ai\/)?(.+ploetzblog\.de.+)/);
+        if (ploetzMatch) {
+          const ploetzUrl = ploetzMatch[1].startsWith('http') ? ploetzMatch[1] : 'https://' + ploetzMatch[1];
+          try {
+            console.log('🔍 Hole Plötzblog-Seite für Bild:', ploetzUrl);
+            const ploetzRes = await axios.get(ploetzUrl, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const $p = cheerio.load(ploetzRes.data);
+            const ploetzOgImage = $p('meta[property="og:image"]').attr('content') || '';
+            console.log('🖼️ Plötzblog og:image:', ploetzOgImage.slice(0, 100));
+            if (ploetzOgImage && ploetzOgImage.startsWith('http') && !ploetzOgImage.includes('.svg')) {
+              imageUrl = ploetzOgImage.replace(/[?&]p=w\d+/g, '').replace(/[?&]width=\d+/g, '');
+              console.log('✅ Plötzblog-Bild:', imageUrl.slice(0, 80));
+            }
+            const ploetzDesc = $p('meta[property="og:description"]').attr('content') || '';
+            if (ploetzDesc.length > 20) {
+              recipeData.description = ploetzDesc;
+              console.log('📝 Plötzblog-Beschreibung:', ploetzDesc.slice(0, 80));
+            }
+          } catch(e) {
+            console.log('⚠️ Plötzblog nicht abrufbar:', e.message);
+          }
+        }
+      }
     }
     recipeData.image_url = imageUrl;
 
