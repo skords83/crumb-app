@@ -35,6 +35,13 @@ export default function RootLayout({
     <html lang="de">
       <head>
         <meta name="theme-color" content="#8B7355" />
+        {/* iOS Splash Screens */}
+        <link rel="apple-touch-startup-image" href="/icons/splash-1284x2778.png"
+          media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" />
+        <link rel="apple-touch-startup-image" href="/icons/splash-1170x2532.png"
+          media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" />
+        <link rel="apple-touch-startup-image" href="/icons/splash-750x1334.png"
+          media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
