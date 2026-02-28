@@ -110,14 +110,19 @@ const NTFY_VORLAUF = parseInt(process.env.NTFY_VORLAUF) || 5;
 
 const sendNtfyNotification = async (title, message, tags = 'bread') => {
   try {
-    const url = `${process.env.NTFY_URL || 'http://ntfy.local'}/${process.env.NTFY_TOPIC || 'crumb-backplan'}`;
-    const body = { topic: process.env.NTFY_TOPIC || 'crumb-backplan', title, message, tags: [tags], priority: 4 };
+    const topic = process.env.NTFY_TOPIC || 'crumb-backplan';
+    const baseUrl = (process.env.NTFY_URL || 'http://ntfy.local').replace(/\/$/, '');
+    const shortTitle = title.length > 60
+      ? title.slice(0, 60).replace(/\s+\S*$/, '') + '\u2026'
+      : title;
+    // ntfy JSON-API: POST zur Basis-URL, topic im Body (nicht im Pfad)
+    const payload = JSON.stringify({ topic, title: shortTitle, message, tags: [tags], priority: 4 });
     const headers = { 'Content-Type': 'application/json' };
     if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
-    await axios.post(url, body, { headers });
-    console.log(`🔔 Notification gesendet: ${title}`);
+    await axios.post(baseUrl, payload, { headers });
+    console.log(`🔔 Notification gesendet: ${shortTitle}`);
   } catch (err) {
-    console.error('❌ ntfy Fehler:', err.message);
+    console.error('\u274c ntfy Fehler:', err.message);
   }
 };
 
