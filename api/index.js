@@ -110,15 +110,11 @@ const NTFY_VORLAUF = parseInt(process.env.NTFY_VORLAUF) || 5;
 
 const sendNtfyNotification = async (title, message, tags = 'bread') => {
   try {
-    const headers = {
-      'Title': encodeURIComponent(title),
-      'Tags': tags,
-      'Priority': '4',
-      'Content-Type': 'text/plain; charset=utf-8'
-    };
-    if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
     const url = `${process.env.NTFY_URL || 'http://ntfy.local'}/${process.env.NTFY_TOPIC || 'crumb-backplan'}`;
-    await axios.post(url, message, { headers });
+    const body = { topic: process.env.NTFY_TOPIC || 'crumb-backplan', title, message, tags: [tags], priority: 4 };
+    const headers = { 'Content-Type': 'application/json' };
+    if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
+    await axios.post(url, body, { headers });
     console.log(`🔔 Notification gesendet: ${title}`);
   } catch (err) {
     console.error('❌ ntfy Fehler:', err.message);
