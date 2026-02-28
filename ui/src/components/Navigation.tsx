@@ -4,8 +4,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, User, ChevronDown, KeyRound } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 export default function Navigation() {
   const pathname = usePathname();
@@ -14,6 +15,7 @@ export default function Navigation() {
   if (isAuthPage) return null;
   
   const { logout, user } = useAuth();
+  const { canInstall, install } = usePWAInstall();
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -35,30 +37,24 @@ export default function Navigation() {
     const checkActivePlans = async () => {
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-          }
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
         });
-    const data = await res.json();
-    // Fix: prüfen ob data wirklich ein Array ist
-    const active = Array.isArray(data) && data.some((r: any) => r.planned_at !== null);
-    setHasActivePlan(active);
-  } catch (err) {
-    console.error("Nav-Check Fehler:", err);
-  }
-};
-
+        const data = await res.json();
+        const active = Array.isArray(data) && data.some((r: any) => r.planned_at !== null);
+        setHasActivePlan(active);
+      } catch (err) {
+        console.error("Nav-Check Fehler:", err);
+      }
+    };
     checkActivePlans();
     const interval = setInterval(checkActivePlans, 30000);
     return () => clearInterval(interval);
   }, [pathname]);
 
-  // Rest bleibt gleich...
   const navItems = [
     { name: 'Rezepte', href: '/', icon: LayoutGrid },
     { name: 'Import', href: '/new', icon: FileDown },
   ];
-
   const allNavItems = [...navItems];
   if (hasActivePlan) {
     allNavItems.push({ name: 'Backplan', href: '/backplan', icon: Clock });
@@ -66,159 +62,131 @@ export default function Navigation() {
 
   return (
     <>
+      {/* ── DESKTOP HEADER ── */}
       <header className="hidden md:block fixed top-0 left-0 right-0 z-50">
         <div className="bg-[#8B7355] text-white px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 border-2 border-white/30 rounded-full flex items-center justify-center bg-white/10 overflow-hidden relative">
-              <img 
-                src="/logo.png" 
-                alt="Crumb Logo"
-                className="w-11 h-11 object-contain" 
-              />
+            <div className="w-14 h-14 border-2 border-white/30 rounded-full flex items-center justify-center bg-white/10 overflow-hidden">
+              <img src="/logo.png" alt="Crumb Logo" className="w-11 h-11 object-contain" />
             </div>
-            
             <div className="flex flex-col">
-              <h1 className="text-2xl font-black tracking-[-0.05em] text-white leading-none uppercase">
-                Crumb
-              </h1>
-              <div className="h-[2px] w-full bg-white/30 mt-1 rounded-full"></div>
-              <p className="text-[10px] font-medium tracking-[0.3em] text-white/80 uppercase mt-1">
-                Perfect Bread, Perfect Timing
-              </p>
+              <h1 className="text-2xl font-black tracking-[-0.05em] text-white leading-none uppercase">Crumb</h1>
+              <div className="h-[2px] w-full bg-white/30 mt-1 rounded-full" />
+              <p className="text-[10px] font-medium tracking-[0.3em] text-white/80 uppercase mt-1">Perfect Bread, Perfect Timing</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             {hasActivePlan && (
               <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/20">
-                <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                <div className="w-2 h-2 bg-orange-400 rounded-full" />
                 Backvorgang läuft
               </div>
             )}
 
-            {/* User Menu Dropdown */}
+            {/* PWA Install Button (Desktop) */}
+            {canInstall && (
+              <button
+                onClick={install}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold"
+              >
+                <Download size={14} />
+                App installieren
+              </button>
+            )}
+
+            {/* User Menu */}
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-2 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-                aria-label="Benutzermenü"
               >
                 <div className="w-6 h-6 rounded-full bg-[#8B7355] flex items-center justify-center text-white text-xs font-bold">
                   {user?.username ? user.username.slice(0, 2).toUpperCase() : '?'}
                 </div>
                 <ChevronDown size={14} className="text-white" />
               </button>
-
               {showUserMenu && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setShowUserMenu(false)}
-                  />
+                  <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
                   <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
                     <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">
-                        {user?.username || 'Benutzer'}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {user?.email}
-                      </p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{user?.username || 'Benutzer'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
                     </div>
-                    <Link
-                      href="/profile"
-                      onClick={() => setShowUserMenu(false)}
-                      className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      <KeyRound size={16} />
-                      Passwort ändern
+                    <Link href="/profile" onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      <KeyRound size={16} /> Passwort ändern
                     </Link>
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        logout();
-                      }}
-                      className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
-                      <LogOut size={16} />
-                      Abmelden
+                    <button onClick={() => { setShowUserMenu(false); logout(); }}
+                      className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      <LogOut size={16} /> Abmelden
                     </button>
                   </div>
                 </>
               )}
             </div>
 
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              aria-label="Dark Mode umschalten"
-            >
-              {mounted && darkMode ? (
-                <Sun size={20} className="text-white" />
-              ) : (
-                <Moon size={20} className="text-white" />
-              )}
+            <button onClick={toggleTheme} className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors">
+              {mounted && darkMode ? <Sun size={20} className="text-white" /> : <Moon size={20} className="text-white" />}
             </button>
           </div>
         </div>
 
-        {/* Rest der Navigation bleibt gleich */}
         <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 flex">
           {allNavItems.map((item) => {
             const isActive = pathname === item.href;
             const isSpecial = item.href === '/backplan';
-            
             return (
-              <Link 
-                key={item.href} 
-                href={item.href}
+              <Link key={item.href} href={item.href}
                 className={`flex items-center gap-3 px-6 py-4 text-sm font-medium transition-all relative group ${
-                  isActive 
-                  ? 'text-[#8B7355]' 
-                  : isSpecial ? 'text-orange-600 hover:text-orange-700 font-bold' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
-              >
+                  isActive ? 'text-[#8B7355]' : isSpecial
+                    ? 'text-orange-600 hover:text-orange-700 font-bold'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                }`}>
                 <div className="relative">
-                  <item.icon 
-                    size={20} 
-                    strokeWidth={isActive ? 2.5 : 2} 
-                    className={isSpecial && !isActive ? 'drop-shadow-[0_0_8px_rgba(234,88,12,0.4)]' : ''} 
-                  />
-                  
+                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2}
+                    className={isSpecial && !isActive ? 'drop-shadow-[0_0_8px_rgba(234,88,12,0.4)]' : ''} />
                   {isSpecial && !isActive && (
                     <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-600 border border-white"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-600 border border-white" />
                     </span>
                   )}
                 </div>
-
                 {item.name}
-
-                {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#8B7355]" />
-                )}
+                {isActive && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#8B7355]" />}
               </Link>
             );
           })}
         </nav>
       </header>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 z-50 flex items-center justify-around pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-        {allNavItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link 
-              key={item.href} 
-              href={item.href}
-              className={`flex flex-col items-center gap-1 transition-colors ${
-                isActive ? 'text-[#8B7355]' : (item.href === '/backplan' ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500')
-              }`}
-            >
-              <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">{item.name}</span>
-            </Link>
-          );
-        })}
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center justify-around h-16 pb-safe">
+          {allNavItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link key={item.href} href={item.href}
+                className={`flex flex-col items-center gap-1 transition-colors px-4 ${
+                  isActive ? 'text-[#8B7355]' : item.href === '/backplan' ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'
+                }`}>
+                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                <span className="text-[10px] font-bold uppercase tracking-tighter">{item.name}</span>
+              </Link>
+            );
+          })}
+
+          {/* PWA Install Button (Mobile) */}
+          {canInstall && (
+            <button onClick={install}
+              className="flex flex-col items-center gap-1 text-[#8B7355] px-4">
+              <Download size={22} strokeWidth={2} />
+              <span className="text-[10px] font-bold uppercase tracking-tighter">Installieren</span>
+            </button>
+          )}
+        </div>
       </nav>
     </>
   );

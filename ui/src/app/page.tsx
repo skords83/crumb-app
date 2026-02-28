@@ -156,7 +156,7 @@ export default function HomePage() {
       </div>
 
       {/* Floating Action Button */}
-      <Link href="/new" className="fixed bottom-10 right-10 z-50 bg-[#8B7355] text-white p-5 rounded-2xl shadow-2xl hover:scale-110 active:scale-95 transition-all group">
+      <Link href="/new" className="fixed bottom-24 right-6 md:bottom-10 md:right-10 right-10 z-50 bg-[#8B7355] text-white p-5 rounded-2xl shadow-2xl hover:scale-110 active:scale-95 transition-all group">
         <Plus size={24} strokeWidth={3} />
       </Link>
 
