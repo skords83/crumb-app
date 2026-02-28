@@ -371,8 +371,7 @@ function parseRepeatingActions(instruction, totalDuration) {
     if (intervals.length > 0) {
       const action = capitalizeAction(matchA[3]);
       const mainInstruction = buildMainInstruction(instruction);
-      console.log(`🔄 Format A: ${intervals.join(', ')} Min → ${intervals.length * 2 + 1} Schritte`);
-      let lastTime = 0;
+        let lastTime = 0;
       intervals.forEach((time) => {
         const waitDuration = time - lastTime;
         if (waitDuration > 0) steps.push({ instruction: mainInstruction, duration: waitDuration, type: 'Warten' });
@@ -393,7 +392,6 @@ function parseRepeatingActions(instruction, totalDuration) {
       ? parseInt(matchB[3])
       : Math.max(1, Math.floor(totalDuration / interval) - 1);
     const mainInstruction = buildMainInstruction(instruction);
-    console.log(`🔄 Format B: alle ${interval} Min × ${count} → ${count * 2 + 1} Schritte`);
     let lastTime = 0;
     for (let i = 0; i < count; i++) {
       const nextTime = (i + 1) * interval;
@@ -438,7 +436,6 @@ app.post('/api/import/html', async (req, res) => {
         .replace(/^\/\//, 'https://')
         .replace(/\?p=w\d+/, '?p=w800')
         .replace(/\?p=grid-[^&\s"']+/, '?p=w800');
-      console.log('✅ Cloudimg gefunden:', imageUrl);
     } else {
       const imgCandidates = [];
       $('img').each((i, img) => {
@@ -471,19 +468,15 @@ app.post('/api/import/html', async (req, res) => {
         if (ploetzMatch) {
           const ploetzUrl = ploetzMatch[1].startsWith('http') ? ploetzMatch[1] : 'https://' + ploetzMatch[1];
           try {
-            console.log('🔍 Hole Plötzblog-Seite für Bild:', ploetzUrl);
             const ploetzRes = await axios.get(ploetzUrl, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
             const $p = cheerio.load(ploetzRes.data);
             const ploetzOgImage = $p('meta[property="og:image"]').attr('content') || '';
-            console.log('🖼️ Plötzblog og:image:', ploetzOgImage.slice(0, 100));
             if (ploetzOgImage && ploetzOgImage.startsWith('http') && !ploetzOgImage.includes('.svg')) {
               imageUrl = ploetzOgImage.replace(/[?&]p=w\d+/g, '').replace(/[?&]width=\d+/g, '');
-              console.log('✅ Plötzblog-Bild:', imageUrl.slice(0, 80));
             }
             const ploetzDesc = $p('meta[property="og:description"]').attr('content') || '';
             if (ploetzDesc.length > 20) {
               recipeData.description = ploetzDesc;
-              console.log('📝 Plötzblog-Beschreibung:', ploetzDesc.slice(0, 80));
             }
           } catch(e) {
             console.log('⚠️ Plötzblog nicht abrufbar:', e.message);
@@ -542,10 +535,8 @@ app.post('/api/import/html', async (req, res) => {
       seenIng.set(key, true);
       return true;
     });
-    console.log(`🥖 ${recipeData.ingredients.length} Zutaten extrahiert`);
 
     // ---- STEPS & PHASEN --------------------------------------
-    console.log('📋 Extrahiere Phasen und Schritte...');
     const rawHtml = html;
 
     function htmlToText(str) {
@@ -616,7 +607,6 @@ app.post('/api/import/html', async (req, res) => {
       }
     }
     const uniquePhases = detectedPhases.filter((p, i) => i === 0 || p.name !== detectedPhases[i - 1].name);
-    console.log(`Erkannte Phasen: ${uniquePhases.map(p => p.name).join(', ')}`);
 
 
     function extractIngredientsFromChunk(chunk, phaseName) {
@@ -642,15 +632,13 @@ app.post('/api/import/html', async (req, res) => {
         if (noteMatch) { note = noteMatch[1]; name = name.replace(/\([^)]+\)/g, '').trim(); }
         name = name.replace(/\s+/g, ' ').trim();
         if (!name || name.length < 2 || name.length > 120) {
-          console.log(`  SKIP LEN: "${name}" len=${name.length} hasAmount=${hasAmount} cells0="${cells[0].slice(0,30)}"`);
           continue;
         }
         const key = name.toLowerCase();
-        if (seen.has(key)) { console.log(`  SKIP DUPLIKAT: "${name}"`); continue; }
+
         seen.add(key);
         ingredients.push({ name, amount: hasAmount ? amount : '', unit: '', temperature, note });
       }
-      if (phaseName) console.log(`  [${phaseName}] rows=${rowCount} found=${ingredients.length} names=${JSON.stringify(ingredients.map(i=>i.name))}`);
       return ingredients;
     }
 
@@ -667,7 +655,6 @@ app.post('/api/import/html', async (req, res) => {
         }
       }
       if (steps.length > 0) {
-        console.log('📋 smry.app Struktur erkannt');
         // Fallback: prose-divs mit Schritten die durch Werbung aus der Nummerierung gefallen sind
         const proseRe = /class="[^"]*prose[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
         let proseM;
@@ -722,7 +709,6 @@ app.post('/api/import/html', async (req, res) => {
     // FIX: Deduplizierung – Reset bei jeder kleineren/gleichen Schrittnummer (neue Phase)
     const allSteps = (() => {
       const raw = extractAllSteps(rawHtml);
-      console.log(`📋 ${raw.length} Schritte extrahiert (roh)`);
       const deduped = [];
       const seenInBlock = new Set();
       let lastNum = -1;
@@ -734,7 +720,6 @@ app.post('/api/import/html', async (req, res) => {
         }
         lastNum = step.stepNum;
       });
-      console.log(`📋 ${deduped.length} Schritte nach Deduplizierung`);
       return deduped;
     })();
 
@@ -762,7 +747,6 @@ app.post('/api/import/html', async (req, res) => {
         const phase   = uniquePhases[i];
         const nextPos = i + 1 < uniquePhases.length ? uniquePhases[i + 1].charPos : rawHtml.length;
         const phaseChunk = rawHtml.slice(phase.charPos, nextPos);
-        console.log(`  CHUNK ${phase.name}: charPos=${phase.charPos}, nextPos=${nextPos}, len=${phaseChunk.length}, hasGesamter=${phaseChunk.includes('gesamter')}`);
         // FIX: Chunk auf max 100000 Zeichen begrenzen (2.2MB Chunks verursachen Regex-Probleme)
         const limitedChunk = phaseChunk.slice(0, 100000);
         const phaseIngredients = extractIngredientsFromChunk(limitedChunk, phase.name);
@@ -775,7 +759,6 @@ app.post('/api/import/html', async (req, res) => {
             const rep = parseRepeatingActions(step.instruction, step.duration);
             rep ? expandedSteps.push(...rep) : expandedSteps.push(step);
           });
-        console.log(`  -> ${phase.name}: ${phaseIngredients.length} Zutaten, ${expandedSteps.length} Schritte`);
         dough_sections.push({
           name: phase.name,
           ingredients: phaseIngredients,
@@ -810,7 +793,6 @@ app.post('/api/import/html', async (req, res) => {
       dough_sections: recipeData.dough_sections || []
     };
 
-    console.log('📤 Sending to frontend:', { title: finalData.title, image: finalData.image_url ? '✅' : '❌', ingredients: finalData.ingredients.length, steps: finalData.steps.length, phases: finalData.dough_sections.length });
     res.json(finalData);
 
   } catch (error) {
@@ -891,7 +873,6 @@ app.get('/api/ntfy/status', (req, res) => {
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Backend läuft auf Port ${PORT}`);
-  console.log('DEBUG: Typ von getScraper ist:', typeof getScraper);
   await initDB();
   setInterval(checkAndNotify, 60000);
 });
