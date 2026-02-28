@@ -111,9 +111,10 @@ const NTFY_VORLAUF = parseInt(process.env.NTFY_VORLAUF) || 5;
 const sendNtfyNotification = async (title, message, tags = 'bread') => {
   try {
     const headers = {
-      'Title': title.replace(/[^\x20-\x7E]/g, ''),
+      'Title': encodeURIComponent(title),
       'Tags': tags,
-      'Priority': '4'
+      'Priority': '4',
+      'Content-Type': 'text/plain; charset=utf-8'
     };
     if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
     const url = `${process.env.NTFY_URL || 'http://ntfy.local'}/${process.env.NTFY_TOPIC || 'crumb-backplan'}`;
