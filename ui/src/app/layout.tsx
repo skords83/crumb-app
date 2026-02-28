@@ -14,6 +14,16 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "Crumb - Deine Brot Bibliothek",
   description: "Brotbacken mit System",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Crumb",
+  },
+  icons: {
+    icon: "/icons/favicon-32.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -24,6 +34,7 @@ export default function RootLayout({
   return (
     <html lang="de">
       <head>
+        <meta name="theme-color" content="#8B7355" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
