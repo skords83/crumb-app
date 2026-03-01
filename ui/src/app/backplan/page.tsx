@@ -332,8 +332,8 @@ export default function BackplanPage() {
                         }`}>
                         <div className="flex justify-between items-center mb-2">
                           <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
-                              {step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
+                              {step.type === 'Backen' ? '🔥' : step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
                             </span>
                             <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatDuration(step.duration)}</span>
                           </div>
@@ -347,7 +347,7 @@ export default function BackplanPage() {
                         </p>
                         {isActiveStep && (
                           <>
-                            <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${step.type === 'Warten' ? 'bg-[#F5F0E8] dark:bg-gray-700' : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'}`}>
+                            <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${step.type === 'Warten' ? 'bg-[#F5F0E8] dark:bg-gray-700' : step.type === 'Backen' ? 'bg-gradient-to-br from-red-500 to-red-700' : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'}`}>
                               <div>
                                 <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${step.type === 'Warten' ? 'text-[#8B7355]' : 'text-white/70'}`}>{step.type === 'Warten' ? 'Restzeit' : 'Timer'}</div>
                                 <div className={`text-[28px] font-extrabold tabular-nums tracking-tight ${step.type === 'Warten' ? 'text-[#2D2D2D] dark:text-gray-100' : 'text-white'}`}>{formatCountdown(remainingSeconds)}</div>

@@ -98,7 +98,7 @@ export default function RecipeForm({
         const amount = parseFloat(ing.amount.toString().replace(',', '.')) || 0;
         const unit = ing.unit || "g";
         if (totals[key]) {
-          totals[key].amount = Math.round((totals[key].amount + amount) * 1000) / 1000;
+          totals[key].amount += amount;
         } else {
           totals[key] = { name: ing.name, amount, unit };
         }
@@ -198,9 +198,7 @@ export default function RecipeForm({
                 {totalIngredients.map((ing, idx) => (
                   <div key={`total-${idx}`} className="flex flex-col bg-white/60 dark:bg-gray-700/60 px-4 py-2 rounded-2xl border border-white dark:border-gray-600 shadow-sm">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{ing.name}</span>
-                    <span className="text-sm font-black text-[#8B7355]">
-                      {String(ing.amount).replace('.', ',')} {ing.unit}
-                    </span>
+                    <span className="text-sm font-black text-[#8B7355]">{ing.amount} {ing.unit}</span>
                   </div>
                 ))}
               </div>
@@ -316,7 +314,13 @@ export default function RecipeForm({
                   <div className="lg:col-span-7 space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8B7355]">Ablauf</p>
                     <div className="space-y-3">
-                      {section.steps?.map((step: any, stIdx: number) => (
+                      {section.steps?.map((step: any, stIdx: number) => {
+                        // Normalisieren: scraper liefert manchmal undefined/null → default 'Aktion'
+                        const stepType: 'Aktion' | 'Warten' | 'Backen' =
+                          step.type === 'Warten' ? 'Warten'
+                          : step.type === 'Backen' ? 'Backen'
+                          : 'Aktion';
+                        return (
                         <div key={`step-${sIdx}-${stIdx}`} className="flex gap-3 p-4 bg-white dark:bg-gray-700 rounded-2xl border border-gray-50 dark:border-gray-600 shadow-sm relative group/step">
                           <div className="flex-1 space-y-2">
                             <textarea 
@@ -327,20 +331,21 @@ export default function RecipeForm({
                               onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
                             />
                             <div className="flex gap-2">
-                              {/* FIX: text-[8px] → text-xs */}
                               <select 
                                 className={`text-xs font-black uppercase px-2 py-1 rounded-md border outline-none ${
-                                  step.type === 'Aktion'
+                                  stepType === 'Backen'
+                                    ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800'
+                                    : stepType === 'Aktion'
                                     ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800'
                                     : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800'
                                 }`}
-                                value={step.type}
+                                value={stepType}
                                 onChange={(e) => updateStepInSection(sIdx, stIdx, 'type', e.target.value)}
                               >
                                 <option value="Aktion">Aktion</option>
                                 <option value="Warten">Warten</option>
+                                <option value="Backen">Backen</option>
                               </select>
-                              {/* FIX: text-[8px] → text-xs, w-6 → w-10 für mehr Platz */}
                               <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
                                 <Clock size={11} />
                                 <input
@@ -354,7 +359,8 @@ export default function RecipeForm({
                           </div>
                           <button type="button" onClick={() => removeStepFromSection(sIdx, stIdx)} className="text-gray-300 dark:text-gray-500 hover:text-red-400 self-start"><Trash2 size={14} /></button>
                         </div>
-                      ))}
+                        );
+                      })}
                       {/* FIX: text-[9px] → text-xs */}
                       <div className="flex gap-2">
                         <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>

@@ -19,20 +19,24 @@ const PHASE_PATTERNS = [
   { re: /autolyse/i,    is_parallel: false },
   { re: /vorteig/i,     is_parallel: true  },
   { re: /kochstück/i,   is_parallel: true  },
+  { re: /eistreich/i,   is_parallel: false },
+  { re: /streich/i,     is_parallel: false },
 ];
+// h3-Texte die keine Phasen sind
+const NON_PHASE_H3 = ['das brauchst du', 'nährwerte', 'kommentar', 'hot in den socials', 'rezepteigenschaften'];
 
 const detectIsParallel = (name) => {
   for (const p of PHASE_PATTERNS) if (p.re.test(name)) return p.is_parallel;
   return false;
 };
 
-const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'quellen', 'rasten', 'kühlschrank', 'autolyse', 'abkühlen'];
+const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'quellen', 'rasten', 'kühlschrank', 'autolyse', 'abkühlen', 'entspannen', 'abgedeckt'];
 
 function parseDurationAndType(text) {
   const lower = text.toLowerCase();
-  // JoSemola schreibt Zeiten oft als "4-5 Stunden" oder "60 Minuten"
-  const hourMatch = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:std|h|stunden?)/i);
-  const minMatch  = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:min)/i);
+  // Zeitangaben wie "3h", "45 Min", "8-18h", "3 Std."
+  const hourMatch  = lower.match(/(\d+)(?:\s*[-–bis]\s*(\d+))?\s*(?:std\.?|h\b|stunden?)/i);
+  const minMatch   = lower.match(/(\d+)(?:\s*[-–bis]\s*(\d+))?\s*(?:min\.?|minuten?)/i);
   let duration = 10;
   if (hourMatch) {
     const h1 = parseInt(hourMatch[1]), h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
@@ -42,8 +46,8 @@ function parseDurationAndType(text) {
     duration = (m1 + m2) / 2;
   }
   let type = 'Aktion';
-  if (lower.includes('backen') || lower.includes('ofen')) type = 'Backen';
-  else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) || (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen') && !lower.includes('erhitzen'))) type = 'Warten';
+  if (lower.includes('backen') || lower.includes('ofen') || lower.includes('vorheizen')) type = 'Backen';
+  else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) || (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen') && !lower.includes('erhitzen') && !lower.includes('verkneten'))) type = 'Warten';
   return { duration, type };
 }
 
@@ -57,117 +61,127 @@ const scrapeJoSemola = async (url) => {
     const $ = cheerio.load(data);
     const dough_sections = [];
 
-    // JoSemola Custom Theme:
-    // Zutaten: h3 "Für den Hauptteig" / "Für den Sauerteig" → ul > li
-    //   li: "3 g\nAnstellgut" (amount in span, name als text)
-    // Schritte: "Step X von Y" Divs mit Schritt-Text
+    // ── 1. ZUTATEN ─────────────────────────────────────────
+    // JoSemola: h3 direkt als Phasenname (kein "Für den/das/die" Prefix)
+    // Danach ul > li mit "MENGE\nEINHEIT\nNAME" als Listenstruktur
+    // Zutaten-Bereich liegt zwischen h2 "Zutaten" und nächster h2
+    const zutatenH2 = $('h2').filter((_, el) => $(el).text().trim().toLowerCase() === 'zutaten').first();
 
-    // 1. ZUTATEN-GRUPPEN via h3
-    $('h3').each((_, h3) => {
-      const heading = $(h3).text().trim();
-      // "Für den Sauerteig", "Für das Kochstück", "Für den Hauptteig"
-      const nameMatch = heading.match(/^für\s+(?:den|die|das)\s+(.+)$/i);
-      if (!nameMatch) return;
-      const phaseName = nameMatch[1].trim();
+    if (zutatenH2.length) {
+      // Alle h3 + ul zwischen "Zutaten" h2 und nächster h2
+      let node = zutatenH2.next();
+      let currentSection = null;
 
-      const ingredients = [];
-      // ul direkt nach h3
-      $(h3).nextUntil('h3').filter('ul').find('li').each((_, li) => {
-        // JoSemola: "3 g\nAnstellgut" – amount und name durch Whitespace getrennt
-        const liText = $(li).text().replace(/\s+/g, ' ').trim();
-        const amountEl = $(li).find('.wprm-recipe-ingredient-amount, [class*="amount"]');
-        const unitEl   = $(li).find('.wprm-recipe-ingredient-unit,   [class*="unit"]');
-        const nameEl   = $(li).find('.wprm-recipe-ingredient-name,   [class*="name"]');
+      while (node.length && node[0].tagName !== 'h2') {
+        const tag = node[0].tagName;
 
-        if (nameEl.length) {
-          // WPRM-Klassen vorhanden
-          ingredients.push({
-            amount: evalFraction(amountEl.text().trim()),
-            unit: unitEl.text().trim() || 'g',
-            name: nameEl.text().trim()
-          });
-        } else {
-          // Kein WPRM → manuell parsen
-          // Format: "3 g Anstellgut" oder "3\ng\nAnstellgut"
-          const match = liText.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]{0,5})\s+(.+)$/);
-          if (match) {
-            ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: match[3].trim() });
-          } else if (liText.length > 1) {
-            ingredients.push({ amount: 0, unit: '', name: liText });
+        if (tag === 'h3') {
+          const name = node.text().trim();
+          if (name && !NON_PHASE_H3.some(s => name.toLowerCase().includes(s))) {
+            currentSection = { name, is_parallel: detectIsParallel(name), ingredients: [], steps: [] };
+            dough_sections.push(currentSection);
           }
         }
-      });
 
-      if (ingredients.length > 0) {
-        dough_sections.push({
-          name: phaseName,
-          is_parallel: detectIsParallel(phaseName),
-          ingredients,
-          steps: []
-        });
-      }
-    });
+        if (tag === 'ul' && currentSection) {
+          node.find('li').each((_, li) => {
+            // Zeilenumbruch-Format: "100 g\nMilch" oder alles in einem
+            const rawText = $(li).text().replace(/\s+/g, ' ').trim();
 
-    // Fallback WPRM (falls doch vorhanden)
-    if (dough_sections.length === 0) {
-      $('.wprm-recipe-ingredient-group').each((_, group) => {
-        const rawName = $(group).find('.wprm-recipe-group-name').text().trim() || 'Hauptteig';
-        const ingredients = [];
-        $(group).find('.wprm-recipe-ingredient').each((_, ing) => {
-          const name = $(ing).find('.wprm-recipe-ingredient-name').text().trim();
-          if (!name) return;
-          ingredients.push({
-            amount: evalFraction($(ing).find('.wprm-recipe-ingredient-amount').text().trim()),
-            unit: $(ing).find('.wprm-recipe-ingredient-unit').text().trim() || 'g',
-            name
+            // Versuche Menge + Einheit + Name zu trennen
+            // Beispiele: "100 g Milch", "2 EL Milch (EL)", "5 g Hefe", "60 g Butter, weich"
+            const match = rawText.match(/^([\d,./]+)\s+([a-zA-ZäöüÄÖÜ%]+)\s+(.+)$/);
+            if (match) {
+              let name = match[3].replace(/\s*\([^)]*\)\s*$/, '').trim(); // "(EL)" am Ende entfernen
+              currentSection.ingredients.push({
+                amount: evalFraction(match[1]),
+                unit: match[2],
+                name
+              });
+            } else {
+              // Kein Mengen-Format → Zutat ohne Menge (z.B. "gesamtes Mehlkochstück")
+              if (rawText.length > 1) {
+                currentSection.ingredients.push({ amount: 0, unit: '', name: rawText });
+              }
+            }
           });
+        }
+
+        node = node.next();
+      }
+    }
+
+    // Fallback: alle h3 im Dokument durchsuchen
+    if (dough_sections.length === 0) {
+      $('h3').each((_, h3) => {
+        const name = $(h3).text().trim();
+        if (!name || NON_PHASE_H3.some(s => name.toLowerCase().includes(s))) return;
+        if (!PHASE_PATTERNS.some(p => p.re.test(name)) &&
+            !['hauptteig','sauerteig','vorteig','teig','kochstück','streich'].some(k => name.toLowerCase().includes(k))) return;
+
+        const ingredients = [];
+        $(h3).nextUntil('h3', 'ul').find('li').each((_, li) => {
+          const rawText = $(li).text().replace(/\s+/g, ' ').trim();
+          const match = rawText.match(/^([\d,./]+)\s+([a-zA-ZäöüÄÖÜ%]+)\s+(.+)$/);
+          if (match) {
+            ingredients.push({ amount: evalFraction(match[1]), unit: match[2], name: match[3].replace(/\s*\([^)]*\)\s*$/, '').trim() });
+          } else if (rawText.length > 1) {
+            ingredients.push({ amount: 0, unit: '', name: rawText });
+          }
         });
-        dough_sections.push({ name: rawName, is_parallel: detectIsParallel(rawName), ingredients, steps: [] });
+        if (ingredients.length > 0) {
+          dough_sections.push({ name, is_parallel: detectIsParallel(name), ingredients, steps: [] });
+        }
       });
     }
 
-    // Wenn noch immer leer → eine Hauptteig-Sektion
+    // Keine Phasen → eine Hauptteig-Sektion
     if (dough_sections.length === 0) {
       dough_sections.push({ name: 'Hauptteig', is_parallel: false, ingredients: [], steps: [] });
     }
 
-    // 2. SCHRITTE – JoSemola Custom: Schritte stehen in Paragraphen nach "Step X von Y"
-    // Oder in .wprm-recipe-instruction-text
-    const stepTexts = [];
+    // ── 2. SCHRITTE ────────────────────────────────────────
+    // JoSemola: Schritte stehen als Fließtext nach "Step X von Y" + img[alt="step image"]
+    // Im HTML-Text sieht das so aus:
+    //   img[alt="step image"]
+    //   "Step 1 von 5"
+    //   img[Utensilien]
+    //   "Werkzeuge..."
+    //   INSTRUKTIONSTEXT
+    //   (optional) img[icon] + "~ 3 Std. Teigruhe" (Zeitangabe)
+    //
+    // Zuverlässigste Methode: Alle p-Texte nach dem Rezeptbereich, die kein UI-Text sind
 
-    // Methode A: Schritt-Paragraphen (Custom Theme)
-    // JoSemola hat "Step 1 von 6" als Heading, dann Instruktionstext als p
-    // Alternativ direkt Paragraphen mit Step-Inhalt
-    $('[class*="step"], [class*="Step"]').each((_, el) => {
+    const stepTexts = [];
+    const UI_SKIP = ['step image', 'utensilien', 'jetzt backen', 'teilen', 'drucken', 'rezept ansehen', 'lets bake', 'enjoy', 'hot in den socials'];
+
+    // Alle Text-Nodes die nach dem Zutaten-Block kommen
+    // JoSemola rendert Steps als direkte Text-Nodes im Body, oft in p oder span
+    $('p, span').each((_, el) => {
       const text = $(el).text().trim();
-      if (text.length > 20 && !text.match(/^Step\s+\d+/i)) stepTexts.push(text);
+      if (text.length < 20) return;
+      if (UI_SKIP.some(s => text.toLowerCase().includes(s))) return;
+      if (text.match(/^Step\s+\d+\s+von\s+\d+$/i)) return;
+      if (text.match(/^\d+\s*Bewertungen?/)) return;
+      if (text.match(/^(Kochtopf|Waage|Küchenmaschine|Backpinsel|Teigschaber)/)) return; // Werkzeug-Liste
+      if (text.match(/^(Kommentare?|Das hilft|Community)/i)) return;
+      if (text.match(/^~?\s*[\d.]+\s*(Std|Min|h)\b/i)) return; // reine Zeitangabe wie "~ 3 Std. Teigruhe"
+
+      // Echte Schritte haben oft Aktion-Verben
+      const lower = text.toLowerCase();
+      const hasAction = ['kneten', 'mischen', 'falten', 'formen', 'backen', 'reifen', 'ruhen', 'zugeben',
+        'verrühren', 'vorheizen', 'teilen', 'abdecken', 'erhitzen', 'bepinseln', 'auflösen',
+        'verkneten', 'ausrollen', 'flechten', 'bestreichen', 'abkühlen', 'lassen'].some(k => lower.includes(k));
+      if (hasAction) stepTexts.push(text);
     });
 
-    // Methode B: WPRM-Instruktionen
-    if (stepTexts.length === 0) {
-      $('.wprm-recipe-instruction-text').each((_, el) => {
-        const text = $(el).text().trim();
-        if (text.length > 10) stepTexts.push(text);
-      });
-    }
+    // Schritte auf Phasen verteilen
+    const hauptteigIdx = dough_sections.findIndex(s => s.name.toLowerCase().includes('hauptteig'));
+    let currentIdx = hauptteigIdx >= 0 ? hauptteigIdx : dough_sections.length - 1;
 
-    // Methode C: Strukturierte Paragraphen mit Schritt-Keywords
-    if (stepTexts.length === 0) {
-      $('p').each((_, p) => {
-        const text = $(p).text().trim();
-        if (text.length < 25) return;
-        const lower = text.toLowerCase();
-        const hasKw = ['kneten', 'mischen', 'falten', 'formen', 'backen', 'reifen', 'ruhen', 'zugeben', 'verrühren', 'vorheizen'].some(k => lower.includes(k));
-        if (hasKw) stepTexts.push(text);
-      });
-    }
-
-    // Schritte Phasen zuordnen
-    let currentIdx = dough_sections.length - 1; // Start beim letzten (Hauptteig)
     stepTexts.forEach(text => {
-      // Phasenwechsel erkennen
       dough_sections.forEach((sec, idx) => {
-        if (text.toLowerCase().includes(sec.name.toLowerCase())) currentIdx = idx;
+        if (text.toLowerCase().includes(sec.name.toLowerCase()) && sec.name !== 'Hauptteig') currentIdx = idx;
       });
       const { duration, type } = parseDurationAndType(text);
       dough_sections[currentIdx]?.steps.push({ instruction: text, duration, type });
@@ -176,33 +190,40 @@ const scrapeJoSemola = async (url) => {
     // Phasen ohne Schritte: Platzhalter
     dough_sections.forEach(sec => {
       if (sec.steps.length === 0) {
-        const duration = sec.name.toLowerCase().includes('sauerteig') ? 240 :
-                         sec.name.toLowerCase().includes('kochstück') ? 30 : 60;
-        sec.steps.push({ instruction: `${sec.name} vorbereiten und reifen lassen`, duration, type: 'Warten' });
+        const lower = sec.name.toLowerCase();
+        const duration = lower.includes('sauerteig') ? 240 : lower.includes('kochstück') ? 30 : lower.includes('streich') ? 5 : 60;
+        const type = lower.includes('streich') ? 'Aktion' : 'Warten';
+        sec.steps.push({ instruction: `${sec.name} vorbereiten`, duration, type });
       }
     });
 
-    // 3. BILD – JoSemola hat og:image oder recipe header image
+    // ── 3. BILD ────────────────────────────────────────────
+    // JoSemola: Bild steht als img[alt="recipe header image"] im DOM,
+    // aber src ist leer (lazy-loaded per JS). Echter URL über og:image.
     let imageUrl = $('meta[property="og:image"]').attr('content') || '';
     if (!imageUrl) {
-      // recipe header image (lazy-loaded)
-      const headerImg = $('img[class*="header"], img[class*="recipe"], .recipe-image img').first();
-      if (headerImg.length) imageUrl = headerImg.attr('src') || headerImg.attr('data-src') || '';
-    }
-    if (!imageUrl) {
-      // Erstes großes Bild im Content
-      const contentImg = $('main img, article img').first();
-      if (contentImg.length) imageUrl = contentImg.attr('src') || '';
+      // wp-content uploads Bilder
+      $('img[src*="/wp-content/uploads/"]').each((_, img) => {
+        const src = $(img).attr('src') || '';
+        // Kein Thumbnail (100x100, 300x300)
+        if (!src.match(/-\d{2,3}x\d{2,3}\./)) { imageUrl = src; return false; }
+      });
     }
 
-    // 4. BESCHREIBUNG – Jo Semola hat blockquote-Zitate als "Mein Rezept"-Beschreibung
-    let description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
-    if (!description || description.length < 30) {
-      // Suche nach dem Anführungszeichen-Zitat im Rezept
-      $('blockquote, [class*="quote"], em').each((_, el) => {
-        const text = $(el).text().trim().replace(/[""„"]/g, '');
-        if (text.length > 40 && text.length < 300) { description = text; return false; }
-      });
+    // ── 4. BESCHREIBUNG ────────────────────────────────────
+    // JoSemola: Blockquote-Zitat "Das perfekte Mitbringsel zum..."
+    let description = '';
+    // Suche nach dem Anführungszeichen-Zitat (steht als Text nach dem H1)
+    $('p, div, blockquote').each((_, el) => {
+      const text = $(el).text().trim();
+      // Das Zitat beginnt mit „ oder " und ist 20-300 Zeichen lang
+      if (text.match(/^[„"""]/) && text.length > 20 && text.length < 400) {
+        description = text.replace(/^[„"""]+|["""]+$/g, '').trim();
+        return false;
+      }
+    });
+    if (!description) {
+      description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
     }
 
     const title = $('h1').first().text().trim() || $('title').text().replace(' - Jo Semola', '').trim();
@@ -215,7 +236,7 @@ const scrapeJoSemola = async (url) => {
       dough_sections: dough_sections.filter(s => s.ingredients.length > 0 || s.steps.length > 0)
     };
 
-    console.log(`✅ JoSemola: "${title}" – ${result.dough_sections.length} Phasen`);
+    console.log(`✅ JoSemola: "${title}" – ${result.dough_sections.length} Phasen, ${result.dough_sections.reduce((s,p) => s + p.steps.length, 0)} Schritte`);
     return result;
 
   } catch (error) {

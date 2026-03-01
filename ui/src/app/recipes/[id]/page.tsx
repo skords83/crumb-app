@@ -363,7 +363,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                       <div className="space-y-5">
                         {section.steps?.map((step: any, stIdx: number) => (
                           <div key={stIdx} className="flex gap-4">
-                            <div className={`w-5 h-5 rounded-full border dark:border-gray-600 flex items-center justify-center text-[10px] font-black shrink-0 ${step.type === 'Aktion' ? 'bg-[#8B4513] text-white' : 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-400'}`}>
+                            <div className={`w-5 h-5 rounded-full border dark:border-gray-600 flex items-center justify-center text-[10px] font-black shrink-0 ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B4513] text-white' : 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-400'}`}>
                               {stIdx + 1}
                             </div>
                             <div>
