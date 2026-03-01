@@ -61,6 +61,23 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}min`;
 }
 
+// ── HYDRATION ───────────────────────────────────────────────
+const WATER_KEYWORDS = ['wasser', 'milch'];
+const calcHydration = (sections: any[]): number | null => {
+  let flour = 0, water = 0;
+  sections?.forEach(sec => {
+    sec.ingredients?.forEach((ing: any) => {
+      const name = (ing.name || '').toLowerCase();
+      const amount = parseFloat(String(ing.amount || '0').replace(',', '.'));
+      if (isNaN(amount) || amount === 0) return;
+      if (FLOUR_KEYWORDS.some(k => name.includes(k))) flour += amount;
+      if (WATER_KEYWORDS.some(k => name.includes(k))) water += amount;
+    });
+  });
+  if (flour === 0) return null;
+  return Math.round((water / flour) * 100);
+};
+
 // ── EINSTELLUNGEN (localStorage) ────────────────────────────
 const SETTINGS_KEY = 'crumb_settings';
 const loadSettings = () => {
@@ -111,12 +128,13 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   // Statistiken
   const stats = useMemo(() => {
-    if (!recipe?.dough_sections) return { steps: 0, duration: 0 };
+    if (!recipe?.dough_sections) return { steps: 0, duration: 0, hydration: null };
     const steps = recipe.dough_sections.reduce(
       (s: number, sec: any) => s + (sec.steps?.length || 0), 0
     );
     const duration = calcTotalDuration(recipe.dough_sections);
-    return { steps, duration };
+    const hydration = calcHydration(recipe.dough_sections);
+    return { steps, duration, hydration };
   }, [recipe]);
 
   // Löschen
@@ -245,6 +263,18 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                 <p className="font-black text-gray-800 dark:text-gray-100 text-sm">{stats.steps}</p>
               </div>
             </div>
+            {stats.hydration !== null && (
+              <>
+                <div className="h-8 w-px bg-gray-100 dark:bg-gray-700" />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-blue-400 dark:text-blue-400"><Icons.Droplets size={22} /></div>
+                  <div className="text-center">
+                    <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Hydration</p>
+                    <p className="font-black text-gray-800 dark:text-gray-100 text-sm">{stats.hydration}%</p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* BACKPLAN ANZEIGE */}
