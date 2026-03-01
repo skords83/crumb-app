@@ -182,8 +182,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                   : 'bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:text-[#8B4513]'
               }`}
             >
-              <Icons.Percent size={14} />
-              <span className="hidden sm:inline">Bäcker%</span>
+              <span>Bäckerprozente</span>
             </button>
             <button onClick={() => router.push(`/recipes/${id}/edit`)}
               className="p-2.5 text-gray-400 dark:text-gray-400 hover:text-[#8B4513] border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
