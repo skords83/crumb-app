@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep, detectPortionCount, scaleSectionsToOnePortion } = require('./utils');
+const { stepDuration, isBakingStep, detectPortionCount, scaleSectionsToOnePortion, splitCompoundStep } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function evalFraction(amount) {
