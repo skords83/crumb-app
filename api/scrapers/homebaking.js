@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep } = require('./utils');
+const { stepDuration, isBakingStep, detectPortionCount, scaleSectionsToOnePortion } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function evalFraction(amount) {
@@ -26,6 +26,7 @@ const PHASE_PATTERNS = [
   { re: /kochstück/i,   is_parallel: true  },
   { re: /brühstück/i,   is_parallel: true  },
   { re: /quellstück/i,  is_parallel: true  },
+  { re: /biga/i,        is_parallel: true  },  // Homebaking-spezifisch
 ];
 
 const detectIsParallel = (name) => {
@@ -37,23 +38,20 @@ const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'stockgare', 'stückg
 
 function parseDurationAndType(text) {
   const lower = text.toLowerCase();
-  let type = 'Aktion';
-  if (isBakingStep(text)) {
-    type = 'Backen';
-  } else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) ||
-    (extractFirstDurationLocal(lower) > 25 && !lower.includes('kneten') &&
-     !lower.includes('mischen') && !lower.includes('backofen'))) {
-    type = 'Warten';
+  const hourMatch = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:std|h|stunden?)/i);
+  const minMatch  = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:min)/i);
+  let duration = 10;
+  if (hourMatch) {
+    const h1 = parseInt(hourMatch[1]), h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
+    duration = ((h1 + h2) / 2) * 60;
+  } else if (minMatch) {
+    const m1 = parseInt(minMatch[1]), m2 = minMatch[2] ? parseInt(minMatch[2]) : m1;
+    duration = (m1 + m2) / 2;
   }
-  return { duration: stepDuration(text, type) || 10, type };
-}
-function extractFirstDurationLocal(lower) {
-  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
-  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
-  let t = 0;
-  if (h) t += Math.round(parseFloat(h[1].replace(',','.')) * 60);
-  if (m) t += parseInt(m[1]);
-  return t;
+  let type = 'Aktion';
+  if (lower.includes('backen') || lower.includes('ofen')) type = 'Backen';
+  else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) || (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen'))) type = 'Warten';
+  return { duration, type };
 }
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
@@ -79,18 +77,22 @@ const scrapeHomebaking = async (url) => {
       const name = $(h3).text().trim();
       if (!name || name.length > 60) return;
       // Prüfen ob es eine Phase ist
-      const isPhase = PHASE_PATTERNS.some(p => p.re.test(name)) ||
-        ['sauerteig', 'vorteig', 'hauptteig', 'brotaroma', 'teig'].some(k => name.toLowerCase().includes(k));
+      const nameLower = name.toLowerCase().replace(/:$/, '').trim();
+      const NON_PHASE = ['herstellung', 'zubereitung', 'zutaten', 'kommentar', 'newsletter'];
+      if (NON_PHASE.some(s => nameLower.includes(s))) return;
+      const isPhase = PHASE_PATTERNS.some(p => p.re.test(nameLower)) ||
+        ['sauerteig', 'vorteig', 'hauptteig', 'brotaroma', 'teig', 'biga'].some(k => nameLower.includes(k));
       if (!isPhase) return;
 
+      // Phasennamen normalisieren (Doppelpunkt am Ende entfernen)
+      const cleanName = name.replace(/:$/, '').trim();
+
       const ingredients = [];
-      // Zutaten: ul direkt nach h3
-      const ul = $(h3).nextUntil('h3', 'ul').first();
-      if (ul.length) {
-        ul.find('li').each((_, li) => {
+      // ALLE ul-Blöcke unter diesem h3 einlesen (Stufe 1, Stufe 2, etc.)
+      $(h3).nextUntil('h3', 'ul').each((_, ul) => {
+        $(ul).find('li').each((_, li) => {
           const text = $(li).text().trim();
           if (!text) return;
-          // Format: "400g Roggenmehl /960" oder "400 g Roggenmehl"
           const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
           if (match) {
             ingredients.push({
@@ -99,13 +101,12 @@ const scrapeHomebaking = async (url) => {
               name: match[3].trim()
             });
           } else {
-            // Kein Mengenformat → als Zutat ohne Menge
             ingredients.push({ amount: 0, unit: '', name: text });
           }
         });
-      }
+      });
 
-      // Auch Fließtext direkt nach h3 parsen (Format: "400g Salz\n350g Wasser")
+      // Fließtext-Fallback (Format: "400g Salz\n350g Wasser")
       if (ingredients.length === 0) {
         const nextP = $(h3).next('p');
         if (nextP.length) {
@@ -118,8 +119,8 @@ const scrapeHomebaking = async (url) => {
       }
 
       dough_sections.push({
-        name,
-        is_parallel: detectIsParallel(name),
+        name: cleanName,
+        is_parallel: detectIsParallel(cleanName),
         ingredients,
         steps: []
       });
@@ -137,22 +138,39 @@ const scrapeHomebaking = async (url) => {
     }
 
     // 2. SCHRITTE – Homebaking schreibt Anweisungen als Paragraphen nach den Zutaten
-    // Alle Paragraphen sammeln die nach dem Rezept-Block kommen
+    // Schritte sammeln: aus <p>-Tags UND aus <li> unter "Herstellung:"-h3
     const allParas = [];
+    const SKIP_STEP = ['kommentar', 'newsletter', 'rezept drucken', 'stufe 1', 'stufe 2', 'stufe 3'];
+
+    // A) li-Schritte unter "Herstellung:" h3 (Homebaking-spezifisch)
+    recipeContent.find('h3').each((_, h3) => {
+      const name = $(h3).text().trim().toLowerCase().replace(/:$/, '');
+      if (!['herstellung', 'zubereitung'].includes(name)) return;
+      $(h3).nextUntil('h3', 'ul').find('li').each((_, li) => {
+        const text = $(li).text().trim();
+        if (text.length >= 15 && !SKIP_STEP.some(s => text.toLowerCase().includes(s))) {
+          allParas.push(text);
+        }
+      });
+    });
+
+    // B) <p>-Tags im Content (Schritt-Paragraphen zwischen den Phasen)
     recipeContent.find('p').each((_, p) => {
       const text = $(p).text().trim();
-      if (text.length < 20) return; // Zu kurz = kein Schritt
-      // Kommentare und andere Nicht-Rezept-Texte ausfiltern
-      const lower = text.toLowerCase();
-      if (lower.includes('kommentar') || lower.includes('newsletter') || lower.includes('rezept drucken')) return;
+      if (text.length < 20) return;
+      if (SKIP_STEP.some(s => text.toLowerCase().includes(s))) return;
+      // Keine reinen Stufenbezeichner ("Stufe 1:", "Stufe 2:")
+      if (/^Stufe\s+\d+:/i.test(text)) return;
       allParas.push(text);
     });
 
+    // Deduplizieren (falls ein Schritt sowohl als p als auch als li vorkommt)
+    const seen = new Set();
+    const uniqueParas = allParas.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
+
     // Schritte der richtigen Phase zuordnen
-    let currentSectionIdx = dough_sections.length > 0 ? dough_sections.length - 1 : 0; // Hauptteig zuletzt
-    // Finde ersten Hauptteig-Schritt (nach Phasen-Erwähnungen)
-    allParas.forEach(text => {
-      // Phasenwechsel prüfen
+    let currentSectionIdx = dough_sections.length > 0 ? dough_sections.length - 1 : 0;
+    uniqueParas.forEach(text => {
       dough_sections.forEach((sec, idx) => {
         if (text.toLowerCase().includes(sec.name.toLowerCase())) currentSectionIdx = idx;
       });
@@ -170,6 +188,31 @@ const scrapeHomebaking = async (url) => {
         sec.steps.push({ instruction: `${sec.name} ansetzen und reifen lassen`, duration, type: 'Warten' });
       }
     });
+
+    // 2b. PORTIONSGRÖSSE erkennen und auf 1 Stück skalieren
+    // Typisch: <h2>Rezept</h2> gefolgt von <p>für ein Teiggewicht von 1773g / 2 Stück je 886g</p>
+    let portionCount = 1;
+    recipeContent.find('h2').each((_, h2) => {
+      if ($(h2).text().trim().toLowerCase() !== 'rezept') return;
+      const portionText = $(h2).next('p').text().trim();
+      portionCount = detectPortionCount(portionText);
+    });
+    // Fallback: alle p-Tags nach h2 oder im Content durchsuchen
+    if (portionCount === 1) {
+      recipeContent.find('p').each((_, p) => {
+        const t = $(p).text().trim();
+        if (/für ein Teiggewicht/i.test(t) || /Teiggewicht von/i.test(t)) {
+          portionCount = detectPortionCount(t);
+          return false; // break
+        }
+      });
+    }
+    if (portionCount > 1) {
+      console.log(`  → ${portionCount} Stück erkannt – skaliere auf 1 Stück`);
+      dough_sections.splice(0, dough_sections.length,
+        ...scaleSectionsToOnePortion(dough_sections, portionCount)
+      );
+    }
 
     // 3. BILD
     let imageUrl = '';
@@ -192,10 +235,11 @@ const scrapeHomebaking = async (url) => {
       description,
       image_url: imageUrl,
       source_url: url,
+      portion_count: portionCount,
       dough_sections: dough_sections.filter(s => s.ingredients.length > 0 || s.steps.length > 0)
     };
 
-    console.log(`✅ Homebaking: "${title}" – ${result.dough_sections.length} Phasen`);
+    console.log(`✅ Homebaking: "${title}" – ${result.dough_sections.length} Phasen, ${portionCount} Stück (auf 1 skaliert)`);
     return result;
 
   } catch (error) {

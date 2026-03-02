@@ -82,4 +82,44 @@ function stepDuration(text, type) {
   return extractFirstDuration(text) || 10;
 }
 
-module.exports = { sumAllDurations, extractFirstDuration, isBakingStep, stepDuration };
+/**
+ * Erkennt die Stückzahl aus einem Portionshinweis-Text.
+ * Typische Formate bei Homebaking.at:
+ *   "für ein Teiggewicht von 1773g / 2 Stück je 886g Teigeinlage"
+ *   "für ein Teiggewicht von 834g / 2 Stück – 417g Teigeinlage"
+ *   "für ein Teiggewicht von 1938g / 3 Stück zu je 646g"
+ *   "für ein Teiggewicht von 910g ( 2 Stück zu je 455g)"
+ *   "Rezept für ein Teiggewicht von 2422g / 3Stk 807g"
+ *
+ * Gibt die Anzahl der Stücke zurück (2, 3, ...) oder 1 wenn kein Mehrfachrezept.
+ */
+function detectPortionCount(text) {
+  if (!text) return 1;
+  // Muster: "/", "(", "von" gefolgt von Zahl + "Stück"/"Stk"
+  const match = text.match(/[\/\(]\s*(\d+)\s*St(?:ück|k)\b/i)
+    || text.match(/\b(\d+)\s*St(?:ück|k)\s+(?:zu je|je|à)/i)
+    || text.match(/(\d+)\s*St(?:ück|k)[,\s]/i);
+  if (match) {
+    const n = parseInt(match[1]);
+    return n >= 2 ? n : 1;
+  }
+  return 1;
+}
+
+/**
+ * Skaliert alle Zutatenmenngen in dough_sections auf 1 Portion.
+ * Teilt jede amount durch portionCount.
+ * Gibt ein neues Array zurück (kein Mutate).
+ */
+function scaleSectionsToOnePortion(sections, portionCount) {
+  if (!portionCount || portionCount <= 1) return sections;
+  return sections.map(sec => ({
+    ...sec,
+    ingredients: sec.ingredients.map(ing => ({
+      ...ing,
+      amount: ing.amount ? Math.round((ing.amount / portionCount) * 10) / 10 : ing.amount
+    }))
+  }));
+}
+
+module.exports = { sumAllDurations, extractFirstDuration, isBakingStep, stepDuration, detectPortionCount, scaleSectionsToOnePortion };

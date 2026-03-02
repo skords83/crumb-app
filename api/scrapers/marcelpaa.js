@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep } = require('./utils');
+const { stepDuration, isBakingStep, scaleSectionsToOnePortion } = require('./utils');
 
 // ── PHASE-ERKENNUNG (gleiche Logik wie index.js) ─────────────
 const PHASE_PATTERNS = [
@@ -258,15 +258,29 @@ const scrapeMarcelPaa = async (url) => {
     // 5. TITEL
     const title = $('.wprm-recipe-name').text().trim() || $('h1').first().text().trim();
 
+    // PORTIONSGRÖSSE via WPRM-Servings-Feld (z.B. "2 Brote")
+    // .wprm-recipe-servings enthält die Zahl, Container ggf. Text wie "2 Brote"
+    const wPrmServings = parseInt($('.wprm-recipe-servings').text().trim()) || 1;
+    const servingsUnit = $('.wprm-recipe-servings-unit').text().trim().toLowerCase();
+    // Nur skalieren wenn es wirklich "Brote/Stück/Laibe" sind, nicht "Portionen" (das wäre Schneiden)
+    const isLoafUnit = /brot|laib|stück|baguette|wecken|brötchen/i.test(servingsUnit);
+    const portionCount = (isLoafUnit && wPrmServings >= 2) ? wPrmServings : 1;
+    let scaledSections = dough_sections.filter(s => s.ingredients.length > 0 || s.steps.length > 0);
+    if (portionCount > 1) {
+      console.log(`  → ${portionCount} ${servingsUnit} erkannt – skaliere auf 1`);
+      scaledSections = scaleSectionsToOnePortion(scaledSections, portionCount);
+    }
+
     const result = {
       title,
       description,
       image_url: imageUrl,
       source_url: url,
-      dough_sections: dough_sections.filter(s => s.ingredients.length > 0 || s.steps.length > 0)
+      portion_count: portionCount,
+      dough_sections: scaledSections
     };
 
-    console.log(`✅ Marcel Paa: "${title}" – ${result.dough_sections.length} Phasen`);
+    console.log(`✅ Marcel Paa: "${title}" – ${result.dough_sections.length} Phasen, ${portionCount} Stück (auf 1 skaliert)`);
     return result;
 
   } catch (error) {
