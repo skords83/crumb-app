@@ -138,34 +138,60 @@ const scrapeHomebaking = async (url) => {
     }
 
     // 2. SCHRITTE – Homebaking schreibt Anweisungen als Paragraphen nach den Zutaten
-    // Schritte sammeln: aus <p>-Tags UND aus <li> unter "Herstellung:"-h3
+    // Scope: nur Elemente NACH dem <h2>Rezept</h2> verarbeiten
     const allParas = [];
     const SKIP_STEP = ['kommentar', 'newsletter', 'rezept drucken', 'stufe 1', 'stufe 2', 'stufe 3'];
 
-    // A) li-Schritte unter "Herstellung:" h3 (Homebaking-spezifisch)
+    // Startpunkt: h2 mit Text "Rezept" – alles davor ist Einleitung/Description
+    const rezeptH2 = recipeContent.find('h2').filter((_, h2) =>
+      $(h2).text().trim().toLowerCase() === 'rezept'
+    ).first();
+
+    // A) li-Schritte unter "Herstellung:" h3
     recipeContent.find('h3').each((_, h3) => {
+      // Nur h3 NACH dem Rezept-h2 berücksichtigen
+      if (rezeptH2.length && $(h3).prevAll('h2').filter((_, h2) =>
+        $(h2).text().trim().toLowerCase() === 'rezept').length === 0) return;
       const name = $(h3).text().trim().toLowerCase().replace(/:$/, '');
       if (!['herstellung', 'zubereitung'].includes(name)) return;
-      $(h3).nextUntil('h3', 'ul').find('li').each((_, li) => {
-        // li die nur ein <img> enthalten überspringen
-        if ($(li).find('img').length && !$(li).text().trim()) return;
-        const text = $(li).text().trim();
-        if (text.length >= 15 && !SKIP_STEP.some(s => text.toLowerCase().includes(s))) {
-          allParas.push(text);
-        }
+      $(h3).nextUntil('h3', 'ul').each((_, ul) => {
+        // Galerie-ul: enthält <a><img> → überspringen
+        if ($(ul).find('a > img').length && !$(ul).find('li').text().trim()) return;
+        $(ul).find('li').each((_, li) => {
+          if ($(li).find('img').length && !$(li).text().trim()) return;
+          const text = $(li).text().trim();
+          // Link-only li (z.B. Galerie-Links) ausfiltern
+          if ($(li).find('a').length && $(li).text().trim() === $(li).find('a').text().trim()
+              && $(li).find('img').length) return;
+          if (text.length >= 15 && !SKIP_STEP.some(s => text.toLowerCase().includes(s))) {
+            allParas.push(text);
+          }
+        });
       });
     });
 
-    // B) <p>-Tags im Content (Schritt-Paragraphen zwischen den Phasen)
-    recipeContent.find('p').each((_, p) => {
-      // p die nur ein <img> enthalten überspringen
-      if ($(p).find('img').length && !$(p).text().trim()) return;
-      const text = $(p).text().trim();
+    // B) <p>-Tags: nur NACH dem h2 Rezept, und nur zwischen h3-Phasen (nicht nach Share/Kommentar)
+    // Wir iterieren alle Siblings nach rezeptH2 bis zum nächsten h2 (Kommentare etc.)
+    let inRecipeScope = false;
+    recipeContent.find('h2, h3, p, ul').each((_, el) => {
+      const tag = el.tagName.toLowerCase();
+      const text = $(el).text().trim();
+
+      if (tag === 'h2') {
+        if (text.toLowerCase() === 'rezept') { inRecipeScope = true; return; }
+        if (inRecipeScope) { inRecipeScope = false; return; } // nächste h2 = Rezept-Ende
+      }
+      if (!inRecipeScope) return;
+      if (tag !== 'p') return;
+
+      // Bild-p überspringen
+      if ($(el).find('img').length && !text) return;
       if (text.length < 20) return;
       if (SKIP_STEP.some(s => text.toLowerCase().includes(s))) return;
-      if (/^Stufe\s+\d+:/i.test(text)) return;
-      // Portionsangabe-Zeile nicht als Schritt
+      if (/^Stufe\s+\d+:?\s*$/i.test(text)) return;
       if (/für ein Teiggewicht|Teiggewicht von/i.test(text)) return;
+      // Portionshinweis-Sätze überspringen
+      if (/^für ein Teiggewicht/i.test(text)) return;
       allParas.push(text);
     });
 
