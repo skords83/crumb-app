@@ -105,17 +105,26 @@ const scrapeHomebaking = async (url) => {
           if (el.is('ul')) {
             // Zutaten dieser Stufe
             el.find('li').each((_, li) => {
-              const liText = $(li).text().trim();
-              if (!liText) return;
-              const match = liText.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
-              if (match) {
-                const ingName = match[3].trim();
-                
-                collectingIngredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
-              } else {
-                
+              // ... innerhalb der el.find('li').each Schleife für Stufen ...
+                const liText = $(li).text().trim();
+                if (!liText) return;
+                const match = liText.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
+
+                if (match) {
+                  const ingName = match[3].trim();
+
+                  // NEU: Check ob diese Zutat eigentlich eine vorherige Phase ist
+                  const isIntermediate = dough_sections.some(s => 
+                    ingName.toLowerCase().includes(s.name.toLowerCase().replace(/\s+stufe\s+\d+$/i, ''))
+                  );
+
+                  if (!isIntermediate) {
+                    collectingIngredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
+                  }
+                } else {
+                  // Für Text-Zutaten ohne Mengenangabe (z.B. "Salz zum Bestreuen")
                   collectingIngredients.push({ amount: 0, unit: '', name: liText });
-              }
+                }
             });
             // Stufe abschließen nachdem ul gelesen
             dough_sections.push({
@@ -126,6 +135,7 @@ const scrapeHomebaking = async (url) => {
             });
             collectingIngredients = [];
           }
+          
         });
       } else {
         // Keine Stufen → normale Phase
@@ -135,15 +145,22 @@ const scrapeHomebaking = async (url) => {
           el.find('li').each((_, li) => {
             const text = $(li).text().trim();
             if (!text) return;
-            const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
-            if (match) {
-              const ingName = match[3].trim();
-              
-              ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
-            } else {
-              
+              const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
+
+              if (match) {
+                const ingName = match[3].trim();
+
+                // NEU: Check gegen bereits existierende Phasen
+                const isIntermediate = dough_sections.some(s => 
+                  ingName.toLowerCase().includes(s.name.toLowerCase())
+                );
+
+                if (!isIntermediate) {
+                  ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
+                }
+              } else {
                 ingredients.push({ amount: 0, unit: '', name: text });
-            }
+              }
           });
         });
 
