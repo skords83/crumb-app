@@ -4,6 +4,107 @@
 // Wort-Zahlen und Annäherungs-Präfixe ("über 2 Tage", "ca. 3 Stunden", "mehr als 12 Stunden")
 const APPROX_PREFIX = /(?:über|ca\.?|circa|mehr als|mindestens|bis zu|etwa|ungefähr)\s*/i;
 
+// ─── splitCompoundStep ────────────────────────────────────────────────────────
+// Warte-Verb-Muster (stehen/reifen/ruhen lassen)
+const WAIT_VERB_RE = /(?:stehen|reifen|ruhen|gehen|rasten|quellen|kühlen|lagern|fermentieren|entspannen)\s+lassen/i;
+// Transition-Wörter am Satzanfang
+const TRANSITION_RE = /^(?:anschließend|dann|danach|nun|jetzt|zuletzt|abschließend|zum\s+schluss)\b\s*/i;
+
+/**
+ * Klassifiziert einen Textsegment als Typ
+ */
+function classifySegment(text) {
+  if (WAIT_VERB_RE.test(text) || /über\s+nacht/i.test(text)) return 'Warten';
+  if (isBakingStep(text)) return 'Backen';
+  if (/vorheizen|aufheizen/i.test(text)) return 'Vorheizen';
+  return 'Kneten';
+}
+
+/**
+ * Versucht einen Satz an "und [Zeit?] [Warte-Verb] lassen" aufzuteilen.
+ * "Alles verrühren und 4-5 Stunden reifen lassen."
+ *   → ["Alles verrühren", "4-5 Stunden reifen lassen"]
+ * Gibt null zurück wenn kein Muster gefunden.
+ */
+function splitAtWaitPhrase(sentence) {
+  const m = sentence.match(
+    /^(.{5,}?)\s+und\s+((?:(?:über\s+nacht|\d[\d,.\-–]*\s*(?:tage?n?|stunden?|std\.?|h\b|minuten?|min\.?\b))\s+)?(?:stehen|reifen|ruhen|gehen|rasten|quellen|kühlen|lagern|fermentieren|entspannen)\s+lassen[^.]*)\.?\s*$/i
+  );
+  if (!m) return null;
+  return [m[1].trim(), m[2].trim()];
+}
+
+/**
+ * Zerlegt einen zusammengesetzten Schritt in Einzel-Schritte.
+ *
+ * Beispiele:
+ *   "Alles verrühren und 4-5 Stunden reifen lassen."
+ *     → [{Kneten: "Alles verrühren.", duration:0},
+ *        {Warten: "4-5 Stunden reifen lassen.", duration:270}]
+ *
+ *   "Wasser vermischen und 5 Min stehen lassen. Mehl hinzugeben.
+ *    Anschließend 12 Stunden reifen lassen."
+ *     → [{Kneten}, {Warten:5}, {Kneten}, {Warten:720}]
+ *
+ * @param {string} text
+ * @returns {Array<{instruction:string, duration:number, type:string}>}
+ */
+function splitCompoundStep(text) {
+  if (!text || text.length < 15) {
+    const type = classifySegment(text || '');
+    return [{ instruction: text || '', duration: stepDuration(text || '', type), type }];
+  }
+
+  // 1. In Sätze zerlegen (". " vor Großbuchstabe)
+  const sentences = text
+    .split(/(?<=\.)\s+(?=[A-ZÄÖÜ0-9])/)
+    .map(s => s.trim())
+    .filter(s => s.length > 3);
+
+  // 2. Jeden Satz ggf. nochmals an Warte-Phrase splitten
+  const segments = [];
+  for (const s of sentences) {
+    const split = splitAtWaitPhrase(s);
+    if (split && split[0].length >= 5) {
+      segments.push({ text: split[0], type: classifySegment(split[0]) });
+      segments.push({ text: split[1], type: classifySegment(split[1]) });
+    } else {
+      // Transition-Wort entfernen
+      const cleaned = s.replace(TRANSITION_RE, '').trim();
+      segments.push({ text: cleaned, type: classifySegment(cleaned) });
+    }
+  }
+
+  if (segments.length <= 1) {
+    const type = classifySegment(text);
+    return [{ instruction: text, duration: stepDuration(text, type), type }];
+  }
+
+  // 3. Aufeinanderfolgende Aktions-Segmente zusammenfassen
+  const merged = [];
+  let pendingAction = null;
+  for (const seg of segments) {
+    if (seg.type === 'Warten' || seg.type === 'Backen' || seg.type === 'Vorheizen') {
+      if (pendingAction) { merged.push(pendingAction); pendingAction = null; }
+      merged.push(seg);
+    } else {
+      if (pendingAction) {
+        // Aktionen verketten
+        pendingAction.text = pendingAction.text.replace(/\.\s*$/, '') + '. ' + seg.text;
+      } else {
+        pendingAction = { ...seg };
+      }
+    }
+  }
+  if (pendingAction) merged.push(pendingAction);
+
+  // 4. Duration berechnen + Satz bereinigen
+  return merged.map(({ text: t, type }) => {
+    const instruction = t.replace(/\.\s*$/, '') + '.';
+    return { instruction, duration: stepDuration(instruction, type), type };
+  });
+}
+
 // Hilfsfunktion: wandelt eine Zahl (als String, inkl. Komma) in Minuten um
 function _toMinutes(numStr, unit) {
   const n = parseFloat(numStr.replace(',', '.'));
@@ -140,4 +241,4 @@ function scaleSectionsToOnePortion(sections, portionCount) {
   }));
 }
 
-module.exports = { sumAllDurations, extractFirstDuration, isBakingStep, stepDuration, detectPortionCount, scaleSectionsToOnePortion };
+module.exports = { sumAllDurations, extractFirstDuration, isBakingStep, stepDuration, detectPortionCount, scaleSectionsToOnePortion, splitCompoundStep };
