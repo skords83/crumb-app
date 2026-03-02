@@ -54,16 +54,63 @@ function parseDurationAndType(text) {
   }
 
   let type = 'Aktion';
-  if (lower.includes('backen') || lower.includes('ofen')) {
+  // "backen" als eigenständiges Verb, aber NICHT "Backofen" oder "vorheizen" allein
+  const isBaking = /\bbacken\b/i.test(text) && !/\bbackofen\b/i.test(text);
+  if (isBaking) {
     type = 'Backen';
   } else if (
     WAIT_KEYWORDS.some(kw => lower.includes(kw)) ||
-    (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen'))
+    (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen') && !lower.includes('vorheizen') && !lower.includes('backofen'))
   ) {
     type = 'Warten';
   }
 
   return { duration, type };
+}
+
+// ── SCHRITT-SPLITTING ─────────────────────────────────────────
+// Marcel Paa verbindet oft Aktion + Wartezeit in einem Satz:
+// "...dehnen und falten. Danach den Teig wieder abdecken und weitere 30 Min. ruhen lassen."
+// Wir splitten an ". Danach/Anschliessend/Dann/Nun" wenn der zweite Teil eine Zeitangabe
+// UND ein Wartewort enthält.
+const SPLIT_AFTER = /\.\s*(Danach|Anschliessend|Dann|Nun)\b/;
+const HAS_WAIT_AND_TIME = (text) => {
+  const lower = text.toLowerCase();
+  const hasTime = /\d+\s*(?:min|std|stunden?|h\b)/i.test(text);
+  const hasWait = ['ruhen lassen', 'aufgehen lassen', 'gehen lassen', 'quellen lassen',
+    'reifen lassen', 'abkühlen', 'kühl stellen', 'stehen lassen'].some(kw => lower.includes(kw));
+  return hasTime && hasWait;
+};
+
+function splitStepIfNeeded(text) {
+  const match = text.match(SPLIT_AFTER);
+  if (!match) return null;
+
+  const splitIdx = text.indexOf(match[0]);
+  const part1 = text.slice(0, splitIdx + 1).trim(); // bis einschl. Punkt
+  const part2 = text.slice(splitIdx + match[0].length - match[1].length).trim(); // ab Schlüsselwort
+
+  // Nur splitten wenn der zweite Teil wirklich eine Wartezeit ist
+  if (part1.length > 10 && HAS_WAIT_AND_TIME(part2)) {
+    return [part1, part2];
+  }
+  return null;
+}
+
+function processInstruction(text) {
+  // FIX: "Tipp: ..." Schritte komplett ignorieren
+  if (/^Tipp[:. ]/i.test(text.trim())) return [];
+
+  const parts = splitStepIfNeeded(text);
+  if (parts) {
+    return parts.map(p => {
+      const { duration, type } = parseDurationAndType(p);
+      return { instruction: p, duration, type };
+    });
+  }
+
+  const { duration, type } = parseDurationAndType(text);
+  return [{ instruction: text, duration, type }];
 }
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
@@ -127,8 +174,8 @@ const scrapeMarcelPaa = async (url) => {
         $(group).find('.wprm-recipe-instruction-text').each((_, el) => {
           const text = $(el).text().trim();
           if (!text) return;
-          const { duration, type } = parseDurationAndType(text);
-          dough_sections[sectionIdx].steps.push({ instruction: text, duration, type });
+          const steps = processInstruction(text);
+          dough_sections[sectionIdx].steps.push(...steps);
         });
       });
     } else {
@@ -145,11 +192,12 @@ const scrapeMarcelPaa = async (url) => {
           }
         });
 
-        const { duration, type } = parseDurationAndType(text);
-        dough_sections[currentSectionIdx].steps.push({ instruction: text, duration, type });
+        const steps = processInstruction(text);
+        dough_sections[currentSectionIdx].steps.push(...steps);
 
-        // Phasenvorschub nach langer Fermentation
-        if (type === 'Warten' && duration >= 120 && currentSectionIdx < dough_sections.length - 1) {
+        // Nach langer Fermentation zur nächsten parallelen Phase vorspringen
+        const lastStep = steps[steps.length - 1];
+        if (lastStep?.type === 'Warten' && lastStep.duration >= 120 && currentSectionIdx < dough_sections.length - 1) {
           if (dough_sections[currentSectionIdx].is_parallel) currentSectionIdx++;
         }
       });
