@@ -76,7 +76,6 @@ const scrapeHomebaking = async (url) => {
     recipeContent.find('h3').each((_, h3) => {
       const name = $(h3).text().trim();
       if (!name || name.length > 60) return;
-      // Prüfen ob es eine Phase ist
       const nameLower = name.toLowerCase().replace(/:$/, '').trim();
       const NON_PHASE = ['herstellung', 'zubereitung', 'zutaten', 'kommentar', 'newsletter'];
       if (NON_PHASE.some(s => nameLower.includes(s))) return;
@@ -84,46 +83,108 @@ const scrapeHomebaking = async (url) => {
         ['sauerteig', 'vorteig', 'hauptteig', 'brotaroma', 'teig', 'biga'].some(k => nameLower.includes(k));
       if (!isPhase) return;
 
-      // Phasennamen normalisieren (Doppelpunkt am Ende entfernen)
       const cleanName = name.replace(/:$/, '').trim();
 
-      const ingredients = [];
-      // ALLE ul-Blöcke unter diesem h3 einlesen (Stufe 1, Stufe 2, etc.)
-      $(h3).nextUntil('h3', 'ul').each((_, ul) => {
-        $(ul).find('li').each((_, li) => {
-          const text = $(li).text().trim();
-          if (!text) return;
-          const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
-          if (match) {
-            ingredients.push({
-              amount: evalFraction(match[1]),
-              unit: match[2] || 'g',
-              name: match[3].trim()
-            });
-          } else {
-            ingredients.push({ amount: 0, unit: '', name: text });
-          }
-        });
-      });
-
-      // Fließtext-Fallback (Format: "400g Salz\n350g Wasser")
-      if (ingredients.length === 0) {
-        const nextP = $(h3).next('p');
-        if (nextP.length) {
-          nextP.text().split('\n').forEach(line => {
-            line = line.trim();
-            const match = line.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
-            if (match) ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: match[3].trim() });
-          });
-        }
+      // Alle Siblings bis zum nächsten h3 einsammeln
+      const siblings = [];
+      let cur = $(h3).next();
+      while (cur.length && !cur.is('h3')) {
+        siblings.push(cur);
+        cur = cur.next();
       }
 
-      dough_sections.push({
-        name: cleanName,
-        is_parallel: detectIsParallel(cleanName),
-        ingredients,
-        steps: []
-      });
+      // Prüfen ob Stufen-Paragraphen vorhanden sind ("Stufe 1:", "Stufe 2:", etc.)
+      const stufenPs = siblings.filter(el =>
+        el.is('p') && /^Stufe\s+\d+[:.]?\s*$/i.test(el.text().trim())
+      );
+
+      if (stufenPs.length >= 2) {
+        // Mehrere Stufen → jede Stufe als eigene Phase anlegen
+        // Sammle Stufen-Blöcke: von "Stufe N:" bis zur nächsten "Stufe M:" oder Ende
+        let stufenIdx = 0;
+        let collectingIngredients = [];
+        let inStufe = false;
+
+        siblings.forEach(el => {
+          const text = el.text().trim();
+          if (el.is('p') && /^Stufe\s+(\d+)[:.]?\s*$/i.test(text)) {
+            // Neue Stufe beginnt → vorherige abschließen
+            if (inStufe && collectingIngredients.length > 0) {
+              // Bereits abgeschlossen in der vorherigen Iteration
+            }
+            stufenIdx++;
+            inStufe = true;
+            collectingIngredients = [];
+            return;
+          }
+          if (!inStufe) return;
+
+          if (el.is('ul')) {
+            // Zutaten dieser Stufe
+            el.find('li').each((_, li) => {
+              const liText = $(li).text().trim();
+              if (!liText) return;
+              const match = liText.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
+              if (match) {
+                collectingIngredients.push({
+                  amount: evalFraction(match[1]),
+                  unit: match[2] || 'g',
+                  name: match[3].trim()
+                });
+              } else {
+                collectingIngredients.push({ amount: 0, unit: '', name: liText });
+              }
+            });
+            // Stufe abschließen nachdem ul gelesen
+            dough_sections.push({
+              name: `${cleanName} Stufe ${stufenIdx}`,
+              is_parallel: detectIsParallel(cleanName),
+              ingredients: [...collectingIngredients],
+              steps: []
+            });
+            collectingIngredients = [];
+          }
+        });
+      } else {
+        // Keine Stufen → normale Phase
+        const ingredients = [];
+        siblings.forEach(el => {
+          if (!el.is('ul')) return;
+          el.find('li').each((_, li) => {
+            const text = $(li).text().trim();
+            if (!text) return;
+            const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
+            if (match) {
+              ingredients.push({
+                amount: evalFraction(match[1]),
+                unit: match[2] || 'g',
+                name: match[3].trim()
+              });
+            } else {
+              ingredients.push({ amount: 0, unit: '', name: text });
+            }
+          });
+        });
+
+        // Fließtext-Fallback
+        if (ingredients.length === 0) {
+          const nextP = $(h3).next('p');
+          if (nextP.length) {
+            nextP.text().split('\n').forEach(line => {
+              line = line.trim();
+              const match = line.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
+              if (match) ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: match[3].trim() });
+            });
+          }
+        }
+
+        dough_sections.push({
+          name: cleanName,
+          is_parallel: detectIsParallel(cleanName),
+          ingredients,
+          steps: []
+        });
+      }
     });
 
     // Fallback: Wenn keine h3-Phasen → Hauptteig aus allen Zutaten
@@ -202,10 +263,10 @@ const scrapeHomebaking = async (url) => {
       if (tag === 'h3') {
         const h3Name = rawText.toLowerCase().replace(/:$/, '').trim();
         inHerstellung = ['herstellung', 'zubereitung'].includes(h3Name);
-        // Phasenwechsel durch h3: wenn h3 eine bekannte Phase ist, currentSectionIdx anpassen
         if (!inHerstellung) {
+          // Bei h3 die erste Stufen-Phase dieser Gruppe suchen (Stufe 1)
           const matchIdx = dough_sections.findIndex(s =>
-            new RegExp('\\b' + s.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(rawText)
+            new RegExp('\\b' + s.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(' Stufe')[0] + '\\b', 'i').test(rawText)
           );
           if (matchIdx >= 0 && matchIdx > currentSectionIdx) {
             currentSectionIdx = matchIdx;
@@ -215,19 +276,44 @@ const scrapeHomebaking = async (url) => {
       }
 
       if (tag === 'p') {
-        if ($(el).find('img').length && !rawText) return; // Bild-p
+        if ($(el).find('img').length) return;
         if (rawText.length < 15) return;
         if (SKIP_TEXT.test(rawText)) return;
+        // "Stufe N:" → currentSectionIdx zur nächsten Stufen-Phase dieser Gruppe schieben
+        const stufenM = rawText.match(/^Stufe\s+(\d+)[:.]?\s*$/i);
+        if (stufenM) {
+          const stufenNr = parseInt(stufenM[1]);
+          // Finde die Phase mit dieser Stufennummer im Kontext der aktuellen Phase-Gruppe
+          const curBaseName = dough_sections[currentSectionIdx]?.name.replace(/\s+Stufe\s+\d+$/i, '');
+          const nextStufenIdx = dough_sections.findIndex(s =>
+            s.name.replace(/\s+Stufe\s+\d+$/i, '') === curBaseName &&
+            new RegExp(`Stufe\\s+${stufenNr}$`, 'i').test(s.name)
+          );
+          if (nextStufenIdx >= 0) currentSectionIdx = nextStufenIdx;
+          return; // "Stufe N:" selbst ist kein Schritt
+        }
         if (SKIP_EXACT.test(rawText)) return;
+        if (/^<[a-z]/i.test(rawText)) return;
+        if (/\.(jpg|jpeg|png|webp|gif)\b/i.test(rawText) && rawText.includes('http')) return;
         assignStep(rawText);
         return;
       }
 
       if (tag === 'ul' && inHerstellung) {
-        // Herstellungs-Schritte als li
+        // Galerie-ul überspringen: wenn alle li Bilder enthalten
+        const allLis = $(el).find('li');
+        const hasOnlyImages = allLis.length > 0 && allLis.toArray().every(li =>
+          $(li).find('img').length > 0 && $(li).text().trim().length < 5
+        );
+        if (hasOnlyImages) return;
+
         $(el).find('li').each((_, li) => {
-          if ($(li).find('img').length && !$(li).text().trim()) return;
+          if ($(li).find('img').length) return; // li mit Bild → immer überspringen
           const text = $(li).text().trim();
+          // HTML-Tag-artigen Text filtern (<img ... />, <figure ...>)
+          if (/^<[a-z]/i.test(text)) return;
+          // Bild-URL-artigen Text filtern
+          if (/\.(jpg|jpeg|png|webp|gif)\b/i.test(text) && text.includes('http')) return;
           if (text.length < 15 || SKIP_TEXT.test(text)) return;
           assignStep(text);
         });
