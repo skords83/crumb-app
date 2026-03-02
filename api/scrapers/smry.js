@@ -3,6 +3,7 @@ const cheerio = require('cheerio');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { sumAllDurations, extractFirstDuration, isBakingStep } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function htmlToText(str) {
@@ -22,25 +23,16 @@ function findDivContentEnd(str, startPos) {
 
 function extractDuration(text) {
   if (!text) return 0;
-  const lower = text.toLowerCase();
-  const hourRangeMatch = lower.match(/(\d+[,.]?\d*)\s*[-–]\s*(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
-  if (hourRangeMatch) return Math.round(parseFloat(hourRangeMatch[2].replace(',', '.')) * 60);
-  const hourMatch = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
-  const hasDabei  = /dabei|nach\s+\d+\s*min/i.test(text);
-  const minMatch  = !hasDabei ? lower.match(/(\d+)\s*(?:minuten?|min\.?|min\b)/) : null;
-  let total = 0;
-  if (hourMatch) total += Math.round(parseFloat(hourMatch[1].replace(',', '.')) * 60);
-  if (minMatch)  total += parseInt(minMatch[1]);
-  if (total === 0) {
-    const timeMatch = text.match(/(\d+):(\d+)\s*(?:Uhr|Stunden)?/i);
-    if (timeMatch) total = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
-  }
-  return total;
+  // Backschritte: alle Zeiten summieren ("Nach 20 Min. ... weitere 50 Min. backen" → 70)
+  if (isBakingStep(text)) return sumAllDurations(text) || 45;
+  // Sonst: erste/dominante Zeitangabe
+  return extractFirstDuration(text) || 0;
 }
 
 function detectStepType(text) {
   if (!text) return 'Aktion';
   const lower = text.toLowerCase();
+  if (isBakingStep(text)) return 'Backen';
   if (lower.match(/reifen|ruhen|gehen|aufgehen|stockgare|stückgare|gare\s/)) return 'Warten';
   if (lower.match(/\d+\s*(stunden?|minuten?|std|min|h)\s+(bei|reifen|ruhen|gehen)/i)) return 'Warten';
   if (lower.match(/^\d+[,.]?\d*\s*stunden?\s+bei/i)) return 'Warten';

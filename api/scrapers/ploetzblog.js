@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { sumAllDurations, isBakingStep } = require('./utils');
 
 const scrapePloetz = async (url) => {
   try {
@@ -354,7 +355,7 @@ const scrapePloetz = async (url) => {
         if (seenSteps.has(normKey)) return;
         seenSteps.add(normKey);
 
-        const duration = extractDurationMinutes(text) || 5;
+        const duration = (isBakingStep(text) ? sumAllDurations(text) : extractDurationMinutes(text)) || 5;
         const type = classifyStep(text);
 
         // FIX 2+3: Dehnen-und-Falten Steps aufteilen
@@ -381,7 +382,7 @@ const scrapePloetz = async (url) => {
       for (let i = lastSection.steps.length - 1; i >= 0; i--) {
         const step = lastSection.steps[i];
         const lower = step.instruction.toLowerCase();
-        const isBackStep = lower.includes('backen') || lower.includes('ofen') || lower.includes('°c');
+        const isBackStep = isBakingStep(lower) || lower.includes('°c');
         if (isBackStep || foundBackStep) {
           backSteps.unshift(step);
           foundBackStep = true;

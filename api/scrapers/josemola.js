@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { stepDuration, isBakingStep } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function evalFraction(amount) {
@@ -34,21 +35,23 @@ const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'quellen', 'rasten', 
 
 function parseDurationAndType(text) {
   const lower = text.toLowerCase();
-  // Zeitangaben wie "3h", "45 Min", "8-18h", "3 Std."
-  const hourMatch  = lower.match(/(\d+)(?:\s*[-–bis]\s*(\d+))?\s*(?:std\.?|h\b|stunden?)/i);
-  const minMatch   = lower.match(/(\d+)(?:\s*[-–bis]\s*(\d+))?\s*(?:min\.?|minuten?)/i);
-  let duration = 10;
-  if (hourMatch) {
-    const h1 = parseInt(hourMatch[1]), h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
-    duration = ((h1 + h2) / 2) * 60;
-  } else if (minMatch) {
-    const m1 = parseInt(minMatch[1]), m2 = minMatch[2] ? parseInt(minMatch[2]) : m1;
-    duration = (m1 + m2) / 2;
-  }
   let type = 'Aktion';
-  if (lower.includes('backen') || lower.includes('ofen') || lower.includes('vorheizen')) type = 'Backen';
-  else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) || (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen') && !lower.includes('erhitzen') && !lower.includes('verkneten'))) type = 'Warten';
-  return { duration, type };
+  if (isBakingStep(text)) {
+    type = 'Backen';
+  } else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) ||
+    (extractFirstDurationLocal(lower) > 25 && !lower.includes('kneten') &&
+     !lower.includes('mischen') && !lower.includes('backofen'))) {
+    type = 'Warten';
+  }
+  return { duration: stepDuration(text, type) || 10, type };
+}
+function extractFirstDurationLocal(lower) {
+  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
+  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
+  let t = 0;
+  if (h) t += Math.round(parseFloat(h[1].replace(',','.')) * 60);
+  if (m) t += parseInt(m[1]);
+  return t;
 }
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────

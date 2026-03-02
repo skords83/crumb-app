@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { stepDuration, isBakingStep } = require('./utils');
 
 // ── PHASE-ERKENNUNG (gleiche Logik wie index.js) ─────────────
 const PHASE_PATTERNS = [
@@ -39,34 +40,35 @@ const WAIT_KEYWORDS = [
 
 function parseDurationAndType(text) {
   const lower = text.toLowerCase();
-  const hourMatch = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:std|h|stunden?)/i);
-  const minMatch  = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:min)/i);
 
-  let duration = 10;
-  if (hourMatch) {
-    const h1 = parseInt(hourMatch[1]);
-    const h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
-    duration = ((h1 + h2) / 2) * 60;
-  } else if (minMatch) {
-    const m1 = parseInt(minMatch[1]);
-    const m2 = minMatch[2] ? parseInt(minMatch[2]) : m1;
-    duration = (m1 + m2) / 2;
-  }
-
+  // Type-Erkennung
   let type = 'Aktion';
-  // "backen" als eigenständiges Verb, aber NICHT "Backofen" oder "vorheizen" allein
-  const isBaking = /\bbacken\b/i.test(text) && !/\bbackofen\b/i.test(text);
-  if (isBaking) {
+  if (isBakingStep(text)) {
     type = 'Backen';
   } else if (
     WAIT_KEYWORDS.some(kw => lower.includes(kw)) ||
-    (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen') && !lower.includes('vorheizen') && !lower.includes('backofen'))
+    (extractFirstDurationLocal(lower) > 25 &&
+      !lower.includes('kneten') && !lower.includes('mischen') &&
+      !lower.includes('vorheizen') && !lower.includes('backofen'))
   ) {
     type = 'Warten';
   }
 
+  // Duration: bei Backschritten alle Zeiten summieren, sonst erste Zeitangabe
+  const duration = stepDuration(text, type) || 10;
   return { duration, type };
 }
+
+// Erste Zeitangabe (nur für Warten-Schwellwert-Check)
+function extractFirstDurationLocal(lower) {
+  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
+  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
+  let t = 0;
+  if (h) t += Math.round(parseFloat(h[1].replace(',', '.')) * 60);
+  if (m) t += parseInt(m[1]);
+  return t;
+}
+
 
 // ── SCHRITT-SPLITTING ─────────────────────────────────────────
 // Marcel Paa verbindet oft Aktion + Wartezeit in einem Satz:

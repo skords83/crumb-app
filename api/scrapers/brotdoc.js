@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { stepDuration, isBakingStep } = require('./utils');
 
 const scrapeBrotdoc = async (url) => {
   try {
@@ -50,40 +51,18 @@ const scrapeBrotdoc = async (url) => {
       const text = $(el).text().trim();
       const lowerText = text.toLowerCase();
       
-      // --- ZEIT-ERKENNUNG (Mittelwert bei Spannen) ---
-      // Stunden-Spannen (z.B. "10-14 Std")
-      const hourMatch = lowerText.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:std|h|stunden)/i);
-      // Minuten-Spannen (z.B. "20-30 Min")
-      const minMatch = lowerText.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:min)/i);
-      
-      let duration = 10; 
-      let isLongFermentation = false;
-
-      if (hourMatch) {
-        const h1 = parseInt(hourMatch[1]);
-        const h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
-        duration = ((h1 + h2) / 2) * 60; 
-        if (duration >= 120 && waitKeywords.some(kw => lowerText.includes(kw))) {
-            isLongFermentation = true;
-        }
-      } else if (minMatch) {
-        const m1 = parseInt(minMatch[1]);
-        const m2 = minMatch[2] ? parseInt(minMatch[2]) : m1;
-        duration = (m1 + m2) / 2;
-      }
-
-      // --- TYP-ERKENNUNG ---
-      let calculatedType = 'Aktion'; 
-
-      if (lowerText.includes('backen') || lowerText.includes('ofen')) {
+      // --- ZEIT & TYP ---
+      let calculatedType = 'Aktion';
+      if (isBakingStep(text)) {
         calculatedType = 'Backen';
-      } 
-      else if (
-        waitKeywords.some(kw => lowerText.includes(kw)) || 
-        (duration > 25 && !lowerText.includes('kneten') && !lowerText.includes('mischen'))
+      } else if (
+        waitKeywords.some(kw => lowerText.includes(kw)) ||
+        (extractFirstDurationLocal(lowerText) > 25 && !lowerText.includes('kneten') && !lowerText.includes('mischen') && !lowerText.includes('vorheizen') && !lowerText.includes('backofen'))
       ) {
         calculatedType = 'Warten';
       }
+      const duration = stepDuration(text, calculatedType) || 10;
+      const isLongFermentation = calculatedType === 'Warten' && duration >= 120;
 
       // --- SEKTIONS-LOGIK ---
       dough_sections.forEach((sec, idx) => {
@@ -159,6 +138,15 @@ const scrapeBrotdoc = async (url) => {
     return null;
   }
 };
+
+function extractFirstDurationLocal(lower) {
+  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
+  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
+  let t = 0;
+  if (h) t += Math.round(parseFloat(h[1].replace(',', '.')) * 60);
+  if (m) t += parseInt(m[1]);
+  return t;
+}
 
 function evalFraction(amount) {
   if (!amount) return 0;
