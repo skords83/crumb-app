@@ -29,8 +29,11 @@ function _toMinutes(numStr, unit) {
  */
 function sumAllDurations(text) {
   if (!text) return 0;
-  // Normalisiere Annäherungs-Präfixe weg (ersetzen durch Leerzeichen)
-  let remaining = text.replace(new RegExp(APPROX_PREFIX.source, 'gi'), ' ');
+  // Klammer-Zeiten entfernen: "(5 Minuten)" sind Erklärungen, keine Backzeiten
+  // z.B. "nach einer kurzen Anbackphase (5 Minuten) auf 210°C ... Backzeit ca. 35 Minuten"
+  let remaining = text.replace(/\([^)]*(?:minuten?|min\.?|stunden?|std\.?|h\b|tage?)[^)]*\)/gi, ' ');
+  // Annäherungs-Präfixe normalisieren
+  remaining = remaining.replace(new RegExp(APPROX_PREFIX.source, 'gi'), ' ');
   let total = 0;
   const UNIT = '(?:tage?n?|stunden?|std\\.?|h\\b|minuten?|min\\.?\\b)';
 

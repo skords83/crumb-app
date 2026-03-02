@@ -137,82 +137,25 @@ const scrapeHomebaking = async (url) => {
       dough_sections.push({ name: 'Hauptteig', is_parallel: false, ingredients, steps: [] });
     }
 
-    // 2. SCHRITTE – Homebaking schreibt Anweisungen als Paragraphen nach den Zutaten
-    // Scope: nur Elemente NACH dem <h2>Rezept</h2> verarbeiten
-    const allParas = [];
-    const SKIP_STEP = ['kommentar', 'newsletter', 'rezept drucken', 'stufe 1', 'stufe 2', 'stufe 3'];
+    // 2. SCHRITTE – in DOM-Reihenfolge sammeln und sofort Phase zuordnen
+    // Das Rezept hat folgende Struktur:
+    //   <h2>Rezept</h2>
+    //   <p>Portionstext</p>
+    //   <h3>Biga:</h3>  <ul>Zutaten</ul>  <p>Schritt Biga...</p>
+    //   <h3>Einkornsauerteig:</h3>  <ul>Zutaten Stufe1</ul>  <p>Stufe 1:</p>  <p>Schritt...</p>
+    //                               <ul>Zutaten Stufe2</ul>  <p>Schritt...</p>
+    //   <h3>Hauptteig:</h3>  <ul>Zutaten</ul>
+    //   <h3>Herstellung:</h3>  <ul><li>Schritt1</li><li>Schritt2</li>...</ul>
 
-    // Startpunkt: h2 mit Text "Rezept" – alles davor ist Einleitung/Description
-    const rezeptH2 = recipeContent.find('h2').filter((_, h2) =>
-      $(h2).text().trim().toLowerCase() === 'rezept'
-    ).first();
+    const SKIP_TEXT = /kommentar|newsletter|rezept drucken/i;
+    const SKIP_EXACT = /^(?:Stufe\s+\d+[:.]?\s*|für ein Teiggewicht.*|Teiggewicht von.*)$/i;
 
-    // A) li-Schritte unter "Herstellung:" h3
-    recipeContent.find('h3').each((_, h3) => {
-      // Nur h3 NACH dem Rezept-h2 berücksichtigen
-      if (rezeptH2.length && $(h3).prevAll('h2').filter((_, h2) =>
-        $(h2).text().trim().toLowerCase() === 'rezept').length === 0) return;
-      const name = $(h3).text().trim().toLowerCase().replace(/:$/, '');
-      if (!['herstellung', 'zubereitung'].includes(name)) return;
-      $(h3).nextUntil('h3', 'ul').each((_, ul) => {
-        // Galerie-ul: enthält <a><img> → überspringen
-        if ($(ul).find('a > img').length && !$(ul).find('li').text().trim()) return;
-        $(ul).find('li').each((_, li) => {
-          if ($(li).find('img').length && !$(li).text().trim()) return;
-          const text = $(li).text().trim();
-          // Link-only li (z.B. Galerie-Links) ausfiltern
-          if ($(li).find('a').length && $(li).text().trim() === $(li).find('a').text().trim()
-              && $(li).find('img').length) return;
-          if (text.length >= 15 && !SKIP_STEP.some(s => text.toLowerCase().includes(s))) {
-            allParas.push(text);
-          }
-        });
-      });
-    });
-
-    // B) <p>-Tags: nur NACH dem h2 Rezept, und nur zwischen h3-Phasen (nicht nach Share/Kommentar)
-    // Wir iterieren alle Siblings nach rezeptH2 bis zum nächsten h2 (Kommentare etc.)
-    let inRecipeScope = false;
-    recipeContent.find('h2, h3, p, ul').each((_, el) => {
-      const tag = el.tagName.toLowerCase();
-      const text = $(el).text().trim();
-
-      if (tag === 'h2') {
-        if (text.toLowerCase() === 'rezept') { inRecipeScope = true; return; }
-        if (inRecipeScope) { inRecipeScope = false; return; } // nächste h2 = Rezept-Ende
-      }
-      if (!inRecipeScope) return;
-      if (tag !== 'p') return;
-
-      // Bild-p überspringen
-      if ($(el).find('img').length && !text) return;
-      if (text.length < 20) return;
-      if (SKIP_STEP.some(s => text.toLowerCase().includes(s))) return;
-      if (/^Stufe\s+\d+:?\s*$/i.test(text)) return;
-      if (/für ein Teiggewicht|Teiggewicht von/i.test(text)) return;
-      // Portionshinweis-Sätze überspringen
-      if (/^für ein Teiggewicht/i.test(text)) return;
-      allParas.push(text);
-    });
-
-    // Deduplizieren (falls ein Schritt sowohl als p als auch als li vorkommt)
-    const seen = new Set();
-    const uniqueParas = allParas.filter(t => { if (seen.has(t)) return false; seen.add(t); return true; });
-
-    // Schritte der richtigen Phase zuordnen
-    // Strategie:
-    // - Schritte die als Zutatenliste mehrere Phasennamen aufzählen (Komma-getrennt) → Hauptteig
-    // - Schritte die genau einen Phasennamen als Subjekt erwähnen → diese Phase
-    // - Sonstige Schritte → currentSectionIdx bleibt
     const hauptteigIdx = Math.max(0, dough_sections.findIndex(s => /hauptteig/i.test(s.name)));
+    const isIngredientList = (t) => /^[A-ZÄÖÜ][a-zäöüß]+(?:teig|laib|biga|poolish|levain)?[,]\s/.test(t);
+
+    // Zuordnungs-Funktion: welche Phase bekommt diesen Schritt?
     let currentSectionIdx = 0;
-
-    // Hilfsfunktion: Ist ein Phasenname Teil einer Komma-Aufzählung am Satzanfang?
-    // "Sauerteig, Biga, Mehl..." → true (Zutatenliste)
-    const isIngredientList = (text) => /^[A-ZÄÖÜ][a-zäöüß]+(?:teig|laib|biga|poolish|levain)?[,]\s/.test(text);
-
-    uniqueParas.forEach(text => {
-      // Wie viele Phasennamen werden erwähnt?
+    function assignStep(text) {
       const mentionedIdxs = dough_sections
         .map((sec, idx) => ({
           idx,
@@ -222,31 +165,82 @@ const scrapeHomebaking = async (url) => {
         .map(x => x.idx);
 
       if (mentionedIdxs.length > 1) {
-        // Mehrere Phasen erwähnt → Zusammenführungsschritt = Hauptteig
         currentSectionIdx = hauptteigIdx;
       } else if (mentionedIdxs.length === 1) {
         const newIdx = mentionedIdxs[0];
-        // Phasenname in Komma-Liste am Anfang = Zutat, nicht Phasenwechsel → Hauptteig
         if (isIngredientList(text) && newIdx !== hauptteigIdx) {
           currentSectionIdx = hauptteigIdx;
         } else if (newIdx > currentSectionIdx) {
-          currentSectionIdx = newIdx; // nur vorwärts
+          currentSectionIdx = newIdx;
         }
-        // newIdx <= currentSectionIdx und kein Ingredientlist → Phase bleibt
       }
-      // 0 Erwähnungen: bleibt bei currentSectionIdx
-
       const { duration, type } = parseDurationAndType(text);
       if (dough_sections[currentSectionIdx]) {
         dough_sections[currentSectionIdx].steps.push({ instruction: text, duration, type });
+      }
+    }
+
+    // h3-Phasen-Kontext verfolgen beim DOM-Durchlauf
+    let inRecipeScope = false;
+    let inHerstellung = false;
+    const rezeptH2 = recipeContent.find('h2').filter((_, h2) =>
+      $(h2).text().trim().toLowerCase() === 'rezept'
+    ).first();
+
+    recipeContent.find('h2, h3, p, ul').each((_, el) => {
+      const tag = el.tagName.toLowerCase();
+      const rawText = $(el).text().trim();
+
+      // Scope-Steuerung
+      if (tag === 'h2') {
+        if (rawText.toLowerCase() === 'rezept') { inRecipeScope = true; return; }
+        if (inRecipeScope) { inRecipeScope = false; }
+        return;
+      }
+      if (!inRecipeScope) return;
+
+      if (tag === 'h3') {
+        const h3Name = rawText.toLowerCase().replace(/:$/, '').trim();
+        inHerstellung = ['herstellung', 'zubereitung'].includes(h3Name);
+        // Phasenwechsel durch h3: wenn h3 eine bekannte Phase ist, currentSectionIdx anpassen
+        if (!inHerstellung) {
+          const matchIdx = dough_sections.findIndex(s =>
+            new RegExp('\\b' + s.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(rawText)
+          );
+          if (matchIdx >= 0 && matchIdx > currentSectionIdx) {
+            currentSectionIdx = matchIdx;
+          }
+        }
+        return;
+      }
+
+      if (tag === 'p') {
+        if ($(el).find('img').length && !rawText) return; // Bild-p
+        if (rawText.length < 15) return;
+        if (SKIP_TEXT.test(rawText)) return;
+        if (SKIP_EXACT.test(rawText)) return;
+        assignStep(rawText);
+        return;
+      }
+
+      if (tag === 'ul' && inHerstellung) {
+        // Herstellungs-Schritte als li
+        $(el).find('li').each((_, li) => {
+          if ($(li).find('img').length && !$(li).text().trim()) return;
+          const text = $(li).text().trim();
+          if (text.length < 15 || SKIP_TEXT.test(text)) return;
+          assignStep(text);
+        });
       }
     });
 
     // Phasen ohne Schritte bekommen einen Platzhalter-Warten-Schritt
     dough_sections.forEach(sec => {
-      if (sec.steps.length === 0 && sec.name.toLowerCase() !== 'hauptteig') {
+      if (sec.steps.length === 0) {
         const lower = sec.name.toLowerCase();
-        const duration = lower.includes('sauerteig') ? 960 : lower.includes('brotaroma') ? 120 : 60;
+        const duration = lower.includes('sauerteig') ? 960
+          : lower.includes('biga') || lower.includes('vorteig') || lower.includes('poolish') ? 1440
+          : lower.includes('brotaroma') ? 120 : 60;
         sec.steps.push({ instruction: `${sec.name} ansetzen und reifen lassen`, duration, type: 'Warten' });
       }
     });
