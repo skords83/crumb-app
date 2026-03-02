@@ -69,6 +69,11 @@ const scrapeHomebaking = async (url) => {
     // Zutaten als ul > li unter jedem h3
     // Schritte als Fließtext-Paragraphen nach dem Zutatenblock
 
+    // Zwischenprodukte (reifer Vorteig etc.) aus Zutaten herausfiltern
+    const isIntermediate = (name) =>
+      /\b(?:reife[rs]?|gereifter?)\b/i.test(name) ||
+      /\b(?:sauerteig|biga|poolish|levain|vorteig)\b.{0,25}(?:stufe\s*\d|von stufe)/i.test(name);
+
     // 1. PHASEN + ZUTATEN aus h3/ul-Struktur
     const recipeContent = $('.entry-content, article .content, .post-content, main article').first();
 
@@ -126,13 +131,12 @@ const scrapeHomebaking = async (url) => {
               if (!liText) return;
               const match = liText.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
               if (match) {
-                collectingIngredients.push({
-                  amount: evalFraction(match[1]),
-                  unit: match[2] || 'g',
-                  name: match[3].trim()
-                });
+                const ingName = match[3].trim();
+                if (isIntermediate(ingName)) return;
+                collectingIngredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
               } else {
-                collectingIngredients.push({ amount: 0, unit: '', name: liText });
+                if (!isIntermediate(liText))
+                  collectingIngredients.push({ amount: 0, unit: '', name: liText });
               }
             });
             // Stufe abschließen nachdem ul gelesen
@@ -155,13 +159,12 @@ const scrapeHomebaking = async (url) => {
             if (!text) return;
             const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
             if (match) {
-              ingredients.push({
-                amount: evalFraction(match[1]),
-                unit: match[2] || 'g',
-                name: match[3].trim()
-              });
+              const ingName = match[3].trim();
+              if (isIntermediate(ingName)) return;
+              ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
             } else {
-              ingredients.push({ amount: 0, unit: '', name: text });
+              if (!isIntermediate(text))
+                ingredients.push({ amount: 0, unit: '', name: text });
             }
           });
         });
@@ -277,9 +280,7 @@ const scrapeHomebaking = async (url) => {
 
       if (tag === 'p') {
         if ($(el).find('img').length) return;
-        if (rawText.length < 15) return;
-        if (SKIP_TEXT.test(rawText)) return;
-        // "Stufe N:" → currentSectionIdx zur nächsten Stufen-Phase dieser Gruppe schieben
+        // "Stufe N:" VOR Längenfilter prüfen – "Stufe 1:" hat nur 8 Zeichen
         const stufenM = rawText.match(/^Stufe\s+(\d+)[:.]?\s*$/i);
         if (stufenM) {
           const stufenNr = parseInt(stufenM[1]);
@@ -292,6 +293,8 @@ const scrapeHomebaking = async (url) => {
           if (nextStufenIdx >= 0) currentSectionIdx = nextStufenIdx;
           return; // "Stufe N:" selbst ist kein Schritt
         }
+        if (rawText.length < 15) return;
+        if (SKIP_TEXT.test(rawText)) return;
         if (SKIP_EXACT.test(rawText)) return;
         if (/^<[a-z]/i.test(rawText)) return;
         if (/\.(jpg|jpeg|png|webp|gif)\b/i.test(rawText) && rawText.includes('http')) return;
