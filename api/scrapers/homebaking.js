@@ -34,25 +34,7 @@ const detectIsParallel = (name) => {
   return false;
 };
 
-const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'stockgare', 'stückgare', 'abkühlen', 'quellen', 'rasten', 'entspannen', 'kühlschrank', 'autolyse'];
 
-function parseDurationAndType(text) {
-  const lower = text.toLowerCase();
-  const hourMatch = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:std|h|stunden?)/i);
-  const minMatch  = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:min)/i);
-  let duration = 10;
-  if (hourMatch) {
-    const h1 = parseInt(hourMatch[1]), h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
-    duration = ((h1 + h2) / 2) * 60;
-  } else if (minMatch) {
-    const m1 = parseInt(minMatch[1]), m2 = minMatch[2] ? parseInt(minMatch[2]) : m1;
-    duration = (m1 + m2) / 2;
-  }
-  let type = 'Aktion';
-  if (lower.includes('backen') || lower.includes('ofen')) type = 'Backen';
-  else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) || (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen'))) type = 'Warten';
-  return { duration, type };
-}
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
 const scrapeHomebaking = async (url) => {
@@ -234,9 +216,10 @@ const scrapeHomebaking = async (url) => {
           currentSectionIdx = newIdx;
         }
       }
-      const { duration, type } = parseDurationAndType(text);
       if (dough_sections[currentSectionIdx]) {
-        dough_sections[currentSectionIdx].steps.push({ instruction: text, duration, type });
+        splitCompoundStep(text).forEach(step => {
+          dough_sections[currentSectionIdx].steps.push(step);
+        });
       }
     }
 
