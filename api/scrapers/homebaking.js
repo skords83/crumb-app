@@ -1,7 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep, detectPortionCount, scaleSectionsToOnePortion, splitCompoundStep } = require('./utils');
-
+const { stepDuration, isBakingStep, detectPortionCount, scaleSectionsToOnePortion } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function evalFraction(amount) {
@@ -23,17 +22,37 @@ const PHASE_PATTERNS = [
   { re: /levain/i,      is_parallel: true  },
   { re: /autolyse/i,    is_parallel: false },
   { re: /vorteig/i,     is_parallel: true  },
-  { re: /brotaroma/i,   is_parallel: true  },
+  { re: /brotaroma/i,   is_parallel: true  },  // Homebaking-spezifisch
   { re: /kochstück/i,   is_parallel: true  },
   { re: /brühstück/i,   is_parallel: true  },
   { re: /quellstück/i,  is_parallel: true  },
-  { re: /biga/i,        is_parallel: true  },
+  { re: /biga/i,        is_parallel: true  },  // Homebaking-spezifisch
 ];
 
 const detectIsParallel = (name) => {
   for (const p of PHASE_PATTERNS) if (p.re.test(name)) return p.is_parallel;
   return false;
 };
+
+const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'stockgare', 'stückgare', 'abkühlen', 'quellen', 'rasten', 'entspannen', 'kühlschrank', 'autolyse'];
+
+function parseDurationAndType(text) {
+  const lower = text.toLowerCase();
+  const hourMatch = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:std|h|stunden?)/i);
+  const minMatch  = lower.match(/(\d+)(?:\s*(?:bis|zu|-)\s*(\d+))?\s*(?:min)/i);
+  let duration = 10;
+  if (hourMatch) {
+    const h1 = parseInt(hourMatch[1]), h2 = hourMatch[2] ? parseInt(hourMatch[2]) : h1;
+    duration = ((h1 + h2) / 2) * 60;
+  } else if (minMatch) {
+    const m1 = parseInt(minMatch[1]), m2 = minMatch[2] ? parseInt(minMatch[2]) : m1;
+    duration = (m1 + m2) / 2;
+  }
+  let type = 'Aktion';
+  if (lower.includes('backen') || lower.includes('ofen')) type = 'Backen';
+  else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) || (duration > 25 && !lower.includes('kneten') && !lower.includes('mischen'))) type = 'Warten';
+  return { duration, type };
+}
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
 const scrapeHomebaking = async (url) => {
@@ -45,14 +64,16 @@ const scrapeHomebaking = async (url) => {
     const $ = cheerio.load(data);
     const dough_sections = [];
 
-    // Zwischenprodukte (reifer Vorteig etc.) aus Zutaten herausfiltern
-    const isIntermediate = (name) =>
-      /\b(?:reife[rs]?|gereifter?)\b/i.test(name) ||
-      /\b(?:sauerteig|biga|poolish|levain|vorteig)\b.{0,25}(?:stufe\s*\d|von stufe)/i.test(name);
+    // Homebaking.at: Rezept steht unter .entry-content oder article
+    // Phasen sind h3 innerhalb des Rezeptbereichs (Sauerteig, Brotaroma, Hauptteig)
+    // Zutaten als ul > li unter jedem h3
+    // Schritte als Fließtext-Paragraphen nach dem Zutatenblock
+
 
     // 1. PHASEN + ZUTATEN aus h3/ul-Struktur
     const recipeContent = $('.entry-content, article .content, .post-content, main article').first();
 
+    // Finde alle h3 im Rezeptbereich die Phasen sind
     recipeContent.find('h3').each((_, h3) => {
       const name = $(h3).text().trim();
       if (!name || name.length > 60) return;
@@ -65,6 +86,7 @@ const scrapeHomebaking = async (url) => {
 
       const cleanName = name.replace(/:$/, '').trim();
 
+      // Alle Siblings bis zum nächsten h3 einsammeln
       const siblings = [];
       let cur = $(h3).next();
       while (cur.length && !cur.is('h3')) {
@@ -72,11 +94,14 @@ const scrapeHomebaking = async (url) => {
         cur = cur.next();
       }
 
+      // Prüfen ob Stufen-Paragraphen vorhanden sind ("Stufe 1:", "Stufe 2:", etc.)
       const stufenPs = siblings.filter(el =>
         el.is('p') && /^Stufe\s+\d+[:.]?\s*$/i.test(el.text().trim())
       );
 
       if (stufenPs.length >= 2) {
+        // Mehrere Stufen → jede Stufe als eigene Phase anlegen
+        // Sammle Stufen-Blöcke: von "Stufe N:" bis zur nächsten "Stufe M:" oder Ende
         let stufenIdx = 0;
         let collectingIngredients = [];
         let inStufe = false;
@@ -84,26 +109,33 @@ const scrapeHomebaking = async (url) => {
         siblings.forEach(el => {
           const text = el.text().trim();
           if (el.is('p') && /^Stufe\s+(\d+)[:.]?\s*$/i.test(text)) {
+            // Neue Stufe beginnt → vorherige abschließen
+            if (inStufe && collectingIngredients.length > 0) {
+              // Bereits abgeschlossen in der vorherigen Iteration
+            }
             stufenIdx++;
             inStufe = true;
             collectingIngredients = [];
             return;
           }
           if (!inStufe) return;
+
           if (el.is('ul')) {
+            // Zutaten dieser Stufe
             el.find('li').each((_, li) => {
               const liText = $(li).text().trim();
               if (!liText) return;
               const match = liText.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
               if (match) {
                 const ingName = match[3].trim();
-                if (isIntermediate(ingName)) return;
+                
                 collectingIngredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
               } else {
-                if (!isIntermediate(liText))
+                
                   collectingIngredients.push({ amount: 0, unit: '', name: liText });
               }
             });
+            // Stufe abschließen nachdem ul gelesen
             dough_sections.push({
               name: `${cleanName} Stufe ${stufenIdx}`,
               is_parallel: detectIsParallel(cleanName),
@@ -114,6 +146,7 @@ const scrapeHomebaking = async (url) => {
           }
         });
       } else {
+        // Keine Stufen → normale Phase
         const ingredients = [];
         siblings.forEach(el => {
           if (!el.is('ul')) return;
@@ -123,15 +156,16 @@ const scrapeHomebaking = async (url) => {
             const match = text.match(/^([\d,./]+)\s*([a-zA-ZäöüÄÖÜ%]*)\s+(.+)$/);
             if (match) {
               const ingName = match[3].trim();
-              if (isIntermediate(ingName)) return;
+              
               ingredients.push({ amount: evalFraction(match[1]), unit: match[2] || 'g', name: ingName });
             } else {
-              if (!isIntermediate(text))
+              
                 ingredients.push({ amount: 0, unit: '', name: text });
             }
           });
         });
 
+        // Fließtext-Fallback
         if (ingredients.length === 0) {
           const nextP = $(h3).next('p');
           if (nextP.length) {
@@ -152,6 +186,7 @@ const scrapeHomebaking = async (url) => {
       }
     });
 
+    // Fallback: Wenn keine h3-Phasen → Hauptteig aus allen Zutaten
     if (dough_sections.length === 0) {
       const ingredients = [];
       recipeContent.find('li').each((_, li) => {
@@ -163,14 +198,23 @@ const scrapeHomebaking = async (url) => {
     }
 
     // 2. SCHRITTE – in DOM-Reihenfolge sammeln und sofort Phase zuordnen
+    // Das Rezept hat folgende Struktur:
+    //   <h2>Rezept</h2>
+    //   <p>Portionstext</p>
+    //   <h3>Biga:</h3>  <ul>Zutaten</ul>  <p>Schritt Biga...</p>
+    //   <h3>Einkornsauerteig:</h3>  <ul>Zutaten Stufe1</ul>  <p>Stufe 1:</p>  <p>Schritt...</p>
+    //                               <ul>Zutaten Stufe2</ul>  <p>Schritt...</p>
+    //   <h3>Hauptteig:</h3>  <ul>Zutaten</ul>
+    //   <h3>Herstellung:</h3>  <ul><li>Schritt1</li><li>Schritt2</li>...</ul>
+
     const SKIP_TEXT = /kommentar|newsletter|rezept drucken/i;
     const SKIP_EXACT = /^(?:Stufe\s+\d+[:.]?\s*|für ein Teiggewicht.*|Teiggewicht von.*)$/i;
 
     const hauptteigIdx = Math.max(0, dough_sections.findIndex(s => /hauptteig/i.test(s.name)));
     const isIngredientList = (t) => /^[A-ZÄÖÜ][a-zäöüß]+(?:teig|laib|biga|poolish|levain)?[,]\s/.test(t);
 
+    // Zuordnungs-Funktion: welche Phase bekommt diesen Schritt?
     let currentSectionIdx = 0;
-
     function assignStep(text) {
       const mentionedIdxs = dough_sections
         .map((sec, idx) => ({
@@ -190,22 +234,24 @@ const scrapeHomebaking = async (url) => {
           currentSectionIdx = newIdx;
         }
       }
-
-      // splitCompoundStep zerlegt "Aktion und X Stunden reifen lassen" in Einzel-Schritte
+      const { duration, type } = parseDurationAndType(text);
       if (dough_sections[currentSectionIdx]) {
-        splitCompoundStep(text).forEach(step => {
-          dough_sections[currentSectionIdx].steps.push(step);
-        });
+        dough_sections[currentSectionIdx].steps.push({ instruction: text, duration, type });
       }
     }
 
+    // h3-Phasen-Kontext verfolgen beim DOM-Durchlauf
     let inRecipeScope = false;
     let inHerstellung = false;
+    const rezeptH2 = recipeContent.find('h2').filter((_, h2) =>
+      $(h2).text().trim().toLowerCase() === 'rezept'
+    ).first();
 
     recipeContent.find('h2, h3, p, ul').each((_, el) => {
       const tag = el.tagName.toLowerCase();
       const rawText = $(el).text().trim();
 
+      // Scope-Steuerung
       if (tag === 'h2') {
         if (rawText.toLowerCase() === 'rezept') { inRecipeScope = true; return; }
         if (inRecipeScope) { inRecipeScope = false; }
@@ -217,6 +263,7 @@ const scrapeHomebaking = async (url) => {
         const h3Name = rawText.toLowerCase().replace(/:$/, '').trim();
         inHerstellung = ['herstellung', 'zubereitung'].includes(h3Name);
         if (!inHerstellung) {
+          // Bei h3 die erste Stufen-Phase dieser Gruppe suchen (Stufe 1)
           const matchIdx = dough_sections.findIndex(s =>
             new RegExp('\\b' + s.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(' Stufe')[0] + '\\b', 'i').test(rawText)
           );
@@ -229,17 +276,18 @@ const scrapeHomebaking = async (url) => {
 
       if (tag === 'p') {
         if ($(el).find('img').length) return;
-        // "Stufe N:" VOR Längenfilter prüfen – hat nur 8 Zeichen
+        // "Stufe N:" VOR Längenfilter prüfen – "Stufe 1:" hat nur 8 Zeichen
         const stufenM = rawText.match(/^Stufe\s+(\d+)[:.]?\s*$/i);
         if (stufenM) {
           const stufenNr = parseInt(stufenM[1]);
+          // Finde die Phase mit dieser Stufennummer im Kontext der aktuellen Phase-Gruppe
           const curBaseName = dough_sections[currentSectionIdx]?.name.replace(/\s+Stufe\s+\d+$/i, '');
           const nextStufenIdx = dough_sections.findIndex(s =>
             s.name.replace(/\s+Stufe\s+\d+$/i, '') === curBaseName &&
             new RegExp(`Stufe\\s+${stufenNr}$`, 'i').test(s.name)
           );
           if (nextStufenIdx >= 0) currentSectionIdx = nextStufenIdx;
-          return;
+          return; // "Stufe N:" selbst ist kein Schritt
         }
         if (rawText.length < 15) return;
         if (SKIP_TEXT.test(rawText)) return;
@@ -251,6 +299,7 @@ const scrapeHomebaking = async (url) => {
       }
 
       if (tag === 'ul' && inHerstellung) {
+        // Galerie-ul überspringen: wenn alle li Bilder enthalten
         const allLis = $(el).find('li');
         const hasOnlyImages = allLis.length > 0 && allLis.toArray().every(li =>
           $(li).find('img').length > 0 && $(li).text().trim().length < 5
@@ -258,9 +307,11 @@ const scrapeHomebaking = async (url) => {
         if (hasOnlyImages) return;
 
         $(el).find('li').each((_, li) => {
-          if ($(li).find('img').length) return;
+          if ($(li).find('img').length) return; // li mit Bild → immer überspringen
           const text = $(li).text().trim();
+          // HTML-Tag-artigen Text filtern (<img ... />, <figure ...>)
           if (/^<[a-z]/i.test(text)) return;
+          // Bild-URL-artigen Text filtern
           if (/\.(jpg|jpeg|png|webp|gif)\b/i.test(text) && text.includes('http')) return;
           if (text.length < 15 || SKIP_TEXT.test(text)) return;
           assignStep(text);
@@ -268,7 +319,7 @@ const scrapeHomebaking = async (url) => {
       }
     });
 
-    // Phasen ohne Schritte → Platzhalter
+    // Phasen ohne Schritte bekommen einen Platzhalter-Warten-Schritt
     dough_sections.forEach(sec => {
       if (sec.steps.length === 0) {
         const lower = sec.name.toLowerCase();
@@ -280,18 +331,20 @@ const scrapeHomebaking = async (url) => {
     });
 
     // 2b. PORTIONSGRÖSSE erkennen und auf 1 Stück skalieren
+    // Typisch: <h2>Rezept</h2> gefolgt von <p>für ein Teiggewicht von 1773g / 2 Stück je 886g</p>
     let portionCount = 1;
     recipeContent.find('h2').each((_, h2) => {
       if ($(h2).text().trim().toLowerCase() !== 'rezept') return;
       const portionText = $(h2).next('p').text().trim();
       portionCount = detectPortionCount(portionText);
     });
+    // Fallback: alle p-Tags nach h2 oder im Content durchsuchen
     if (portionCount === 1) {
       recipeContent.find('p').each((_, p) => {
         const t = $(p).text().trim();
         if (/für ein Teiggewicht/i.test(t) || /Teiggewicht von/i.test(t)) {
           portionCount = detectPortionCount(t);
-          return false;
+          return false; // break
         }
       });
     }
@@ -304,9 +357,11 @@ const scrapeHomebaking = async (url) => {
 
     // 3. BILD
     let imageUrl = '';
+    // Homebaking: Bilder unter /app/uploads/JJJJ/MM/
     const galleryImg = $('img[src*="/app/uploads/"]').first();
     if (galleryImg.length) {
       imageUrl = galleryImg.attr('src') || '';
+      // Thumbnail-Suffix entfernen (-780x520 etc.)
       imageUrl = imageUrl.replace(/-\d+x\d+(?=\.(jpg|jpeg|png|webp))/i, '');
     }
     if (!imageUrl) {
@@ -315,13 +370,14 @@ const scrapeHomebaking = async (url) => {
 
     const title = $('h1').first().text().trim() || $('title').text().replace(' – HOMEBAKING BLOG', '').trim();
 
+    // Beschreibung: Einleitungs-Absätze VOR dem "## Rezept"-h2
     let description = '';
     const h2Rezept = recipeContent.find('h2').filter((_, h2) => $(h2).text().trim().toLowerCase() === 'rezept').first();
     if (h2Rezept.length) {
       const descParts = [];
       h2Rezept.prevAll('p').each((_, p) => {
         const t = $(p).text().trim();
-        if (t.length > 30) descParts.unshift(t);
+        if (t.length > 30) descParts.unshift(t); // unshift = richtige Reihenfolge
       });
       description = descParts.join(' ').slice(0, 500).trim();
     }
