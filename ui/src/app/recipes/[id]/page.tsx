@@ -207,13 +207,13 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
         {/* HERO IMAGE mit Overlay-Buttons */}
-        <div className="relative h-96 overflow-hidden">
+        <div className="relative h-96 overflow-visible">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
             className="w-full h-full object-cover object-[center_65%]"
             alt={recipe.title}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-gray-800 from-[25%] via-white/0 dark:via-gray-800/0 via-[65%] to-black/15 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-gray-800 from-[5%] via-white/20 dark:via-gray-800/20 via-[35%] to-black/30 pointer-events-none" />
 
           {/* Zurück oben links */}
           <Link href="/" className="absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
@@ -271,7 +271,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="p-6 md:p-10">
-          <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8 -mt-16 relative z-10">{recipe.title}</h1>
+          <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8 -mt-28 relative z-10 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">{recipe.title}</h1>
 
           {recipe.description && <DescriptionBox description={recipe.description} />}
 
