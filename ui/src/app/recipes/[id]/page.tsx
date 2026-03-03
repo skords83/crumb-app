@@ -101,6 +101,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [targetTime, setTargetTime] = useState("");
   const [calculatedTimeline, setCalculatedTimeline] = useState<any[]>([]);
   const [showBakersPercent, setShowBakersPercent] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Einstellung laden
   useEffect(() => {
@@ -139,7 +140,8 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   // Löschen
   const handleDelete = async () => {
-    if (!window.confirm("Möchtest du dieses Rezept wirklich unwiderruflich löschen?")) return;
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setConfirmDelete(false);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'DELETE',
@@ -157,18 +159,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     recipe.dough_sections.forEach((section: any) => {
       section.ingredients?.forEach((ing: any) => {
         const rawName = (ing.name || "").trim();
-        if (!rawName) return;
-        // Zwischenprodukte herausfiltern: Vorteige die im Rezept selbst hergestellt werden
-        const nameLower = rawName.toLowerCase();
-        const isIntermediate =
-          // "reifer Sauerteig", "reifer Biga", "gereifter Poolish" etc.
-          /\b(?:reife[rs]?|gereifter?)\b/i.test(rawName) ||
-          // Phasenname der selbst in dough_sections vorkommt
-          recipe.dough_sections.some((sec: any) =>
-            sec.name.toLowerCase() !== section.name.toLowerCase() &&
-            nameLower.includes(sec.name.toLowerCase())
-          );
-        if (isIntermediate) return;
+        if (!rawName ||
+            rawName.toLowerCase().includes("sauerteigstufe") ||
+            rawName.toLowerCase() === "vorteig" ||
+            rawName.toLowerCase() === "quellstück") return;
         const key = rawName.toLowerCase();
         const parsed = parseFloat(String(ing.amount || '0').replace(',', '.'));
         const num = isNaN(parsed) ? 0 : parsed;
@@ -202,22 +196,36 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
             <button
               onClick={toggleBakersPercent}
               title="Bäckerprozente ein/ausblenden"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+              className={`p-2.5 rounded-xl border font-bold transition-all text-sm ${
                 showBakersPercent
                   ? 'bg-[#8B4513] text-white border-[#8B4513]'
-                  : 'bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:text-[#8B4513]'
+                  : 'text-gray-400 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:text-[#8B4513]'
               }`}
             >
-              <span>Bäckerprozente</span>
+              %
             </button>
             <button onClick={() => router.push(`/recipes/${id}/edit`)}
               className="p-2.5 text-gray-400 dark:text-gray-400 hover:text-[#8B4513] border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
               <Icons.Edit3 size={18} />
             </button>
-            <button onClick={handleDelete}
-              className="p-2.5 text-red-300 dark:text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
-              <Icons.Trash2 size={18} />
-            </button>
+            {confirmDelete ? (
+              <div className="flex gap-1 items-center">
+                <span className="text-xs text-red-500 dark:text-red-400 font-medium">Löschen?</span>
+                <button onClick={handleDelete}
+                  className="p-2.5 bg-red-500 text-white border border-red-500 rounded-xl transition-all hover:bg-red-600">
+                  <Icons.Trash2 size={18} />
+                </button>
+                <button onClick={() => setConfirmDelete(false)}
+                  className="p-2.5 text-gray-400 border border-gray-100 dark:border-gray-700 rounded-xl transition-all hover:text-gray-600">
+                  <Icons.X size={18} />
+                </button>
+              </div>
+            ) : (
+              <button onClick={handleDelete}
+                className="p-2.5 text-red-300 dark:text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
+                <Icons.Trash2 size={18} />
+              </button>
+            )}
           </div>
         </div>
 
