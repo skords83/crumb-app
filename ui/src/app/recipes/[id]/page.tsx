@@ -204,10 +204,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-  <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700"> {/* PADDING HINZUGEFÜGT */}
+      <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
-    {/* HERO IMAGE als eigene abgerundete Box */}
-    <div className="relative h-72 w-full rounded-[1.5rem] overflow-hidden"> {/* RUNDUNG HIER DEFINIERT */}
+        {/* HERO IMAGE mit Overlay-Buttons */}
+        <div className="relative h-96 w-full rounded-[1.5rem] overflow-hidden">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
             className="w-full h-full object-cover object-[center_65%]"
