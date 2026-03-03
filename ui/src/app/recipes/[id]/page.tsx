@@ -101,6 +101,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [targetTime, setTargetTime] = useState("");
   const [calculatedTimeline, setCalculatedTimeline] = useState<any[]>([]);
   const [showBakersPercent, setShowBakersPercent] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   // Einstellung laden
   useEffect(() => {
@@ -139,7 +140,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   // Löschen
   const handleDelete = async () => {
-    if (!window.confirm("Möchtest du dieses Rezept wirklich unwiderruflich löschen?")) return;
+    setShowMenu(false);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'DELETE',
@@ -158,7 +159,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       section.ingredients?.forEach((ing: any) => {
         const rawName = (ing.name || "").trim();
         if (!rawName) return;
-        // Zwischenprodukte herausfiltern: Vorteige die im Rezept selbst hergestellt werden
         const nameLower = rawName.toLowerCase();
         const isIntermediate =
           /\b(?:reife[rs]?|gereifter?)\b/i.test(rawName) ||
@@ -200,22 +200,49 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
             <button
               onClick={toggleBakersPercent}
               title="Bäckerprozente ein/ausblenden"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+              className={`p-2.5 rounded-xl border font-bold transition-all text-sm ${
                 showBakersPercent
                   ? 'bg-[#8B4513] text-white border-[#8B4513]'
-                  : 'bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:text-[#8B4513]'
+                  : 'text-gray-400 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:text-[#8B4513]'
               }`}
             >
-              <span>Bäckerprozente</span>
+              %
             </button>
             <button onClick={() => router.push(`/recipes/${id}/edit`)}
               className="p-2.5 text-gray-400 dark:text-gray-400 hover:text-[#8B4513] border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
               <Icons.Edit3 size={18} />
             </button>
-            <button onClick={handleDelete}
-              className="p-2.5 text-red-300 dark:text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
-              <Icons.Trash2 size={18} />
-            </button>
+            {/* 3-Punkte Menü */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMenu(v => !v)}
+                className="p-2.5 text-gray-400 dark:text-gray-400 hover:text-gray-600 border border-gray-100 dark:border-gray-700 rounded-xl transition-all"
+              >
+                <Icons.MoreVertical size={18} />
+              </button>
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[180px]">
+                    <button
+                      onClick={handleDelete}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-semibold transition-colors"
+                    >
+                      <span>Rezept löschen</span>
+                      <Icons.Trash2 size={16} />
+                    </button>
+                    <div className="border-t border-gray-100 dark:border-gray-700" />
+                    <button
+                      onClick={() => setShowMenu(false)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <span>Abbrechen</span>
+                      <Icons.X size={16} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
