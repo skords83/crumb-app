@@ -18,6 +18,7 @@ const PHASE_PATTERNS = [
   { re: /teig$/i,       is_parallel: true  },
   { re: /stück$/i,      is_parallel: true  },
   { re: /sauerteig/i,   is_parallel: true  },
+  { re: /sauer$/i,      is_parallel: true  },   // Grundsauer, Weizensauer, etc.
   { re: /poolish/i,     is_parallel: true  },
   { re: /levain/i,      is_parallel: true  },
   { re: /autolyse/i,    is_parallel: false },
@@ -63,7 +64,7 @@ const scrapeHomebaking = async (url) => {
       const NON_PHASE = ['herstellung', 'zubereitung', 'zutaten', 'kommentar', 'newsletter'];
       if (NON_PHASE.some(s => nameLower.includes(s))) return;
       const isPhase = PHASE_PATTERNS.some(p => p.re.test(nameLower)) ||
-        ['sauerteig', 'vorteig', 'hauptteig', 'brotaroma', 'teig', 'biga'].some(k => nameLower.includes(k));
+        ['sauerteig', 'vorteig', 'hauptteig', 'brotaroma', 'teig', 'biga', 'sauer'].some(k => nameLower.includes(k));
       if (!isPhase) return;
 
       const cleanName = name.replace(/:$/, '').trim();
