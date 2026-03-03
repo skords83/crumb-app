@@ -204,7 +204,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-  <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 p-4"> {/* PADDING HINZUGEFÜGT */}
+  <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700"> {/* PADDING HINZUGEFÜGT */}
 
     {/* HERO IMAGE als eigene abgerundete Box */}
     <div className="relative h-72 w-full rounded-[1.5rem] overflow-hidden"> {/* RUNDUNG HIER DEFINIERT */}
