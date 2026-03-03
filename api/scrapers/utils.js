@@ -112,7 +112,7 @@ function _tokenize(text) {
       continue;
     }
 
-    segments.push({ text: s, type: _classify(s) });
+    segments.push({ text: sentence.trim(), type: _classify(s) });
   }
   return segments;
 }
