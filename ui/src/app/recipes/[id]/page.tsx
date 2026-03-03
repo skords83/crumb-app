@@ -210,10 +210,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         <div className="relative h-72 overflow-hidden">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover object-[center_75%]"
             alt={recipe.title}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/15 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-gray-800 via-transparent to-black/15 pointer-events-none" />
 
           {/* Zurück oben links */}
           <Link href="/" className="absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
@@ -271,7 +271,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="p-6 md:p-10">
-          <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8">{recipe.title}</h1>
+          <h1 className="text-3xl md:text-4xl font-black text-[#2D2D2D] dark:text-gray-100 tracking-tight mb-8 -mt-10 relative z-10">{recipe.title}</h1>
 
           {recipe.description && <DescriptionBox description={recipe.description} />}
 
