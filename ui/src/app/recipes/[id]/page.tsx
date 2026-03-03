@@ -102,6 +102,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [calculatedTimeline, setCalculatedTimeline] = useState<any[]>([]);
   const [showBakersPercent, setShowBakersPercent] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
 
   // Einstellung laden
   useEffect(() => {
@@ -123,7 +124,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
     })
       .then(res => res.json())
-      .then(data => { setRecipe(data); setIsLoading(false); })
+      .then(data => { setRecipe(data); setIsFavorite(!!data.is_favorite); setIsLoading(false); })
       .catch(() => setIsLoading(false));
   }, [id]);
 
@@ -137,6 +138,22 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     const hydration = calcHydration(recipe.dough_sections);
     return { steps, duration, hydration };
   }, [recipe]);
+
+  // Favorit togglen
+  const toggleFavorite = async () => {
+    const next = !isFavorite;
+    setIsFavorite(next);
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
+        body: JSON.stringify({ is_favorite: next }),
+      });
+    } catch (err) { setIsFavorite(!next); console.error(err); }
+  };
 
   // Löschen
   const handleDelete = async () => {
@@ -183,6 +200,24 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     }));
   }, [recipe]);
 
+  // Labels (identisch mit RecipeCard)
+  const getRecipeLabels = () => {
+    const c = JSON.stringify(recipe || {}).toLowerCase();
+    const labels: {label: string; color: string}[] = [];
+    const hatSauerteig = c.includes('sauerteig') || c.includes('anstellgut') || c.includes('lievito madre');
+    const hatHefe = c.includes('hefe');
+    if (hatSauerteig && hatHefe) labels.push({ label: 'Gemischt', color: 'bg-purple-50 text-purple-600 border-purple-100' });
+    else if (hatSauerteig) labels.push({ label: 'Sauerteig', color: 'bg-orange-50 text-orange-600 border-orange-100' });
+    else if (hatHefe) labels.push({ label: 'Hefe', color: 'bg-blue-50 text-blue-600 border-blue-100' });
+    const hatVollkorn = c.includes('vollkorn') || c.includes('schrot');
+    const hatTyp = ['405','550','610','630','812','997','1050','1150','1200','1370'].some(t => c.includes(t));
+    if (hatVollkorn && !hatTyp) labels.push({ label: 'Reines Vollkorn', color: 'bg-emerald-100 text-emerald-900 border-emerald-200' });
+    else if (hatVollkorn) labels.push({ label: 'Vollkorn-Anteil', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' });
+    if (c.includes('roggen')) labels.push({ label: 'Roggen', color: 'bg-amber-100 text-amber-900 border-amber-200' });
+    if (labels.length === 0) labels.push({ label: 'Brot', color: 'bg-gray-50 text-gray-500 border-gray-100' });
+    return labels;
+  };
+
   if (isLoading) return <RecipeDetailSkeleton />;
   if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
 
@@ -190,69 +225,86 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
       <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
-        {/* HEADER ACTIONS */}
-        <div className="flex justify-between items-center p-6 pb-2">
-          <Link href="/" className="bg-gray-50 dark:bg-gray-700/50 p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-100 dark:border-gray-700 transition-colors">
-            <Icons.ChevronLeft size={20} className="text-gray-600 dark:text-gray-300" />
+        {/* HERO IMAGE mit Overlay-Buttons */}
+        <div className="relative h-72 overflow-hidden">
+          <img
+            src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
+            className="w-full h-full object-cover"
+            alt={recipe.title}
+          />
+          {/* Gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/15 pointer-events-none" />
+
+          {/* Zurück oben links */}
+          <Link href="/" className="absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
+            <Icons.ChevronLeft size={20} className="text-gray-700 dark:text-gray-200" />
           </Link>
-          <div className="flex gap-2 items-center">
-            {/* Bäckerprozente Toggle */}
+
+          {/* Herz + Menü oben rechts */}
+          <div className="absolute top-4 right-4 z-10 flex gap-2">
+            {/* Favorit */}
             <button
-              onClick={toggleBakersPercent}
-              title="Bäckerprozente ein/ausblenden"
-              className={`p-2.5 rounded-xl border font-bold transition-all text-sm ${
-                showBakersPercent
-                  ? 'bg-[#8B4513] text-white border-[#8B4513]'
-                  : 'text-gray-400 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:text-[#8B4513]'
-              }`}
+              onClick={toggleFavorite}
+              className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-all hover:scale-110"
             >
-              %
+              <Icons.Heart size={18} className={isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-500 dark:text-gray-400'} />
             </button>
-            <button onClick={() => router.push(`/recipes/${id}/edit`)}
-              className="p-2.5 text-gray-400 dark:text-gray-400 hover:text-[#8B4513] border border-gray-100 dark:border-gray-700 rounded-xl transition-all">
-              <Icons.Edit3 size={18} />
-            </button>
+
             {/* 3-Punkte Menü */}
             <div className="relative">
               <button
                 onClick={() => setShowMenu(v => !v)}
-                className="p-2.5 text-gray-400 dark:text-gray-400 hover:text-gray-600 border border-gray-100 dark:border-gray-700 rounded-xl transition-all"
+                className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors"
               >
-                <Icons.MoreVertical size={18} />
+                <Icons.MoreVertical size={18} className="text-gray-700 dark:text-gray-200" />
               </button>
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[180px]">
+                  <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[200px]">
+                    {/* Bäckerprozente */}
+                    <button
+                      onClick={() => { toggleBakersPercent(); setShowMenu(false); }}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icons.Percent size={15} className={showBakersPercent ? 'text-[#8B4513]' : 'text-gray-400'} />
+                        <span className="text-sm font-medium">Bäckerprozente</span>
+                      </div>
+                      {showBakersPercent && <div className="w-2 h-2 rounded-full bg-[#8B4513]" />}
+                    </button>
+                    {/* Bearbeiten */}
+                    <button
+                      onClick={() => { router.push(`/recipes/${id}/edit`); setShowMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <Icons.Edit3 size={15} className="text-gray-400" />
+                      <span className="text-sm font-medium">Bearbeiten</span>
+                    </button>
+                    {/* Drucken/Export (Platzhalter) */}
+                    <button
+                      disabled
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-300 dark:text-gray-600 border-b border-gray-100 dark:border-gray-700 cursor-not-allowed"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icons.Printer size={15} />
+                        <span className="text-sm">Drucken / Export</span>
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-2 py-0.5 rounded">bald</span>
+                    </button>
+                    {/* Löschen */}
                     <button
                       onClick={handleDelete}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-semibold transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors font-semibold"
                     >
-                      <span>Rezept löschen</span>
-                      <Icons.Trash2 size={16} />
-                    </button>
-                    <div className="border-t border-gray-100 dark:border-gray-700" />
-                    <button
-                      onClick={() => setShowMenu(false)}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                    >
-                      <span>Abbrechen</span>
-                      <Icons.X size={16} />
+                      <Icons.Trash2 size={15} />
+                      <span className="text-sm">Rezept löschen</span>
                     </button>
                   </div>
                 </>
               )}
             </div>
           </div>
-        </div>
-
-        {/* HERO IMAGE */}
-        <div className="px-6">
-          <img
-            src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
-            className="w-full h-[350px] object-cover rounded-[1.5rem] shadow-md border border-gray-100 dark:border-gray-700"
-            alt={recipe.title}
-          />
         </div>
 
         <div className="p-6 md:p-10">
