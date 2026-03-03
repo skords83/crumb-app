@@ -227,6 +227,7 @@ const scrapeHomebaking = async (url) => {
     // h3-Phasen-Kontext verfolgen beim DOM-Durchlauf
     let inRecipeScope = false;
     let inHerstellung = false;
+    let herstellungDone = false; // true nach letztem ul in Herstellung → kein Blogtext mehr
     const rezeptH2 = recipeContent.find('h2').filter((_, h2) =>
       $(h2).text().trim().toLowerCase() === 'rezept'
     ).first();
@@ -245,7 +246,10 @@ const scrapeHomebaking = async (url) => {
 
       if (tag === 'h3') {
         const h3Name = rawText.toLowerCase().replace(/:$/, '').trim();
+        const wasHerstellung = inHerstellung;
         inHerstellung = ['herstellung', 'zubereitung'].includes(h3Name);
+        // Wenn wir Herstellung verlassen → ab jetzt kein Blogtext mehr
+        if (wasHerstellung && !inHerstellung) herstellungDone = true;
         if (!inHerstellung) {
           // Bei h3 die erste Stufen-Phase dieser Gruppe suchen (Stufe 1)
           const matchIdx = dough_sections.findIndex(s =>
@@ -259,6 +263,7 @@ const scrapeHomebaking = async (url) => {
       }
 
       if (tag === 'p') {
+        if (herstellungDone) return; // Blogtext nach Herstellung ignorieren
         if ($(el).find('img').length) return;
         // "Stufe N:" VOR Längenfilter prüfen – "Stufe 1:" hat nur 8 Zeichen
         const stufenM = rawText.match(/^Stufe\s+(\d+)[:.]?\s*$/i);
@@ -300,6 +305,7 @@ const scrapeHomebaking = async (url) => {
           if (text.length < 15 || SKIP_TEXT.test(text)) return;
           assignStep(text);
         });
+        herstellungDone = true; // nach erstem gültigen Herstellungs-ul → Scope schließen
       }
     });
 
