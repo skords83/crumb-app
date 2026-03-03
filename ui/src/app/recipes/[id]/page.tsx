@@ -157,10 +157,18 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     recipe.dough_sections.forEach((section: any) => {
       section.ingredients?.forEach((ing: any) => {
         const rawName = (ing.name || "").trim();
-        if (!rawName ||
-            rawName.toLowerCase().includes("sauerteigstufe") ||
-            rawName.toLowerCase() === "vorteig" ||
-            rawName.toLowerCase() === "quellstück") return;
+        if (!rawName) return;
+        // Zwischenprodukte herausfiltern: Vorteige die im Rezept selbst hergestellt werden
+        const nameLower = rawName.toLowerCase();
+        const isIntermediate =
+          // "reifer Sauerteig", "reifer Biga", "gereifter Poolish" etc.
+          /\b(?:reife[rs]?|gereifter?)\b/i.test(rawName) ||
+          // Phasenname der selbst in dough_sections vorkommt
+          recipe.dough_sections.some((sec: any) =>
+            sec.name.toLowerCase() !== section.name.toLowerCase() &&
+            nameLower.includes(sec.name.toLowerCase())
+          );
+        if (isIntermediate) return;
         const key = rawName.toLowerCase();
         const parsed = parseFloat(String(ing.amount || '0').replace(',', '.'));
         const num = isNaN(parsed) ? 0 : parsed;
