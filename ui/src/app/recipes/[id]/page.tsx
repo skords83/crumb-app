@@ -104,10 +104,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [showMenu, setShowMenu] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
 
-  // Einstellung laden
+  // Einstellung laden + auf Änderungen aus Navigation reagieren
   useEffect(() => {
-    const settings = loadSettings();
-    setShowBakersPercent(!!settings.showBakersPercent);
+    setShowBakersPercent(!!loadSettings().showBakersPercent);
+    const onStorage = () => setShowBakersPercent(!!loadSettings().showBakersPercent);
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const toggleBakersPercent = () => {
@@ -146,10 +148,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
         body: JSON.stringify({ is_favorite: next }),
       });
     } catch (err) { setIsFavorite(!next); console.error(err); }
@@ -200,24 +199,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     }));
   }, [recipe]);
 
-  // Labels (identisch mit RecipeCard)
-  const getRecipeLabels = () => {
-    const c = JSON.stringify(recipe || {}).toLowerCase();
-    const labels: {label: string; color: string}[] = [];
-    const hatSauerteig = c.includes('sauerteig') || c.includes('anstellgut') || c.includes('lievito madre');
-    const hatHefe = c.includes('hefe');
-    if (hatSauerteig && hatHefe) labels.push({ label: 'Gemischt', color: 'bg-purple-50 text-purple-600 border-purple-100' });
-    else if (hatSauerteig) labels.push({ label: 'Sauerteig', color: 'bg-orange-50 text-orange-600 border-orange-100' });
-    else if (hatHefe) labels.push({ label: 'Hefe', color: 'bg-blue-50 text-blue-600 border-blue-100' });
-    const hatVollkorn = c.includes('vollkorn') || c.includes('schrot');
-    const hatTyp = ['405','550','610','630','812','997','1050','1150','1200','1370'].some(t => c.includes(t));
-    if (hatVollkorn && !hatTyp) labels.push({ label: 'Reines Vollkorn', color: 'bg-emerald-100 text-emerald-900 border-emerald-200' });
-    else if (hatVollkorn) labels.push({ label: 'Vollkorn-Anteil', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' });
-    if (c.includes('roggen')) labels.push({ label: 'Roggen', color: 'bg-amber-100 text-amber-900 border-amber-200' });
-    if (labels.length === 0) labels.push({ label: 'Brot', color: 'bg-gray-50 text-gray-500 border-gray-100' });
-    return labels;
-  };
-
   if (isLoading) return <RecipeDetailSkeleton />;
   if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
 
@@ -232,7 +213,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
             className="w-full h-full object-cover"
             alt={recipe.title}
           />
-          {/* Gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/15 pointer-events-none" />
 
           {/* Zurück oben links */}
@@ -242,15 +222,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
           {/* Herz + Menü oben rechts */}
           <div className="absolute top-4 right-4 z-10 flex gap-2">
-            {/* Favorit */}
             <button
               onClick={toggleFavorite}
-              className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-all hover:scale-110"
+              className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm transition-all hover:scale-110"
             >
               <Icons.Heart size={18} className={isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-500 dark:text-gray-400'} />
             </button>
-
-            {/* 3-Punkte Menü */}
             <div className="relative">
               <button
                 onClick={() => setShowMenu(v => !v)}
@@ -262,18 +239,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
                   <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[200px]">
-                    {/* Bäckerprozente */}
-                    <button
-                      onClick={() => { toggleBakersPercent(); setShowMenu(false); }}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Icons.Percent size={15} className={showBakersPercent ? 'text-[#8B4513]' : 'text-gray-400'} />
-                        <span className="text-sm font-medium">Bäckerprozente</span>
-                      </div>
-                      {showBakersPercent && <div className="w-2 h-2 rounded-full bg-[#8B4513]" />}
-                    </button>
-                    {/* Bearbeiten */}
                     <button
                       onClick={() => { router.push(`/recipes/${id}/edit`); setShowMenu(false); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
@@ -281,7 +246,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                       <Icons.Edit3 size={15} className="text-gray-400" />
                       <span className="text-sm font-medium">Bearbeiten</span>
                     </button>
-                    {/* Drucken/Export (Platzhalter) */}
                     <button
                       disabled
                       className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-300 dark:text-gray-600 border-b border-gray-100 dark:border-gray-700 cursor-not-allowed"
@@ -292,13 +256,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                       </div>
                       <span className="text-[9px] font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-2 py-0.5 rounded">bald</span>
                     </button>
-                    {/* Löschen */}
                     <button
                       onClick={handleDelete}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors font-semibold"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
                       <Icons.Trash2 size={15} />
-                      <span className="text-sm">Rezept löschen</span>
+                      <span className="text-sm font-semibold">Rezept löschen</span>
                     </button>
                   </div>
                 </>

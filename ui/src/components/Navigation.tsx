@@ -4,33 +4,46 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
+
+const SETTINGS_KEY = 'crumb_settings';
+const loadSettings = () => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return {}; } };
+const saveSettings = (s: Record<string, any>) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 
 export default function Navigation() {
   const pathname = usePathname();
   const isAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(pathname);
-  
   if (isAuthPage) return null;
-  
+
   const { logout, user } = useAuth();
   const { canInstall, install } = usePWAInstall();
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showBakersPercent, setShowBakersPercent] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     const isDark = document.documentElement.classList.contains('dark');
     setDarkMode(isDark);
+    setShowBakersPercent(!!loadSettings().showBakersPercent);
   }, []);
 
   const toggleTheme = () => {
     setDarkMode(!darkMode);
     document.documentElement.classList.toggle('dark');
     localStorage.setItem('theme', !darkMode ? 'dark' : 'light');
+  };
+
+  const toggleBakersPercent = () => {
+    const next = !showBakersPercent;
+    setShowBakersPercent(next);
+    saveSettings({ ...loadSettings(), showBakersPercent: next });
+    // page.tsx lauscht auf storage-Events und reagiert live
+    window.dispatchEvent(new StorageEvent('storage', { key: SETTINGS_KEY }));
   };
 
   useEffect(() => {
@@ -40,11 +53,8 @@ export default function Navigation() {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
         });
         const data = await res.json();
-        const active = Array.isArray(data) && data.some((r: any) => r.planned_at !== null);
-        setHasActivePlan(active);
-      } catch (err) {
-        console.error("Nav-Check Fehler:", err);
-      }
+        setHasActivePlan(Array.isArray(data) && data.some((r: any) => r.planned_at !== null));
+      } catch (err) { console.error("Nav-Check Fehler:", err); }
     };
     checkActivePlans();
     const interval = setInterval(checkActivePlans, 30000);
@@ -56,9 +66,7 @@ export default function Navigation() {
     { name: 'Import', href: '/new', icon: FileDown },
   ];
   const allNavItems = [...navItems];
-  if (hasActivePlan) {
-    allNavItems.push({ name: 'Backplan', href: '/backplan', icon: Clock });
-  }
+  if (hasActivePlan) allNavItems.push({ name: 'Backplan', href: '/backplan', icon: Clock });
 
   return (
     <>
@@ -83,24 +91,16 @@ export default function Navigation() {
                 Backvorgang läuft
               </div>
             )}
-
-            {/* PWA Install Button (Desktop) */}
             {canInstall && (
-              <button
-                onClick={install}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold"
-              >
-                <Download size={14} />
-                App installieren
+              <button onClick={install} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold">
+                <Download size={14} /> App installieren
               </button>
             )}
 
             {/* User Menu */}
             <div className="relative">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              >
+              <button onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors">
                 <div className="w-6 h-6 rounded-full bg-[#8B7355] flex items-center justify-center text-white text-xs font-bold">
                   {user?.username ? user.username.slice(0, 2).toUpperCase() : '?'}
                 </div>
@@ -109,11 +109,22 @@ export default function Navigation() {
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50">
                     <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
                       <p className="text-sm font-bold text-gray-900 dark:text-white">{user?.username || 'Benutzer'}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
                     </div>
+                    {/* Bäckerprozente Toggle */}
+                    <button onClick={toggleBakersPercent}
+                      className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center gap-3">
+                        <Percent size={15} className={showBakersPercent ? 'text-[#8B7355]' : 'text-gray-400'} />
+                        Bäckerprozente
+                      </div>
+                      <div className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${showBakersPercent ? 'bg-[#8B7355]' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showBakersPercent ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </div>
+                    </button>
                     <Link href="/profile" onClick={() => setShowUserMenu(false)}
                       className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                       <KeyRound size={16} /> Passwort ändern
@@ -177,11 +188,8 @@ export default function Navigation() {
               </Link>
             );
           })}
-
-          {/* PWA Install Button (Mobile) */}
           {canInstall && (
-            <button onClick={install}
-              className="flex flex-col items-center gap-1 text-[#8B7355] px-4">
+            <button onClick={install} className="flex flex-col items-center gap-1 text-[#8B7355] px-4">
               <Download size={22} strokeWidth={2} />
               <span className="text-[10px] font-bold uppercase tracking-tighter">Installieren</span>
             </button>
