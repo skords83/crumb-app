@@ -4,30 +4,13 @@ import React from 'react';
 import Link from 'next/link';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
 import { calcTotalDuration } from "@/lib/backplan-utils";
+import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 
 interface RecipeCardProps {
   recipe: any;
   onToggleFavorite: (id: number, status: boolean) => void;
   onPlan: (recipe: any) => void;
 }
-
-const FLOUR_KEYWORDS = ['mehl', 'schrot', 'flocken', 'kleie', 'grieß', 'stärke', 'dinkel', 'roggen', 'weizen', 'emmer', 'einkorn', 'kamut', 'hirse', 'buchweizen', 'hafer'];
-const WATER_KEYWORDS = ['wasser', 'milch'];
-
-const calcHydration = (sections: any[]): number | null => {
-  let flour = 0, water = 0;
-  sections?.forEach(sec => {
-    sec.ingredients?.forEach((ing: any) => {
-      const name = (ing.name || '').toLowerCase();
-      const amount = parseFloat(String(ing.amount || '0').replace(',', '.'));
-      if (isNaN(amount) || amount === 0) return;
-      if (FLOUR_KEYWORDS.some(k => name.includes(k))) flour += amount;
-      if (WATER_KEYWORDS.some(k => name.includes(k))) water += amount;
-    });
-  });
-  if (flour === 0) return null;
-  return Math.round((water / flour) * 100);
-};
 
 const getStats = (recipe: any) => {
   const totalMinutes = calcTotalDuration(recipe.dough_sections || []);

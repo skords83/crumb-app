@@ -5,19 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Icons from 'lucide-react';
 import { calculateBackplan, formatTimeManual, calcTotalDuration } from '@/lib/backplan-utils';
+import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 
 // ── BÄCKERPROZENTE ──────────────────────────────────────────
-const FLOUR_KEYWORDS = [
-  'mehl', 'schrot', 'flocken', 'kleie', 'grieß', 'stärke',
-  'dinkel', 'roggen', 'weizen', 'emmer', 'einkorn', 'kamut',
-  'hirse', 'buchweizen', 'hafer', 'biga', 'poolish',
-];
 const isFlour = (name: string) => {
   const lower = name.toLowerCase();
   return FLOUR_KEYWORDS.some(kw => lower.includes(kw));
 };
+
 const calcFlourBase = (ingredients: any[]): number => {
   return ingredients
     .filter(ing => isFlour(ing.name || ''))
@@ -26,6 +23,7 @@ const calcFlourBase = (ingredients: any[]): number => {
       return sum + (isNaN(parsed) ? 0 : parsed);
     }, 0);
 };
+
 const toBakersPercent = (amount: number, flourBase: number): string | null => {
   if (!flourBase || flourBase === 0) return null;
   const pct = (amount / flourBase) * 100;
@@ -61,23 +59,6 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}min`;
 }
 
-// ── HYDRATION ───────────────────────────────────────────────
-const WATER_KEYWORDS = ['wasser', 'milch'];
-const calcHydration = (sections: any[]): number | null => {
-  let flour = 0, water = 0;
-  sections?.forEach(sec => {
-    sec.ingredients?.forEach((ing: any) => {
-      const name = (ing.name || '').toLowerCase();
-      const amount = parseFloat(String(ing.amount || '0').replace(',', '.'));
-      if (isNaN(amount) || amount === 0) return;
-      if (FLOUR_KEYWORDS.some(k => name.includes(k))) flour += amount;
-      if (WATER_KEYWORDS.some(k => name.includes(k))) water += amount;
-    });
-  });
-  if (flour === 0) return null;
-  return Math.round((water / flour) * 100);
-};
-
 // ── EINSTELLUNGEN (localStorage) ────────────────────────────
 const SETTINGS_KEY = 'crumb_settings';
 const loadSettings = () => {
@@ -104,7 +85,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [showMenu, setShowMenu] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
 
-  // Einstellung laden + auf Änderungen aus Navigation reagieren
   useEffect(() => {
     setShowBakersPercent(!!loadSettings().showBakersPercent);
     const onStorage = () => setShowBakersPercent(!!loadSettings().showBakersPercent);
@@ -119,7 +99,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     saveSettings({ ...settings, showBakersPercent: next });
   };
 
-  // Rezept laden
   useEffect(() => {
     if (!id) return;
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
@@ -130,7 +109,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       .catch(() => setIsLoading(false));
   }, [id]);
 
-  // Statistiken
   const stats = useMemo(() => {
     if (!recipe?.dough_sections) return { steps: 0, duration: 0, hydration: null };
     const steps = recipe.dough_sections.reduce(
@@ -141,7 +119,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     return { steps, duration, hydration };
   }, [recipe]);
 
-  // Favorit togglen
   const toggleFavorite = async () => {
     const next = !isFavorite;
     setIsFavorite(next);
@@ -154,7 +131,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     } catch (err) { setIsFavorite(!next); console.error(err); }
   };
 
-  // Löschen
   const handleDelete = async () => {
     setShowMenu(false);
     try {
@@ -167,7 +143,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     } catch (err) { console.error(err); alert("Server nicht erreichbar."); }
   };
 
-  // Gesamt-Zutaten aggregieren
   const totalIngredients = useMemo(() => {
     if (!recipe?.dough_sections) return [];
     const totals: Record<string, { name: string; amount: number; unit: string }> = {};
@@ -206,7 +181,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
       <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
-        {/* HERO IMAGE mit Overlay-Buttons */}
+        {/* HERO IMAGE */}
         <div className="relative h-96 w-full rounded-[1.5rem] overflow-hidden">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
@@ -215,12 +190,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/65 from-[0%] via-black/25 via-[45%] to-black/15 pointer-events-none" />
 
-          {/* Zurück oben links */}
           <Link href="/" className="absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
             <Icons.ChevronLeft size={20} className="text-gray-700 dark:text-gray-200" />
           </Link>
 
-          {/* Herz + Menü oben rechts */}
           <div className="absolute top-4 right-4 z-10 flex gap-2">
             <button
               onClick={toggleFavorite}
@@ -268,7 +241,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               )}
             </div>
           </div>
-          {/* Titel über dem Bild, unten verankert */}
+
           <div className="absolute bottom-0 left-0 right-0 z-10 px-6 pb-6 pt-20">
             <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">{recipe.title}</h1>
           </div>
@@ -349,7 +322,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           {/* PHASEN LOOP */}
           <div className="space-y-12">
             {recipe.dough_sections?.map((section: any, sIdx: number) => {
-              // Mehlbasis pro Phase berechnen
               const flourBase = calcFlourBase(section.ingredients || []);
 
               return (
@@ -370,7 +342,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                     <div className="space-y-2">
                       <span className="text-[10px] font-bold uppercase text-gray-300 dark:text-gray-500 tracking-widest block mb-2">Zutaten</span>
 
-                      {/* Tabellen-Header wenn Bäckerprozente aktiv */}
                       {showBakersPercent && flourBase > 0 && (
                         <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600 pb-1 border-b border-gray-100 dark:border-gray-700">
                           <span className="flex-1">Zutat</span>
