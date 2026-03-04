@@ -48,7 +48,7 @@ function extractFirstDuration(text) {
 }
 
 function isBakingStep(text) {
-  return /\bbacken\b/i.test(text) && !/^\s*(?:den\s+)?backofen\b/i.test(text.trim());
+  return /\b(?:backen|ausbacken|anbacken)\b/i.test(text) && !/^\s*(?:den\s+)?backofen\b/i.test(text.trim());
 }
 
 function stepDuration(text, type) {
