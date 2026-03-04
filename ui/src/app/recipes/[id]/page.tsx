@@ -243,20 +243,22 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="absolute bottom-0 left-0 right-0 z-10 px-6 pb-6 pt-20">
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">{recipe.title}</h1>
-            {(() => {
-              const url = recipe.original_source_url || recipe.source_url;
-              try {
-                return url ? (
-                  <a href={url} target="_blank" rel="noopener noreferrer"
-                    className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium text-white/50 hover:text-white/80 transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
-                    {new URL(url).hostname.replace('www.', '')}
-                    <Icons.ExternalLink size={9} />
-                  </a>
-                ) : null;
-              } catch { return null; }
-            })()}
+            <div className="flex items-end justify-between">
+              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">{recipe.title}</h1>
+              {(() => {
+                const url = recipe.original_source_url || recipe.source_url;
+                try {
+                  return url ? (
+                    <a href={url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[10px] font-medium text-white/50 hover:text-white/80 transition-colors whitespace-nowrap ml-4 mb-0.5 flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}>
+                      {new URL(url).hostname.replace('www.', '')}
+                      <Icons.ExternalLink size={9} />
+                    </a>
+                  ) : null;
+                } catch { return null; }
+              })()}
+            </div>
           </div>
         </div>
 
