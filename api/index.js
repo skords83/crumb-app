@@ -240,6 +240,7 @@ app.post('/api/import', async (req, res) => {
     console.log("🔍 Starte Scraping für:", url);
     const recipeData = await scraper(url);
     if (!recipeData) return res.status(500).json({ error: "Konnte keine Daten extrahieren" });
+    if (!recipeData.source_url) recipeData.source_url = url;
     if (recipeData.image_url && recipeData.image_url.startsWith('http')) {
       try {
         const response = await axios.get(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
