@@ -1,4 +1,4 @@
-const scrapePloetzblog = require('./ploetzblog');
+const { scrapePloetz: scrapePloetzblog } = require('./ploetzblog');
 const scrapeBrotdoc    = require('./brotdoc');
 const scrapeMarcelPaa  = require('./marcelpaa');
 const scrapeHomebaking = require('./homebaking');
