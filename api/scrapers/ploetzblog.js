@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { sumAllDurations, isBakingStep } = require('./utils');
+const { sumAllDurations, isBakingStep, splitCompoundStep } = require('./utils');
 
 const scrapePloetz = async (url) => {
   try {
@@ -363,13 +363,11 @@ const scrapePloetz = async (url) => {
         if (repeated) {
           repeated.forEach(s => {
             currentSection.steps.push(s);
-            // normKey der generierten Sub-Steps speichern, damit die
-            // entsprechenden Original-HTML-Steps danach gefiltert werden
             const subNormKey = `${currentSection.name}::norm::${normalizeStepText(s.instruction)}`;
             seenSteps.add(subNormKey);
           });
         } else {
-          currentSection.steps.push({ type, duration, instruction: text });
+          splitCompoundStep(text).forEach(step => currentSection.steps.push(step));
         }
       }
     });

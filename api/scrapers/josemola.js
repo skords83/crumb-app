@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep } = require('./utils');
+const { isBakingStep, splitCompoundStep } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function evalFraction(amount) {
@@ -15,6 +15,7 @@ const PHASE_PATTERNS = [
   { re: /teig$/i,       is_parallel: true  },
   { re: /stück$/i,      is_parallel: true  },
   { re: /sauerteig/i,   is_parallel: true  },
+  { re: /sauer$/i,      is_parallel: true  },   // Grundsauer, Weizensauer, etc.
   { re: /poolish/i,     is_parallel: true  },
   { re: /levain/i,      is_parallel: true  },
   { re: /autolyse/i,    is_parallel: false },
@@ -30,29 +31,6 @@ const detectIsParallel = (name) => {
   for (const p of PHASE_PATTERNS) if (p.re.test(name)) return p.is_parallel;
   return false;
 };
-
-const WAIT_KEYWORDS = ['reifen', 'ruhen', 'gehen', 'gare', 'quellen', 'rasten', 'kühlschrank', 'autolyse', 'abkühlen', 'entspannen', 'abgedeckt'];
-
-function parseDurationAndType(text) {
-  const lower = text.toLowerCase();
-  let type = 'Aktion';
-  if (isBakingStep(text)) {
-    type = 'Backen';
-  } else if (WAIT_KEYWORDS.some(kw => lower.includes(kw)) ||
-    (extractFirstDurationLocal(lower) > 25 && !lower.includes('kneten') &&
-     !lower.includes('mischen') && !lower.includes('backofen'))) {
-    type = 'Warten';
-  }
-  return { duration: stepDuration(text, type) || 10, type };
-}
-function extractFirstDurationLocal(lower) {
-  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
-  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
-  let t = 0;
-  if (h) t += Math.round(parseFloat(h[1].replace(',','.')) * 60);
-  if (m) t += parseInt(m[1]);
-  return t;
-}
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
 const scrapeJoSemola = async (url) => {
@@ -186,8 +164,7 @@ const scrapeJoSemola = async (url) => {
       dough_sections.forEach((sec, idx) => {
         if (text.toLowerCase().includes(sec.name.toLowerCase()) && sec.name !== 'Hauptteig') currentIdx = idx;
       });
-      const { duration, type } = parseDurationAndType(text);
-      dough_sections[currentIdx]?.steps.push({ instruction: text, duration, type });
+      splitCompoundStep(text).forEach(step => dough_sections[currentIdx]?.steps.push(step));
     });
 
     // Phasen ohne Schritte: Platzhalter

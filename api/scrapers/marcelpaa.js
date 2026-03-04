@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep, scaleSectionsToOnePortion } = require('./utils');
+const { isBakingStep, splitCompoundStep, scaleSectionsToOnePortion } = require('./utils');
 
 // ── PHASE-ERKENNUNG (gleiche Logik wie index.js) ─────────────
 const PHASE_PATTERNS = [
@@ -8,6 +8,7 @@ const PHASE_PATTERNS = [
   { re: /teig$/i,       is_parallel: true  },
   { re: /stück$/i,      is_parallel: true  },
   { re: /sauerteig/i,   is_parallel: true  },
+  { re: /sauer$/i,      is_parallel: true  },   // Grundsauer, Weizensauer, etc.
   { re: /poolish/i,     is_parallel: true  },
   { re: /levain/i,      is_parallel: true  },
   { re: /autolyse/i,    is_parallel: false },
@@ -31,88 +32,6 @@ function evalFraction(amount) {
     return parseFloat(a) / parseFloat(b);
   }
   return parseFloat(clean) || 0;
-}
-
-const WAIT_KEYWORDS = [
-  'reifen', 'ruhen', 'gehen', 'gare', 'stockgare', 'stückgare',
-  'abkühlen', 'quellen', 'rasten', 'entspannen', 'kühlschrank', 'autolyse'
-];
-
-function parseDurationAndType(text) {
-  const lower = text.toLowerCase();
-
-  // Type-Erkennung
-  let type = 'Aktion';
-  if (isBakingStep(text)) {
-    type = 'Backen';
-  } else if (
-    WAIT_KEYWORDS.some(kw => lower.includes(kw)) ||
-    (extractFirstDurationLocal(lower) > 25 &&
-      !lower.includes('kneten') && !lower.includes('mischen') &&
-      !lower.includes('vorheizen') && !lower.includes('backofen'))
-  ) {
-    type = 'Warten';
-  }
-
-  // Duration: bei Backschritten alle Zeiten summieren, sonst erste Zeitangabe
-  const duration = stepDuration(text, type) || 10;
-  return { duration, type };
-}
-
-// Erste Zeitangabe (nur für Warten-Schwellwert-Check)
-function extractFirstDurationLocal(lower) {
-  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
-  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
-  let t = 0;
-  if (h) t += Math.round(parseFloat(h[1].replace(',', '.')) * 60);
-  if (m) t += parseInt(m[1]);
-  return t;
-}
-
-
-// ── SCHRITT-SPLITTING ─────────────────────────────────────────
-// Marcel Paa verbindet oft Aktion + Wartezeit in einem Satz:
-// "...dehnen und falten. Danach den Teig wieder abdecken und weitere 30 Min. ruhen lassen."
-// Wir splitten an ". Danach/Anschliessend/Dann/Nun" wenn der zweite Teil eine Zeitangabe
-// UND ein Wartewort enthält.
-const SPLIT_AFTER = /\.\s*(Danach|Anschliessend|Dann|Nun)\b/;
-const HAS_WAIT_AND_TIME = (text) => {
-  const lower = text.toLowerCase();
-  const hasTime = /\d+\s*(?:min|std|stunden?|h\b)/i.test(text);
-  const hasWait = ['ruhen lassen', 'aufgehen lassen', 'gehen lassen', 'quellen lassen',
-    'reifen lassen', 'abkühlen', 'kühl stellen', 'stehen lassen'].some(kw => lower.includes(kw));
-  return hasTime && hasWait;
-};
-
-function splitStepIfNeeded(text) {
-  const match = text.match(SPLIT_AFTER);
-  if (!match) return null;
-
-  const splitIdx = text.indexOf(match[0]);
-  const part1 = text.slice(0, splitIdx + 1).trim(); // bis einschl. Punkt
-  const part2 = text.slice(splitIdx + match[0].length - match[1].length).trim(); // ab Schlüsselwort
-
-  // Nur splitten wenn der zweite Teil wirklich eine Wartezeit ist
-  if (part1.length > 10 && HAS_WAIT_AND_TIME(part2)) {
-    return [part1, part2];
-  }
-  return null;
-}
-
-function processInstruction(text) {
-  // FIX: "Tipp: ..." Schritte komplett ignorieren
-  if (/^Tipp[:. ]/i.test(text.trim())) return [];
-
-  const parts = splitStepIfNeeded(text);
-  if (parts) {
-    return parts.map(p => {
-      const { duration, type } = parseDurationAndType(p);
-      return { instruction: p, duration, type };
-    });
-  }
-
-  const { duration, type } = parseDurationAndType(text);
-  return [{ instruction: text, duration, type }];
 }
 
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
@@ -176,8 +95,8 @@ const scrapeMarcelPaa = async (url) => {
         $(group).find('.wprm-recipe-instruction-text').each((_, el) => {
           const text = $(el).text().trim();
           if (!text) return;
-          const steps = processInstruction(text);
-          dough_sections[sectionIdx].steps.push(...steps);
+          if (/^Tipp[:. ]/i.test(text)) return;
+          splitCompoundStep(text).forEach(step => dough_sections[sectionIdx].steps.push(step));
         });
       });
     } else {
@@ -186,6 +105,7 @@ const scrapeMarcelPaa = async (url) => {
       $('.wprm-recipe-instruction-text').each((_, el) => {
         const text = $(el).text().trim();
         if (!text) return;
+        if (/^Tipp[:. ]/i.test(text)) return;
 
         // Sektionswechsel anhand von Erwähnungen
         dough_sections.forEach((sec, idx) => {
@@ -194,7 +114,7 @@ const scrapeMarcelPaa = async (url) => {
           }
         });
 
-        const steps = processInstruction(text);
+        const steps = splitCompoundStep(text);
         dough_sections[currentSectionIdx].steps.push(...steps);
 
         // Nach langer Fermentation zur nächsten parallelen Phase vorspringen

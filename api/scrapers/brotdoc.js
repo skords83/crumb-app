@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { stepDuration, isBakingStep } = require('./utils');
+const { stepDuration, isBakingStep, splitCompoundStep } = require('./utils');
 
 const scrapeBrotdoc = async (url) => {
   try {
@@ -42,28 +42,10 @@ const scrapeBrotdoc = async (url) => {
     let currentSectionIdx = 0;
     const instructions = $('.wprm-recipe-instruction-text');
     
-    const waitKeywords = [
-      'reifen', 'ruhen', 'gehen', 'gare', 'stockgare', 'stückgare', 
-      'abkühlen', 'quellen', 'rasten', 'entspannen', 'kühlschrank', 'autolyse'
-    ];
-
     instructions.each((i, el) => {
       const text = $(el).text().trim();
       const lowerText = text.toLowerCase();
       
-      // --- ZEIT & TYP ---
-      let calculatedType = 'Aktion';
-      if (isBakingStep(text)) {
-        calculatedType = 'Backen';
-      } else if (
-        waitKeywords.some(kw => lowerText.includes(kw)) ||
-        (extractFirstDurationLocal(lowerText) > 25 && !lowerText.includes('kneten') && !lowerText.includes('mischen') && !lowerText.includes('vorheizen') && !lowerText.includes('backofen'))
-      ) {
-        calculatedType = 'Warten';
-      }
-      const duration = stepDuration(text, calculatedType) || 10;
-      const isLongFermentation = calculatedType === 'Warten' && duration >= 120;
-
       // --- SEKTIONS-LOGIK ---
       dough_sections.forEach((sec, idx) => {
         if (lowerText.includes(sec.name.toLowerCase()) && idx > currentSectionIdx) {
@@ -72,20 +54,11 @@ const scrapeBrotdoc = async (url) => {
       });
 
       if (dough_sections[currentSectionIdx]) {
-        dough_sections[currentSectionIdx].steps.push({
-          instruction: text,
-          duration: duration,
-          type: calculatedType
+        splitCompoundStep(text).forEach(step => {
+          dough_sections[currentSectionIdx].steps.push(step);
         });
       }
 
-      // --- PHASEN-VORSCHUB ---
-      if (isLongFermentation && currentSectionIdx < dough_sections.length - 1) {
-          const currentSection = dough_sections[currentSectionIdx];
-          if (currentSection.is_parallel) {
-              currentSectionIdx++;
-          }
-      }
     });
 
     // --- VERBESSERTER BILD-IMPORT MIT PRIO AUF LARGE ---
@@ -138,15 +111,6 @@ const scrapeBrotdoc = async (url) => {
     return null;
   }
 };
-
-function extractFirstDurationLocal(lower) {
-  const h = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
-  const m = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
-  let t = 0;
-  if (h) t += Math.round(parseFloat(h[1].replace(',', '.')) * 60);
-  if (m) t += parseInt(m[1]);
-  return t;
-}
 
 function evalFraction(amount) {
   if (!amount) return 0;

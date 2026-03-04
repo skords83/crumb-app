@@ -3,7 +3,7 @@ const cheerio = require('cheerio');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { sumAllDurations, extractFirstDuration, isBakingStep } = require('./utils');
+const { sumAllDurations, extractFirstDuration, isBakingStep, splitCompoundStep } = require('./utils');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function htmlToText(str) {
@@ -205,6 +205,7 @@ const PHASE_PATTERNS = [
   { re: /teig$/i,       is_parallel: true  },
   { re: /stück$/i,      is_parallel: true  },
   { re: /sauerteig/i,   is_parallel: true  },
+  { re: /sauer$/i,      is_parallel: true  },   // Grundsauer, Weizensauer, etc.
   { re: /poolish/i,     is_parallel: true  },
   { re: /levain/i,      is_parallel: true  },
   { re: /autolyse/i,    is_parallel: false },
@@ -377,10 +378,9 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
     console.log('⚠️ Keine Phasen – Fallback Hauptteig');
     const expanded = [];
     allSteps.forEach(s => {
-      const duration = extractDuration(s.instruction) || 5;
-      const step = { instruction: s.instruction, duration, type: detectStepType(s.instruction) };
-      const rep = parseRepeatingActions(step.instruction, step.duration);
-      rep ? expanded.push(...rep) : expanded.push(step);
+      const rep = parseRepeatingActions(s.instruction, extractDuration(s.instruction) || 5);
+      if (rep) { expanded.push(...rep); }
+      else { splitCompoundStep(s.instruction).forEach(step => expanded.push(step)); }
     });
     dough_sections = [{
       name: 'Hauptteig', is_parallel: false, ingredients: recipeData.ingredients || [],
@@ -400,10 +400,9 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
       allSteps
         .filter(s => s.pos > phase.charPos && s.pos < nextPos)
         .forEach(s => {
-          const duration = extractDuration(s.instruction) || 5;
-          const step = { instruction: s.instruction, duration, type: detectStepType(s.instruction) };
-          const rep = parseRepeatingActions(step.instruction, step.duration);
-          rep ? expandedSteps.push(...rep) : expandedSteps.push(step);
+          const rep = parseRepeatingActions(s.instruction, extractDuration(s.instruction) || 5);
+          if (rep) { expandedSteps.push(...rep); }
+          else { splitCompoundStep(s.instruction).forEach(step => expandedSteps.push(step)); }
         });
       dough_sections.push({ name: phase.name, ingredients: phaseIngredients, steps: expandedSteps });
     }
