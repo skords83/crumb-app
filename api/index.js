@@ -76,6 +76,7 @@ const initDB = async () => {
       description TEXT,
       image_url TEXT,
       source_url TEXT,
+      original_source_url TEXT,
       ingredients JSONB,
       dough_sections JSONB,
       steps JSONB,
@@ -86,12 +87,18 @@ const initDB = async () => {
 
   const createIndex = `CREATE INDEX IF NOT EXISTS idx_recipes_user_id ON recipes(user_id);`;
 
+  const migrateRecipesTable = `
+    ALTER TABLE recipes
+      ADD COLUMN IF NOT EXISTS source_url TEXT,
+      ADD COLUMN IF NOT EXISTS original_source_url TEXT;`;
+
   let retries = 10;
   while (retries > 0) {
     try {
       await pool.query(createUsersTable);
       await pool.query(createRecipesTable);
       await pool.query(createIndex);
+      await pool.query(migrateRecipesTable);
       console.log("✅ Datenbank bereit");
       return;
     } catch (err) {
@@ -259,7 +266,6 @@ app.post('/api/import/html', async (req, res) => {
     const recipeData = await parseHtmlImport(html, filename);
     if (!recipeData) return res.status(500).json({ error: 'Konnte HTML nicht parsen' });
 
-    // Bild herunterladen
     if (recipeData.image_url && recipeData.image_url.startsWith('http') && !recipeData.image_url.startsWith('data:')) {
       try {
         const response = await axios.get(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
@@ -296,11 +302,13 @@ app.get('/api/recipes/:id', async (req, res) => {
 });
 
 app.post('/api/recipes', async (req, res) => {
-  const { title, description, image_url, ingredients, dough_sections, steps } = req.body;
+  const { title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO recipes (user_id, title, description, image_url, ingredients, dough_sections, steps) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`,
-      [req.user.userId, title, description, image_url, JSON.stringify(ingredients || []), JSON.stringify(dough_sections || []), JSON.stringify(steps || [])]
+      `INSERT INTO recipes (user_id, title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;`,
+      [req.user.userId, title, description, image_url, source_url || '', original_source_url || '',
+       JSON.stringify(ingredients || []), JSON.stringify(dough_sections || []), JSON.stringify(steps || [])]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Datenbankfehler" }); }
@@ -308,11 +316,13 @@ app.post('/api/recipes', async (req, res) => {
 
 app.put('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, image_url, ingredients, steps, description, dough_sections } = req.body;
+  const { title, image_url, ingredients, steps, description, dough_sections, source_url, original_source_url } = req.body;
   try {
     const result = await pool.query(
-      `UPDATE recipes SET title=$1, image_url=$2, ingredients=$3, steps=$4, description=$5, dough_sections=$6 WHERE id=$7 AND user_id=$8 RETURNING *;`,
-      [title, image_url, JSON.stringify(ingredients), JSON.stringify(steps), description, JSON.stringify(dough_sections), id, req.user.userId]
+      `UPDATE recipes SET title=$1, image_url=$2, ingredients=$3, steps=$4, description=$5, dough_sections=$6, source_url=$7, original_source_url=$8
+       WHERE id=$9 AND user_id=$10 RETURNING *;`,
+      [title, image_url, JSON.stringify(ingredients), JSON.stringify(steps), description,
+       JSON.stringify(dough_sections), source_url || '', original_source_url || '', id, req.user.userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
