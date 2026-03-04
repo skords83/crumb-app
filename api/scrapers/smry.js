@@ -222,6 +222,7 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
     description: '',
     image_url: '',
     source_url: filename || 'uploaded.html',
+    original_source_url: '',
     ingredients: [],
     steps: [],
     dough_sections: []
@@ -266,6 +267,7 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
       const ploetzMatch = ogUrl.match(/https?:\/\/(?:smry\.ai\/)?(.+ploetzblog\.de.+)/);
       if (ploetzMatch) {
         const ploetzUrl = ploetzMatch[1].startsWith('http') ? ploetzMatch[1] : 'https://' + ploetzMatch[1];
+        recipeData.original_source_url = ploetzUrl;
         try {
           const ploetzRes = await axios.get(ploetzUrl, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
           const $p = cheerio.load(ploetzRes.data);
@@ -418,6 +420,7 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
     description: recipeData.description || '',
     image_url: recipeData.image_url || '',
     source_url: recipeData.source_url || '',
+    original_source_url: recipeData.original_source_url || '',
     ingredients: recipeData.ingredients || [],
     steps: recipeData.steps || [],
     dough_sections: recipeData.dough_sections || []

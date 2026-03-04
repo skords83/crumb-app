@@ -85,9 +85,21 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       </div>
 
       <div className="px-6 pb-6 pt-2 flex-1 flex flex-col">
-        <h3 className="text-xl font-bold mt-4 mb-4 text-gray-800 dark:text-gray-100 tracking-tight break-words hyphens-auto line-clamp-2 min-h-[3.5rem]">
-  {recipe.title}
-</h3>
+<div className="flex items-baseline justify-between gap-2 mt-4 mb-4">
+  <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 tracking-tight break-words hyphens-auto line-clamp-2 min-h-[3.5rem]">
+    {recipe.title}
+  </h3>
+  {(() => {
+    const url = recipe.original_source_url || recipe.source_url;
+    try {
+      return url ? (
+        <span className="text-[10px] text-gray-300 dark:text-gray-600 whitespace-nowrap flex-shrink-0 font-medium">
+          {new URL(url).hostname.replace('www.', '')}
+        </span>
+      ) : null;
+    } catch { return null; }
+  })()}
+</div>
 
         <div className="bg-[#F9F9F9] dark:bg-gray-900/40 rounded-2xl p-3 mb-6">
           <div className="flex flex-col gap-3 text-sm text-gray-500 dark:text-gray-400">
