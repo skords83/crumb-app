@@ -7,7 +7,7 @@ export const FLOUR_KEYWORDS = [
 export const WATER_KEYWORDS = ['wasser', 'milch'];
 
 // Zutaten die auf Vorteig/Sauerteig-Phasen verweisen – nicht doppelt zählen
-const PREFERM_SKIP_RE = /\b(sauerteig|sauer|biga|poolish|levain|vorteig|starter|anstellgut)\b/i;
+const PREFERM_SKIP_RE = /\b(sauerteig|biga|poolish|levain|vorteig|starter|anstellgut)\b|sauer$/i;
 
 export const calcHydration = (sections: any[]): number | null => {
   let flour = 0, water = 0;
