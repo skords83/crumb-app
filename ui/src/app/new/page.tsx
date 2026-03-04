@@ -35,6 +35,8 @@ export default function NewRecipePage() {
   const [title, setTitle] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [description, setDescription] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [originalSourceUrl, setOriginalSourceUrl] = useState("");
   const [doughSections, setDoughSections] = useState<any[]>([
     { 
       name: "Hauptteig", 
@@ -48,6 +50,8 @@ export default function NewRecipePage() {
     setTitle(data.title || "");
     setImageUrl(data.image_url || "");
     setDescription(data.description || "");
+    setSourceUrl(data.source_url || "");
+    setOriginalSourceUrl(data.original_source_url || "");
 
     const raw = Array.isArray(data.dough_sections) && data.dough_sections.length > 0
       ? data.dough_sections
@@ -129,7 +133,15 @@ export default function NewRecipePage() {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-        body: JSON.stringify({ title, image_url: imageUrl, description, dough_sections: doughSections, steps: [] }),
+        body: JSON.stringify({
+          title,
+          image_url: imageUrl,
+          description,
+          source_url: sourceUrl,
+          original_source_url: originalSourceUrl,
+          dough_sections: doughSections,
+          steps: []
+        }),
       });
       if (res.ok) { router.push('/'); router.refresh(); }
       else alert("Fehler beim Speichern");
