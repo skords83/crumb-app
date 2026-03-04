@@ -385,10 +385,8 @@ const scrapeHomebaking = async (url) => {
     };
 
     console.log(`✅ Homebaking: "${title}" – ${result.dough_sections.length} Phasen, ${portionCount} Stück (auf 1 skaliert)`);
+    console.log(JSON.stringify(dough_sections, null, 2));  // ← VOR return
     return result;
-
-console.log(JSON.stringify(dough_sections, null, 2));
-return result;
 
   } catch (error) {
     console.error('Homebaking Scraper Error:', error.message);
