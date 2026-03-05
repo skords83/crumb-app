@@ -105,15 +105,16 @@ export default function NewRecipePage() {
   };
 
   // --- URL IMPORT ---
-  const handleAutoImport = async () => {
-    if (!importUrl) return;
-    setIsImporting(true);
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-        body: JSON.stringify({ url: importUrl }),
-      });
+const handleAutoImport = async () => {
+  if (!importUrl) return;
+  const normalizedUrl = importUrl.startsWith('http') ? importUrl : `https://${importUrl}`;
+  setIsImporting(true);
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+      body: JSON.stringify({ url: normalizedUrl }),
+    });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       applyImportData(data);
