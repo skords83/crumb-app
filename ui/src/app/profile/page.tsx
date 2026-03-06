@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, ArrowLeft, CheckCircle, KeyRound } from 'lucide-react';
+import { Loader2, ArrowLeft, CheckCircle, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function ProfilePage() {
@@ -15,6 +15,10 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +68,44 @@ export default function ProfilePage() {
     }
   };
 
+  const PasswordInput = ({
+    value,
+    onChange,
+    show,
+    onToggle,
+    placeholder = '••••••••',
+    required = false,
+    minLength,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    show: boolean;
+    onToggle: () => void;
+    placeholder?: string;
+    required?: boolean;
+    minLength?: number;
+  }) => (
+    <div className="relative">
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
+        placeholder={placeholder}
+        required={required}
+        minLength={minLength}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#8B7355] dark:text-gray-500 dark:hover:text-[#8B7355] transition-colors"
+        tabIndex={-1}
+      >
+        {show ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] p-4 md:p-8">
       <div className="max-w-2xl mx-auto">
@@ -107,12 +149,11 @@ export default function ProfilePage() {
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                 Aktuelles Passwort
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
-                placeholder="••••••••"
+                show={showCurrent}
+                onToggle={() => setShowCurrent((v) => !v)}
                 required
               />
             </div>
@@ -121,12 +162,11 @@ export default function ProfilePage() {
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                 Neues Passwort
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
-                placeholder="••••••••"
+                show={showNew}
+                onToggle={() => setShowNew((v) => !v)}
                 required
                 minLength={6}
               />
@@ -139,12 +179,11 @@ export default function ProfilePage() {
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                 Neues Passwort bestätigen
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors"
-                placeholder="••••••••"
+                show={showConfirm}
+                onToggle={() => setShowConfirm((v) => !v)}
                 required
                 minLength={6}
               />
