@@ -15,7 +15,7 @@ export interface BackplanStep {
   start: Date;
   end: Date;
   isParallel?: boolean;
-  ingredients?: any[];
+  ingredients: any[];
 }
 
 export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
@@ -95,40 +95,12 @@ export function formatTimeManual(date: Date): string {
 }
 
 // Berechnet Gesamtdauer via Dependency Graph – verwendbar in PlanModal, RecipeCard, RecipeDetail
+// Nutzt calculateBackplan intern statt den Algorithmus zu duplizieren.
 export function calcTotalDuration(sections: any[]): number {
   if (!sections?.length) return 0;
-  const phaseNames = sections.map((s: any) => s.name as string);
-  const deps: Record<string, string[]> = {};
-  sections.forEach((section: any) => {
-    deps[section.name] = [];
-    (section.ingredients || []).forEach((ing: any) => {
-      const ingName = (ing.name || '').toLowerCase();
-      phaseNames.forEach((otherName: string) => {
-        if (otherName !== section.name && ingName.includes(otherName.toLowerCase()))
-          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
-      });
-    });
-  });
-  const sectionMap = Object.fromEntries(sections.map((s: any) => [s.name, s]));
-  const endO: Record<string, number> = {};
-  const startO: Record<string, number> = {};
-  function calcEnd(name: string, vis = new Set<string>()): number {
-    if (name in endO) return endO[name];
-    if (vis.has(name)) return 0;
-    vis.add(name);
-    const deps2 = phaseNames.filter((n: string) => deps[n]?.includes(name));
-    endO[name] = deps2.length === 0 ? 0
-      : Math.min(...deps2.map((d: string) => calcStart(d, new Set(vis))));
-    return endO[name];
-  }
-  function calcStart(name: string, vis = new Set<string>()): number {
-    if (name in startO) return startO[name];
-    const dur = (sectionMap[name]?.steps || []).reduce(
-      (s: number, st: any) => s + (parseInt(st.duration) || 0), 0
-    );
-    startO[name] = calcEnd(name, vis) + dur;
-    return startO[name];
-  }
-  phaseNames.forEach((n: string) => calcStart(n));
-  return phaseNames.length ? Math.max(...phaseNames.map((n: string) => startO[n] || 0)) : 0;
+  // Beliebiger Referenzzeitpunkt – nur die Differenzen zählen
+  const ref = new Date(0);
+  const timeline = calculateBackplan(ref, sections);
+  if (!timeline.length) return 0;
+  return Math.round((ref.getTime() - timeline[0].start.getTime()) / 60000);
 }

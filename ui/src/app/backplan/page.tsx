@@ -1,16 +1,21 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Clock, ChevronLeft, ChevronRight, Check, Sun, AlignLeft, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import { BackplanSkeleton } from "@/components/LoadingSkeletons";
-import { calcTotalDuration } from '@/lib/backplan-utils';
+import { calculateBackplan } from '@/lib/backplan-utils';
 
 export default function BackplanPage() {
   const [plannedRecipes, setPlannedRecipes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('crumb_completed_steps');
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    } catch { return new Set<string>(); }
+  });
   const [activeTab, setActiveTab] = useState<'schritte' | 'zeitplan'>('schritte');
   const [activeRecipeIdx, setActiveRecipeIdx] = useState(0);
   const activeCardRef = useRef<HTMLDivElement>(null);
@@ -19,6 +24,12 @@ export default function BackplanPage() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('crumb_completed_steps', JSON.stringify([...completedSteps]));
+    } catch { /* ignore */ }
+  }, [completedSteps]);
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
@@ -78,57 +89,7 @@ export default function BackplanPage() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const calculateStepTimeline = (targetDateTime: string, sections: any[]) => {
-    if (!sections || sections.length === 0) return [];
-    const target = parseLocalDate(targetDateTime);
-    const timeline: any[] = [];
-    const phaseNames = sections.map((s: any) => s.name as string);
-    const deps: Record<string, string[]> = {};
-    sections.forEach((section: any) => {
-      deps[section.name] = [];
-      (section.ingredients || []).forEach((ing: any) => {
-        const ingName = (ing.name || '').toLowerCase();
-        phaseNames.forEach(otherName => {
-          if (otherName !== section.name && ingName.includes(otherName.toLowerCase())) {
-            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
-          }
-        });
-      });
-    });
-    const sectionMap: Record<string, any> = Object.fromEntries(sections.map((s: any) => [s.name, s]));
-    const endOffsets: Record<string, number> = {};
-    const startOffsets: Record<string, number> = {};
-    function calcEndOffset(name: string, visited = new Set<string>()): number {
-      if (name in endOffsets) return endOffsets[name];
-      if (visited.has(name)) return 0;
-      visited.add(name);
-      const dependents = phaseNames.filter(n => deps[n]?.includes(name));
-      endOffsets[name] = dependents.length === 0 ? 0 : Math.min(...dependents.map(d => calcStartOffset(d, new Set(visited))));
-      return endOffsets[name];
-    }
-    function calcStartOffset(name: string, visited = new Set<string>()): number {
-      if (name in startOffsets) return startOffsets[name];
-      const end = calcEndOffset(name, visited);
-      const dur = (sectionMap[name]?.steps || []).reduce((sum: number, s: any) => sum + (parseInt(s.duration) || 0), 0);
-      startOffsets[name] = end + dur;
-      return startOffsets[name];
-    }
-    phaseNames.forEach(name => calcStartOffset(name));
-    sections.forEach((section: any) => {
-      const offset = startOffsets[section.name] || 0;
-      const sectionStart = new Date(target.getTime() - offset * 60000);
-      let stepMoment = new Date(sectionStart.getTime());
-      (section.steps || []).forEach((step: any) => {
-        const duration = parseInt(step.duration) || 0;
-        const stepStart = new Date(stepMoment.getTime());
-        const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
-        timeline.push({ phase: section.name, ingredients: section.ingredients || [], instruction: step.instruction, type: step.type || 'Aktion', duration, start: stepStart, end: stepEnd, isParallel: (endOffsets[section.name] || 0) > 0 });
-        stepMoment = stepEnd;
-      });
-    });
-    timeline.sort((a, b) => a.start.getTime() - b.start.getTime());
-    return timeline;
-  };
+
 
   const toggleStep = (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
@@ -152,11 +113,31 @@ export default function BackplanPage() {
     } catch { alert("Fehler"); }
   };
 
-  const getRecipeProgress = (r: any) => {
-    const tl = calculateStepTimeline(r.planned_at, r.dough_sections);
-    const done = tl.filter((s, i) => completedSteps.has(`${r.id}-${i}`) || currentTime > s.end).length;
-    return tl.length > 0 ? done / tl.length : 0;
-  };
+  // Memoized timeline for the active recipe
+  const recipe = plannedRecipes[activeRecipeIdx];
+  const sections = recipe?.dough_sections || [];
+
+  const timeline = useMemo(
+    () => recipe ? calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recipe?.id, recipe?.planned_at]
+  );
+
+  // Progress map recalculates only once per minute (not every second)
+  const currentMinute = Math.floor(currentTime.getTime() / 60000);
+  const progressMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    const now = new Date();
+    plannedRecipes.forEach(r => {
+      const tl = calculateBackplan(parseLocalDate(r.planned_at), r.dough_sections);
+      const done = tl.filter((s, i) => completedSteps.has(`${r.id}-${i}`) || now > s.end).length;
+      map[r.id] = tl.length > 0 ? done / tl.length : 0;
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannedRecipes, completedSteps, currentMinute]);
+
+  const getRecipeProgress = (r: any) => progressMap[r.id] ?? 0;
 
   if (isLoading) return <BackplanSkeleton />;
 
@@ -175,12 +156,10 @@ export default function BackplanPage() {
     </div>
   );
 
-  const recipe = plannedRecipes[activeRecipeIdx];
-  const timeline = calculateStepTimeline(recipe.planned_at, recipe.dough_sections);
-  const sections = recipe.dough_sections || [];
   const totalDuration = timeline.reduce((s, t) => s + t.duration, 0);
   const activeIndex = timeline.findIndex((s, i) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime >= s.start && currentTime < s.end);
-  const nextIndex = timeline.findIndex((s, i) => i > activeIndex && !completedSteps.has(`${recipe.id}-${i}`) && currentTime < s.start);
+  // nextIndex: first non-completed future step — robust when activeIndex === -1 (between steps)
+  const nextIndex = timeline.findIndex((s, i) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime < s.start);
   const activeStep = activeIndex >= 0 ? timeline[activeIndex] : null;
   const remainingSeconds = activeStep ? Math.max(0, Math.floor((activeStep.end.getTime() - currentTime.getTime()) / 1000)) : 0;
   const stepProgress = activeStep ? Math.min(1, (currentTime.getTime() - activeStep.start.getTime()) / (activeStep.duration * 60000)) : 0;

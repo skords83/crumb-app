@@ -59,6 +59,92 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}min`;
 }
 
+// ── MENGE SKALIEREN & FORMATIEREN ───────────────────────────
+function scaleAmount(rawAmount: string | number, multiplier: number): string {
+  if (multiplier === 1) return String(rawAmount);
+  const parsed = parseFloat(String(rawAmount || '0').replace(',', '.'));
+  if (isNaN(parsed) || parsed === 0) return String(rawAmount);
+  const scaled = parsed * multiplier;
+  // Schöne Darstellung: keine unnötigen Dezimalstellen
+  const result = Math.round(scaled * 10) / 10;
+  return result % 1 === 0 ? String(result) : String(result).replace('.', ',');
+}
+
+// ── DELETE CONFIRMATION MODAL ────────────────────────────────
+function DeleteConfirmModal({ recipeName, onConfirm, onCancel }: {
+  recipeName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 max-w-sm w-full">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+            <Icons.Trash2 size={18} className="text-red-500" />
+          </div>
+          <div>
+            <h3 className="font-black text-gray-900 dark:text-gray-100 text-sm">Rezept löschen?</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-700 dark:text-gray-300 mb-6 bg-gray-50 dark:bg-gray-700/50 rounded-xl px-4 py-3 font-medium">
+          „{recipeName}"
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Abbrechen
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-black transition-colors"
+          >
+            Löschen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SKALIERUNGS-STEPPER ──────────────────────────────────────
+const MULTIPLIER_STEPS = [0.5, 1, 1.5, 2, 3];
+
+function ScalerBar({ multiplier, onChange }: { multiplier: number; onChange: (v: number) => void }) {
+  return (
+    <div className="mb-10 flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+        <Icons.Scale size={13} />
+        Menge
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {MULTIPLIER_STEPS.map(step => (
+          <button
+            key={step}
+            onClick={() => onChange(step)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+              multiplier === step
+                ? 'bg-[#8B4513] text-white shadow-sm'
+                : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 hover:border-[#8B4513]/40 dark:hover:border-[#C4A484]/40'
+            }`}
+          >
+            {step === 1 ? '× 1' : `× ${step}`}
+          </button>
+        ))}
+      </div>
+      {multiplier !== 1 && (
+        <span className="ml-auto text-[10px] font-bold text-[#8B4513] dark:text-[#C4A484] bg-[#8B4513]/10 dark:bg-[#8B4513]/20 px-2 py-1 rounded-lg">
+          {multiplier > 1 ? `${multiplier}× Menge` : `½ Menge`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── EINSTELLUNGEN (localStorage) ────────────────────────────
 const SETTINGS_KEY = 'crumb_settings';
 const loadSettings = () => {
@@ -84,6 +170,8 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [showBakersPercent, setShowBakersPercent] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [multiplier, setMultiplier] = useState(1);
 
   useEffect(() => {
     setShowBakersPercent(!!loadSettings().showBakersPercent);
@@ -132,15 +220,15 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleDelete = async () => {
-    setShowMenu(false);
+    setShowDeleteConfirm(false);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
       });
       if (res.ok) { router.push('/'); router.refresh(); }
-      else alert("Fehler beim Löschen.");
-    } catch (err) { console.error(err); alert("Server nicht erreichbar."); }
+      else console.error("Fehler beim Löschen.");
+    } catch (err) { console.error(err); }
   };
 
   const totalIngredients = useMemo(() => {
@@ -230,7 +318,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                       <span className="text-[9px] font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-2 py-0.5 rounded">bald</span>
                     </button>
                     <button
-                      onClick={handleDelete}
+                      onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
                       <Icons.Trash2 size={15} />
@@ -273,14 +361,17 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                 <Icons.ShoppingCart size={14} /> Was du brauchst
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {totalIngredients.map((ing, i) => (
-                  <div key={i} className="flex flex-col border-l-2 border-[#8B4513]/20 dark:border-[#8B4513]/20 pl-3">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{ing.name}</span>
-                    <span className="font-bold text-sm text-gray-800 dark:text-gray-100">
-                      {ing.amount} {String(ing.amount || '').includes(ing.unit) ? '' : ing.unit || ''}
-                    </span>
-                  </div>
-                ))}
+                {totalIngredients.map((ing, i) => {
+                  const scaledAmount = scaleAmount(ing.amount, multiplier);
+                  return (
+                    <div key={i} className="flex flex-col border-l-2 border-[#8B4513]/20 dark:border-[#8B4513]/20 pl-3">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{ing.name}</span>
+                      <span className="font-bold text-sm text-gray-800 dark:text-gray-100">
+                        {scaledAmount} {String(ing.amount || '').includes(ing.unit) ? '' : ing.unit || ''}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -334,10 +425,13 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
+          {/* SKALIERUNGS-STEPPER */}
+          <ScalerBar multiplier={multiplier} onChange={setMultiplier} />
+
           {/* PHASEN LOOP */}
           <div className="space-y-12">
             {recipe.dough_sections?.map((section: any, sIdx: number) => {
-              const flourBase = calcFlourBase(section.ingredients || []);
+              const flourBase = calcFlourBase(section.ingredients || []) * multiplier;
 
               return (
                 <section key={sIdx}>
@@ -367,8 +461,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
                       {section.ingredients?.map((ing: any, iIdx: number) => {
                         const amountNum = parseFloat(String(ing.amount || '0').replace(',', '.'));
+                        const scaledNum = isNaN(amountNum) ? 0 : amountNum * multiplier;
+                        const scaledDisplay = scaleAmount(ing.amount, multiplier);
                         const pct = showBakersPercent && flourBase > 0
-                          ? toBakersPercent(isNaN(amountNum) ? 0 : amountNum, flourBase)
+                          ? toBakersPercent(scaledNum, flourBase)
                           : null;
 
                         return (
@@ -382,7 +478,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                               )}
                             </span>
                             <span className={`font-black text-gray-900 dark:text-gray-100 ${pct ? 'w-16 text-right' : ''}`}>
-                              {ing.amount} {String(ing.amount || '').includes(ing.unit) ? '' : ing.unit || ''}
+                              {scaledDisplay} {String(ing.amount || '').includes(ing.unit) ? '' : ing.unit || ''}
                             </span>
                             {pct && (
                               <span className="w-12 text-right text-xs font-bold text-[#8B4513]/60 dark:text-[#C4A484]/60 tabular-nums">
@@ -454,6 +550,15 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           } catch (err) { console.error(err); }
         }}
       />
+
+      {/* DELETE CONFIRMATION */}
+      {showDeleteConfirm && (
+        <DeleteConfirmModal
+          recipeName={recipe.title}
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   );
 }
