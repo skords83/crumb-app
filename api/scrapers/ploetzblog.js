@@ -192,7 +192,9 @@ const scrapePloetz = async (url) => {
       // FIX: Minuten NUR addieren wenn kein "dabei/nach"-Kontext vorhanden.
       // Sonst würde "1,5 Stunden... nach 45 Minuten dehnen" fälschlich
       // 90 + 45 = 135 min ergeben statt korrekt 90 min.
-      const hasDabei = /dabei|nach\s+\d+\s*min/i.test(text);
+      // Auch "20 Minuten nach dem Einschießen" ist eine relative Zeitangabe,
+      // keine eigenständige Schritt-Dauer → ebenfalls ausschließen.
+      const hasDabei = /dabei|nach\s+\d+\s*min|\d+\s*min(?:uten?)?\s+nach/i.test(text);
       const minMatch = !hasDabei ? lower.match(/(\d+)\s*(?:minuten?|min\.?)/) : null;
 
       let totalMinutes = 0;
@@ -367,7 +369,17 @@ const scrapePloetz = async (url) => {
             seenSteps.add(subNormKey);
           });
         } else {
-          splitCompoundStep(text).forEach(step => currentSection.steps.push(step));
+          // FIX: "X Minuten nach dem Einschießen"-Steps korrigieren.
+          // splitCompoundStep kann solche Sätze als Warten-Steps mit duration=20 ausgeben,
+          // obwohl "20 Minuten nach dem Einschießen ablassen" eine relative Zeitangabe ist –
+          // kein eigenständiger Warteschritt. → duration auf 0, type auf Aktion setzen.
+          const fixedSteps = splitCompoundStep(text).map(step => {
+            if (/\d+\s*min(?:uten?)?\s+nach\s+dem\s+ein(?:schießen|schiessen)/i.test(step.instruction)) {
+              return { ...step, duration: 0, type: 'Aktion' };
+            }
+            return step;
+          }).filter(step => step.duration > 0 || step.type === 'Aktion');
+          fixedSteps.forEach(step => currentSection.steps.push(step));
         }
       }
     });

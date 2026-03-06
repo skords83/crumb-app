@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Clock, ChevronLeft, ChevronRight, Check, Sun, AlignLeft, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import { BackplanSkeleton } from "@/components/LoadingSkeletons";
-import { calculateBackplan } from '@/lib/backplan-utils';
+import { calculateBackplan, calculateDynamicTimeline, type BackplanStep } from '@/lib/backplan-utils';
 
 export default function BackplanPage() {
   const [plannedRecipes, setPlannedRecipes] = useState<any[]>([]);
@@ -15,6 +15,12 @@ export default function BackplanPage() {
       const saved = localStorage.getItem('crumb_completed_steps');
       return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
     } catch { return new Set<string>(); }
+  });
+  const [stepCompletedAt, setStepCompletedAt] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('crumb_step_completed_at');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
   });
   const [activeTab, setActiveTab] = useState<'schritte' | 'zeitplan'>('schritte');
   const [activeRecipeIdx, setActiveRecipeIdx] = useState(0);
@@ -30,6 +36,12 @@ export default function BackplanPage() {
       localStorage.setItem('crumb_completed_steps', JSON.stringify([...completedSteps]));
     } catch { /* ignore */ }
   }, [completedSteps]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('crumb_step_completed_at', JSON.stringify(stepCompletedAt));
+    } catch { /* ignore */ }
+  }, [stepCompletedAt]);
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
@@ -94,6 +106,44 @@ export default function BackplanPage() {
   const toggleStep = (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
     setCompletedSteps(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+    // Wenn manuell rückgängig gemacht: completedAt entfernen
+    setStepCompletedAt(prev => { const next = { ...prev }; delete next[key]; return next; });
+  };
+
+  // Schritt früher als geplant abschließen → Timeline neu berechnen + API updaten
+  const completeStepEarly = async (recipeId: number, stepIdx: number, currentTimeline: any[]) => {
+    const key = `${recipeId}-${stepIdx}`;
+    const now = Date.now();
+
+    // State sofort aktualisieren (optimistic)
+    const newCompletedSteps = new Set(completedSteps);
+    newCompletedSteps.add(key);
+    const newStepCompletedAt = { ...stepCompletedAt, [key]: now };
+    setCompletedSteps(newCompletedSteps);
+    setStepCompletedAt(newStepCompletedAt);
+
+    // Dynamische Timeline berechnen
+    const recipe = plannedRecipes.find(r => r.id === recipeId);
+    if (!recipe) return;
+    const { newPlannedAt } = calculateDynamicTimeline(
+      recipe.planned_at,
+      recipe.dough_sections,
+      newStepCompletedAt,
+      recipeId
+    );
+
+    // API: planned_at + complete-step notification
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}/complete-step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+        body: JSON.stringify({ stepIndex: stepIdx, completedAt: now, newPlannedAt: newPlannedAt.toISOString() }),
+      });
+      // planned_at lokal aktualisieren damit useMemo neu triggert
+      setPlannedRecipes(prev => prev.map(r =>
+        r.id === recipeId ? { ...r, planned_at: newPlannedAt.toISOString() } : r
+      ));
+    } catch { /* optimistic update bleibt, API-Fehler ignorieren */ }
   };
 
   const finishBaking = async (recipeId: number) => {
@@ -105,6 +155,9 @@ export default function BackplanPage() {
         body: JSON.stringify({ planned_at: null }),
       });
       if (res.ok) {
+        // localStorage aufräumen
+        setCompletedSteps(prev => { const next = new Set(prev); [...next].filter(k => k.startsWith(`${recipeId}-`)).forEach(k => next.delete(k)); return next; });
+        setStepCompletedAt(prev => { const next = { ...prev }; Object.keys(next).filter(k => k.startsWith(`${recipeId}-`)).forEach(k => delete next[k]); return next; });
         const remaining = plannedRecipes.filter(r => r.id !== recipeId);
         setPlannedRecipes(remaining);
         setActiveRecipeIdx(0);
@@ -117,11 +170,27 @@ export default function BackplanPage() {
   const recipe = plannedRecipes[activeRecipeIdx];
   const sections = recipe?.dough_sections || [];
 
-  const timeline = useMemo(
-    () => recipe ? calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections) : [],
+  const hasEarlyCompleted = recipe
+    ? Object.keys(stepCompletedAt).some(k => k.startsWith(`${recipe.id}-`))
+    : false;
+
+  const { timeline, newPlannedAt, shifted } = useMemo(() => {
+    if (!recipe) return { timeline: [], newPlannedAt: new Date(), shifted: false };
+    if (hasEarlyCompleted) {
+      return calculateDynamicTimeline(
+        recipe.planned_at,
+        recipe.dough_sections,
+        stepCompletedAt,
+        recipe.id
+      );
+    }
+    return {
+      timeline: calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
+      newPlannedAt: parseLocalDate(recipe.planned_at),
+      shifted: false,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [recipe?.id, recipe?.planned_at]
-  );
+  }, [recipe?.id, recipe?.planned_at, stepCompletedAt]);
 
   // Progress map recalculates only once per minute (not every second)
   const currentMinute = Math.floor(currentTime.getTime() / 60000);
@@ -228,7 +297,15 @@ export default function BackplanPage() {
               <div>
                 <h1 className="text-[16px] font-extrabold tracking-tight leading-tight dark:text-gray-100">{recipe.title}</h1>
                 <p className="text-[12px] text-[#8B7355] font-bold flex items-center gap-1">
-                  <Clock size={11} /> Fertig um {extractTimeFromString(recipe.planned_at)} Uhr
+                  <Clock size={11} />
+                  {shifted ? (
+                    <>
+                      <span className="line-through text-gray-300 dark:text-gray-600">{extractTimeFromString(recipe.planned_at)}</span>
+                      <span className="text-green-500 ml-1">→ {formatTime(newPlannedAt)} Uhr</span>
+                    </>
+                  ) : (
+                    <>Fertig um {extractTimeFromString(recipe.planned_at)} Uhr</>
+                  )}
                 </p>
               </div>
             </div>
@@ -301,15 +378,16 @@ export default function BackplanPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2 pl-10">
-                  {sectionSteps.map(({ globalIdx, ...step }) => {
+                  {sectionSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
                     const key = `${recipe.id}-${globalIdx}`;
                     const isDone = completedSteps.has(key) || currentTime > step.end;
                     const isActiveStep = globalIdx === activeIndex;
                     const isNextStep = globalIdx === nextIndex;
+                    const isEarlyCompletable = !isDone && (isActiveStep || isNextStep);
                     return (
                       <div key={globalIdx} ref={isActiveStep ? activeCardRef : null}
-                        onClick={() => (isDone || isActiveStep) ? toggleStep(recipe.id, globalIdx) : undefined}
-                        style={{ cursor: isDone || isActiveStep ? 'pointer' : 'default' }}
+                        onClick={() => isDone ? toggleStep(recipe.id, globalIdx) : undefined}
+                        style={{ cursor: isDone ? 'pointer' : 'default' }}
                         className={`transition-all duration-300 rounded-2xl ${
                           isActiveStep ? 'border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-700 p-5'
                           : isNextStep ? 'border-2 border-dashed border-[#D4C9B8] dark:border-gray-600 bg-white dark:bg-gray-800 p-4'
@@ -326,6 +404,14 @@ export default function BackplanPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
                             {isDone && <Check size={14} className="text-[#8B7355]" />}
+                            {isEarlyCompletable && (
+                              <button
+                                onClick={e => { e.stopPropagation(); completeStepEarly(recipe.id, globalIdx, timeline); }}
+                                className="ml-1 px-2 py-1 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors"
+                              >
+                                ✓ Fertig
+                              </button>
+                            )}
                           </div>
                         </div>
                         <p className={`text-[14px] leading-relaxed m-0 ${isActiveStep ? 'text-[15px] font-semibold text-[#2D2D2D] dark:text-gray-100' : isDone ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-600 dark:text-gray-300 font-medium'}`}>
@@ -350,11 +436,11 @@ export default function BackplanPage() {
                             <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
                               <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
                             </div>
-                            {step.type === 'Aktion' && step.ingredients.length > 0 && (
+                            {step.type === 'Aktion' && (step.ingredients?.length ?? 0) > 0 && (
                               <div className="mt-4 bg-white dark:bg-gray-800 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-700">
                                 <div className="text-[10px] font-extrabold text-gray-300 dark:text-gray-500 uppercase tracking-widest mb-3">Zutaten – {step.phase}</div>
-                                {step.ingredients.map((ing: any, ii: number) => (
-                                  <div key={ii} className={`flex justify-between py-2 text-[13px] ${ii < step.ingredients.length - 1 ? 'border-b border-[#F8F6F2] dark:border-gray-700' : ''}`}>
+                                {step.ingredients?.map((ing: any, ii: number) => (
+                                  <div key={ii} className={`flex justify-between py-2 text-[13px] ${ii < (step.ingredients?.length ?? 0) - 1 ? 'border-b border-[#F8F6F2] dark:border-gray-700' : ''}`}>
                                     <span className="text-gray-600 dark:text-gray-300">{ing.name}</span>
                                     <span className="font-extrabold text-[#2D2D2D] dark:text-gray-100 bg-[#F8F6F2] dark:bg-gray-700 px-2 py-0.5 rounded-lg">{ing.amount} {ing.unit}</span>
                                   </div>

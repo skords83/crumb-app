@@ -116,6 +116,12 @@ const initDB = async () => {
 const sentNotifications = new Set();
 const NTFY_VORLAUF = parseInt(process.env.NTFY_VORLAUF) || 5;
 
+function clearSentNotificationsForRecipe(recipeId) {
+  for (const key of sentNotifications) {
+    if (key.startsWith(`${recipeId}-`)) sentNotifications.delete(key);
+  }
+}
+
 const sendNtfyNotification = async (title, message, tags = 'bread') => {
   try {
     const topic = process.env.NTFY_TOPIC || 'crumb-backplan';
@@ -348,6 +354,67 @@ app.patch('/api/recipes/:id', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Patch-Fehler" }); }
+});
+
+// ============================================================
+// COMPLETE STEP (Early completion + ntfy reschedule)
+// ============================================================
+app.post('/api/recipes/:id/complete-step', async (req, res) => {
+  const { id } = req.params;
+  const { stepIndex, completedAt, newPlannedAt } = req.body;
+
+  if (stepIndex === undefined || !completedAt || !newPlannedAt) {
+    return res.status(400).json({ error: 'stepIndex, completedAt und newPlannedAt erforderlich' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE recipes SET planned_at=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
+      [new Date(newPlannedAt), id, req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Nicht gefunden' });
+
+    const recipe = result.rows[0];
+
+    // Alle alten Notifications für dieses Rezept aus dem Cache löschen
+    // → nächste checkAndNotify-Runde bewertet alle Schritte mit neuen Zeiten
+    clearSentNotificationsForRecipe(id);
+
+    // Sofortige Notification wenn nächster Aktion-Schritt < NTFY_VORLAUF Minuten entfernt
+    if (recipe.dough_sections) {
+      const timeline = calculateTimeline(newPlannedAt, recipe.dough_sections);
+      const now = new Date();
+      const nextAction = timeline.find(step =>
+        step.type !== 'Warten' &&
+        step.start > new Date(completedAt) &&
+        step.start > now
+      );
+
+      if (nextAction) {
+        const minutesUntil = (nextAction.start.getTime() - now.getTime()) / 60000;
+        const notifId = `${id}-${nextAction.start.getTime()}`;
+
+        if (minutesUntil >= 1 && minutesUntil < NTFY_VORLAUF) {
+          // Zu wenig Vorlauf für normale Notification → sofort senden
+          const startTime = nextAction.start.toLocaleTimeString('de-DE', {
+            hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
+          });
+          await sendNtfyNotification(
+            `⏰ Gleich: ${nextAction.instruction.substring(0, 50)}`,
+            `${recipe.title} · ${nextAction.phase} · Um ${startTime} Uhr`
+          );
+          sentNotifications.add(notifId);
+        }
+        // < 1 Min: keine Notification, User steht in der Küche
+        // > NTFY_VORLAUF: checkAndNotify übernimmt zur richtigen Zeit
+      }
+    }
+
+    res.json({ ok: true, newPlannedAt });
+  } catch (err) {
+    console.error('❌ complete-step Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/ntfy/status', (req, res) => {

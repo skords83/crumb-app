@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Link as LinkIcon, Edit3, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon, Edit3, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import RecipeForm from '@/components/RecipeForm';
 import SaveButton from '@/components/SaveButton';
@@ -95,6 +95,40 @@ function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () =>
       <button onClick={onDismiss} className="shrink-0 hover:opacity-70 transition-opacity">
         <X size={16} />
       </button>
+    </div>
+  );
+}
+
+// --- IMPORT LOADING OVERLAY ---
+const IMPORT_MESSAGES = [
+  "Seite wird geladen…",
+  "Rezept wird geparst…",
+  "Zutaten werden erkannt…",
+  "Schritte werden analysiert…",
+  "Fast fertig…",
+];
+
+function ImportLoadingOverlay() {
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMsgIndex((i) => (i < IMPORT_MESSAGES.length - 1 ? i + 1 : i));
+    }, 1800);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl z-10 flex flex-col items-center justify-center gap-4">
+      <Loader2 size={36} className="text-[#8B7355] animate-spin" />
+      <p className="text-sm font-semibold text-[#8B7355] animate-in fade-in duration-300 key-[msgIndex]">
+        {IMPORT_MESSAGES[msgIndex]}
+      </p>
+      <div className="flex gap-1.5 mt-1">
+        {IMPORT_MESSAGES.map((_, i) => (
+          <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i <= msgIndex ? 'bg-[#8B7355] w-4' : 'bg-gray-200 dark:bg-gray-600 w-1.5'}`} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -286,7 +320,8 @@ export default function NewRecipePage() {
 
         {/* IMPORT BOX */}
         {!showEditor && activeTab === 'import' && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-10 border border-gray-200 dark:border-gray-700 shadow-sm text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl p-10 border border-gray-200 dark:border-gray-700 shadow-sm text-center animate-in fade-in zoom-in-95 duration-300">
+            {isImporting && <ImportLoadingOverlay />}
             <h2 className="text-3xl font-bold text-[#8B7355] mb-2 text-center">Rezept importieren</h2>
             <p className="text-sm text-gray-400 dark:text-gray-500 mb-8 font-medium">Link vom Plötzblog, Homebaking.at, Marcel Paa oder Jo Semola einfügen.</p>
             
