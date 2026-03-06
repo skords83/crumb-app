@@ -47,6 +47,12 @@ const getRecipeLabels = (recipe: any) => {
   if (content.includes("roggen")) {
     labels.push({ label: "Roggen", color: "bg-amber-100 text-amber-900 border-amber-200" });
   }
+  if (content.includes("dinkel")) {
+    labels.push({ label: "Dinkel", color: "bg-lime-100 text-lime-800 border-lime-200" });
+  }
+  if (content.includes("weizen") || content.includes("weizenmehl")) {
+    labels.push({ label: "Weizen", color: "bg-yellow-50 text-yellow-700 border-yellow-200" });
+  }
   if (labels.length === 0) {
     labels.push({ label: "Brot", color: "bg-gray-50 text-gray-500 border-gray-100" });
   }
