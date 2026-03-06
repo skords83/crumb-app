@@ -31,10 +31,36 @@ const getRecipeLabels = (recipe: any) => {
   // --- 1. Triebmittel (always first) ---
   const hatSauerteig = content.includes("sauerteig") || content.includes("anstellgut") || content.includes("lievito madre");
   const hatHefe = content.includes("hefe");
+
+  const getSauerteigLabel = (): { label: string; color: string } => {
+    // Explicit compound terms first
+    if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig")) {
+      return { label: "Roggensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig")) {
+      return { label: "Dinkelsauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) {
+      return { label: "Weizensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    // Infer from dominant grain in recipe
+    if (content.includes("roggen")) {
+      return { label: "Roggensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    if (content.includes("dinkel")) {
+      return { label: "Dinkelsauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    if (content.includes("weizenmehl") || content.includes("weizen")) {
+      return { label: "Weizensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    // Fallback
+    return { label: "Sauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+  };
+
   if (hatSauerteig && hatHefe) {
     labels.push({ label: "Gemischt", color: "bg-purple-50 text-purple-600 border-purple-100" });
   } else if (hatSauerteig) {
-    labels.push({ label: "Sauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" });
+    labels.push(getSauerteigLabel());
   } else if (hatHefe) {
     labels.push({ label: "Hefe", color: "bg-blue-50 text-blue-600 border-blue-100" });
   }
@@ -45,11 +71,19 @@ const getRecipeLabels = (recipe: any) => {
     labels.push({ label: "Urkorn", color: "bg-rose-50 text-rose-700 border-rose-200" });
   }
 
-  // --- 3. Getreide (via Begriff + Mehltyp) ---
+  // --- 3. Vollkorn ---
   const weizenTypen = ["405", "550", "812"];
   const dinkelTypen = ["630", "1050"];
   const roggenTypen = ["997", "1150", "1370"];
+  const hatTypenMehl = [...weizenTypen, ...dinkelTypen, ...roggenTypen].some(t => content.includes(t));
+  const hatVollkornBegriffe = content.includes("vollkorn") || content.includes("schrot");
+  if (hatVollkornBegriffe && !hatTypenMehl) {
+    labels.push({ label: "Reines Vollkorn", color: "bg-emerald-100 text-emerald-900 border-emerald-200" });
+  } else if (hatVollkornBegriffe) {
+    labels.push({ label: "Vollkorn-Anteil", color: "bg-emerald-50 text-emerald-700 border-emerald-100" });
+  }
 
+  // --- 4. Getreide (via Begriff + Mehltyp) ---
   const hatRoggen = content.includes("roggen") || roggenTypen.some(t => content.includes(t));
   const hatDinkel = content.includes("dinkel") || dinkelTypen.some(t => content.includes(t));
   const hatWeizen = content.includes("weizenmehl") || weizenTypen.some(t => content.includes(t));
@@ -62,15 +96,6 @@ const getRecipeLabels = (recipe: any) => {
   }
   if (hatWeizen) {
     labels.push({ label: "Weizen", color: "bg-yellow-50 text-yellow-700 border-yellow-200" });
-  }
-
-  // --- 4. Vollkorn ---
-  const hatVollkornBegriffe = content.includes("vollkorn") || content.includes("schrot");
-  const hatTypenMehl = [...weizenTypen, ...dinkelTypen, ...roggenTypen].some(t => content.includes(t));
-  if (hatVollkornBegriffe && !hatTypenMehl) {
-    labels.push({ label: "Reines Vollkorn", color: "bg-emerald-100 text-emerald-900 border-emerald-200" });
-  } else if (hatVollkornBegriffe) {
-    labels.push({ label: "Vollkorn-Anteil", color: "bg-emerald-50 text-emerald-700 border-emerald-100" });
   }
 
   return labels.slice(0, 3);
