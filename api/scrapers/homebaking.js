@@ -54,14 +54,16 @@ const scrapeHomebaking = async (url) => {
 
 
     // 1. PHASEN + ZUTATEN aus h3/ul-Struktur
-    const recipeContent = $('.entry-content, article .content, .post-content, main article').first();
+    const recipeContent = $('.entry-content, article .content, .post-content, main article, .wp-block-group, article, main').first();
+    console.log(`  → recipeContent matched: ${recipeContent.length > 0}, tag: ${recipeContent.prop('tagName')}, class: ${recipeContent.attr('class')}`);
+    console.log(`  → h3 count in recipeContent: ${recipeContent.find('h3').length}`);
 
     // Finde alle h3 im Rezeptbereich die Phasen sind
     recipeContent.find('h3').each((_, h3) => {
       const name = $(h3).text().trim();
-      if (!name || name.length > 60) return;
+      if (!name || name.length > 80) return;
       const nameLower = name.toLowerCase().replace(/:$/, '').trim();
-      const NON_PHASE = ['herstellung', 'zubereitung', 'zutaten', 'kommentar', 'newsletter'];
+      const NON_PHASE = ['herstellung', 'zubereitung', 'zutaten', 'kommentar', 'newsletter', 'gesamtmenge'];
       if (NON_PHASE.some(s => nameLower.includes(s))) return;
       const isPhase = PHASE_PATTERNS.some(p => p.re.test(nameLower)) ||
         ['sauerteig', 'vorteig', 'hauptteig', 'brotaroma', 'teig', 'biga', 'sauer'].some(k => nameLower.includes(k));
@@ -78,9 +80,17 @@ const scrapeHomebaking = async (url) => {
       }
 
       // Prüfen ob Stufen-Paragraphen vorhanden sind ("Stufe 1:", "Stufe 2:", etc.)
-      const stufenPs = siblings.filter(el =>
-        el.is('p') && /^Stufe\s+\d+[:.]?\s*$/i.test(el.text().trim())
-      );
+      // Auch: <p><strong>Stufe 1:</strong></p> oder <p>Stufe 1</p>
+      const stufenPs = siblings.filter(el => {
+        if (!el.is('p')) return false;
+        const t = el.text().trim();
+        // Direkt: "Stufe 1:" oder "Stufe 1"
+        if (/^Stufe\s+\d+[:.]?\s*$/i.test(t)) return true;
+        // In <strong> eingebettet: <p><strong>Stufe 1:</strong></p>
+        const inner = el.children().first();
+        if (inner.is('strong, b') && /^Stufe\s+\d+[:.]?\s*$/i.test(inner.text().trim())) return true;
+        return false;
+      });
 
       if (stufenPs.length >= 2) {
         // Mehrere Stufen → jede Stufe als eigene Phase anlegen
@@ -267,6 +277,20 @@ const scrapeHomebaking = async (url) => {
         if ($(el).find('img').length) return;
         // "Stufe N:" VOR Längenfilter prüfen – "Stufe 1:" hat nur 8 Zeichen
         const stufenM = rawText.match(/^Stufe\s+(\d+)[:.]?\s*$/i);
+        if (!stufenM && $(el).children().first().is('strong, b')) {
+          const innerText = $(el).children().first().text().trim();
+          const innerM = innerText.match(/^Stufe\s+(\d+)[:.]?\s*$/i);
+          if (innerM) {
+            const stufenNr = parseInt(innerM[1]);
+            const curBaseName = dough_sections[currentSectionIdx]?.name.replace(/\s+Stufe\s+\d+$/i, '');
+            const nextStufenIdx = dough_sections.findIndex(s =>
+              s.name.replace(/\s+Stufe\s+\d+$/i, '') === curBaseName &&
+              new RegExp(`Stufe\\s+${stufenNr}$`, 'i').test(s.name)
+            );
+            if (nextStufenIdx >= 0) currentSectionIdx = nextStufenIdx;
+            return;
+          }
+        }
         if (stufenM) {
           const stufenNr = parseInt(stufenM[1]);
           // Finde die Phase mit dieser Stufennummer im Kontext der aktuellen Phase-Gruppe
