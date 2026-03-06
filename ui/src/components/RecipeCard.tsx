@@ -26,7 +26,9 @@ const getStats = (recipe: any) => {
 
 const getRecipeLabels = (recipe: any) => {
   const content = JSON.stringify(recipe).toLowerCase();
-  const labels = [];
+  const labels: { label: string; color: string }[] = [];
+
+  // --- 1. Triebmittel (always first) ---
   const hatSauerteig = content.includes("sauerteig") || content.includes("anstellgut") || content.includes("lievito madre");
   const hatHefe = content.includes("hefe");
   if (hatSauerteig && hatHefe) {
@@ -36,27 +38,42 @@ const getRecipeLabels = (recipe: any) => {
   } else if (hatHefe) {
     labels.push({ label: "Hefe", color: "bg-blue-50 text-blue-600 border-blue-100" });
   }
+
+  // --- 2. Urkorn ---
+  const urkornBegriffe = ["emmer", "einkorn", "kamut", "khorasan", "urdinkel", "waldstaudenroggen", "urgerste"];
+  if (urkornBegriffe.some(b => content.includes(b))) {
+    labels.push({ label: "Urkorn", color: "bg-rose-50 text-rose-700 border-rose-200" });
+  }
+
+  // --- 3. Getreide (via Begriff + Mehltyp) ---
+  const weizenTypen = ["405", "550", "812"];
+  const dinkelTypen = ["630", "1050"];
+  const roggenTypen = ["997", "1150", "1370"];
+
+  const hatRoggen = content.includes("roggen") || roggenTypen.some(t => content.includes(t));
+  const hatDinkel = content.includes("dinkel") || dinkelTypen.some(t => content.includes(t));
+  const hatWeizen = content.includes("weizenmehl") || weizenTypen.some(t => content.includes(t));
+
+  if (hatRoggen) {
+    labels.push({ label: "Roggen", color: "bg-amber-100 text-amber-900 border-amber-200" });
+  }
+  if (hatDinkel) {
+    labels.push({ label: "Dinkel", color: "bg-lime-100 text-lime-800 border-lime-200" });
+  }
+  if (hatWeizen) {
+    labels.push({ label: "Weizen", color: "bg-yellow-50 text-yellow-700 border-yellow-200" });
+  }
+
+  // --- 4. Vollkorn ---
   const hatVollkornBegriffe = content.includes("vollkorn") || content.includes("schrot");
-  const typenMehle = ["405", "550", "610", "630", "812", "997", "1050", "1150", "1200", "1370"];
-  const hatTypenMehl = typenMehle.some(type => content.includes(type));
+  const hatTypenMehl = [...weizenTypen, ...dinkelTypen, ...roggenTypen].some(t => content.includes(t));
   if (hatVollkornBegriffe && !hatTypenMehl) {
     labels.push({ label: "Reines Vollkorn", color: "bg-emerald-100 text-emerald-900 border-emerald-200" });
   } else if (hatVollkornBegriffe) {
     labels.push({ label: "Vollkorn-Anteil", color: "bg-emerald-50 text-emerald-700 border-emerald-100" });
   }
-  if (content.includes("roggen")) {
-    labels.push({ label: "Roggen", color: "bg-amber-100 text-amber-900 border-amber-200" });
-  }
-  if (content.includes("dinkel")) {
-    labels.push({ label: "Dinkel", color: "bg-lime-100 text-lime-800 border-lime-200" });
-  }
-  if (content.includes("weizen") || content.includes("weizenmehl")) {
-    labels.push({ label: "Weizen", color: "bg-yellow-50 text-yellow-700 border-yellow-200" });
-  }
-  if (labels.length === 0) {
-    labels.push({ label: "Brot", color: "bg-gray-50 text-gray-500 border-gray-100" });
-  }
-  return labels;
+
+  return labels.slice(0, 3);
 };
 
 export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeCardProps) {
