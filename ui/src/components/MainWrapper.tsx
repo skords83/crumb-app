@@ -6,7 +6,7 @@ export default function MainWrapper({ children }: { children: React.ReactNode })
   const isAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(pathname);
 
   return (
-    <main className={isAuthPage ? '' : 'md:pt-32 pb-24 md:pb-8'}>
+    <main className={isAuthPage ? '' : 'pt-28 md:pt-32 pb-24 md:pb-8'}>
       {children}
     </main>
   );
