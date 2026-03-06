@@ -30,7 +30,7 @@ const getRecipeLabels = (recipe: any) => {
 
   // --- 1. Triebmittel (always first) ---
   const hatSauerteig = content.includes("sauerteig") || content.includes("anstellgut") || content.includes("lievito madre");
-  const hatHefe = content.includes("hefe");
+  const hatHefe = /\b(hefe|trockenhefe|frischhefe|wildhefe)\b/.test(content);
 
   const getSauerteigLabel = (): { label: string; color: string } => {
     // Explicit compound terms first
@@ -43,6 +43,9 @@ const getRecipeLabels = (recipe: any) => {
     if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) {
       return { label: "Weizensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
     }
+    if (content.includes("hafersauerteig") || content.includes("hafer-sauerteig")) {
+      return { label: "Hafersauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
     // Infer from dominant grain in recipe
     if (content.includes("roggen")) {
       return { label: "Roggensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
@@ -52,6 +55,9 @@ const getRecipeLabels = (recipe: any) => {
     }
     if (content.includes("weizenmehl") || content.includes("weizen")) {
       return { label: "Weizensauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
+    }
+    if (content.includes("hafer")) {
+      return { label: "Hafersauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
     }
     // Fallback
     return { label: "Sauerteig", color: "bg-orange-50 text-orange-600 border-orange-100" };
@@ -87,6 +93,7 @@ const getRecipeLabels = (recipe: any) => {
   const hatRoggen = content.includes("roggen") || roggenTypen.some(t => content.includes(t));
   const hatDinkel = content.includes("dinkel") || dinkelTypen.some(t => content.includes(t));
   const hatWeizen = content.includes("weizenmehl") || weizenTypen.some(t => content.includes(t));
+  const hatHafer = content.includes("hafer");
 
   if (hatRoggen) {
     labels.push({ label: "Roggen", color: "bg-amber-100 text-amber-900 border-amber-200" });
@@ -96,6 +103,9 @@ const getRecipeLabels = (recipe: any) => {
   }
   if (hatWeizen) {
     labels.push({ label: "Weizen", color: "bg-yellow-50 text-yellow-700 border-yellow-200" });
+  }
+  if (hatHafer) {
+    labels.push({ label: "Hafer", color: "bg-stone-100 text-stone-700 border-stone-200" });
   }
 
   return labels.slice(0, 3);
