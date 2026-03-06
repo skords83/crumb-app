@@ -156,6 +156,13 @@ export default function BackplanPage() {
     </div>
   );
 
+  // Phasen nach Startzeit sortieren — was zuerst beginnt steht oben
+  const sortedSections = [...sections].sort((a, b) => {
+    const aStart = timeline.find(t => t.phase === a.name)?.start.getTime() ?? Infinity;
+    const bStart = timeline.find(t => t.phase === b.name)?.start.getTime() ?? Infinity;
+    return aStart - bStart;
+  });
+
   const totalDuration = timeline.reduce((s, t) => s + t.duration, 0);
   const activeIndex = timeline.findIndex((s, i) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime >= s.start && currentTime < s.end);
   // nextIndex: first non-completed future step — robust when activeIndex === -1 (between steps)
@@ -277,7 +284,7 @@ export default function BackplanPage() {
       {/* ── TAB: SCHRITTE ── */}
       {activeTab === 'schritte' && (
         <div className="max-w-3xl mx-auto px-4 pt-5">
-          {sections.map((section: any, sIdx: number) => {
+          {sortedSections.map((section: any, sIdx: number) => {
             const sectionSteps = timeline.map((t, i) => ({ ...t, globalIdx: i })).filter(t => t.phase === section.name);
             if (sectionSteps.length === 0) return null;
             const sectionStart = sectionSteps[0].start;
@@ -379,7 +386,7 @@ export default function BackplanPage() {
 
       {/* ── TAB: ZEITPLAN ── */}
       {activeTab === 'zeitplan' && (
-        <GanttChart sections={sections} timeline={timeline} currentTime={currentTime} formatTime={formatTime} formatDuration={formatDuration} />
+        <GanttChart sections={sortedSections} timeline={timeline} currentTime={currentTime} formatTime={formatTime} formatDuration={formatDuration} />
       )}
 
       {/* ── NÄCHSTER SCHRITT (fixed bottom) ── */}
@@ -414,6 +421,11 @@ const PHASE_COLORS = [
 
 function GanttChart({ sections, timeline, currentTime, formatTime, formatDuration }: any) {
   if (timeline.length === 0) return <div className="p-8 text-center text-gray-400">Keine Schritte</div>;
+  const sortedSections = [...sections].sort((a: any, b: any) => {
+    const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
+    const bStart = timeline.find((t: any) => t.phase === b.name)?.start.getTime() ?? Infinity;
+    return aStart - bStart;
+  });
   const totalStart = timeline[0].start;
   const totalEnd = timeline[timeline.length - 1].end;
   const totalMs = totalEnd.getTime() - totalStart.getTime();
@@ -430,7 +442,7 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
   return (
     <div className="max-w-3xl mx-auto px-4 pt-5 pb-10">
       <div className="flex flex-wrap gap-2 mb-5">
-        {sections.map((section: any, i: number) => {
+        {sortedSections.map((section: any, i: number) => {
           const c = PHASE_COLORS[i % PHASE_COLORS.length];
           return (
             <div key={i} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold ${c.bg} ${c.text} ${c.border}`}>
@@ -440,7 +452,7 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
         })}
       </div>
       <div className="space-y-3 mb-2">
-        {sections.map((section: any, sIdx: number) => {
+        {sortedSections.map((section: any, sIdx: number) => {
           const c = PHASE_COLORS[sIdx % PHASE_COLORS.length];
           const steps = timeline.filter((t: any) => t.phase === section.name);
           if (!steps.length) return null;
@@ -472,7 +484,7 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
         <span className="absolute text-[10px] text-green-500 font-bold right-0">{formatTime(totalEnd)}</span>
       </div>
       <div className="mt-8 space-y-4">
-        {sections.map((section: any, sIdx: number) => {
+        {sortedSections.map((section: any, sIdx: number) => {
           const c = PHASE_COLORS[sIdx % PHASE_COLORS.length];
           const steps = timeline.filter((t: any) => t.phase === section.name);
           if (!steps.length) return null;
