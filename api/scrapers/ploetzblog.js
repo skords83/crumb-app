@@ -214,6 +214,76 @@ const scrapePloetz = async (url) => {
       return true;
     };
 
+    // parseBakingSequence – verarbeitet zusammengesetzte Backen-Absätze mit relativen Zeitangaben.
+    //
+    // Eingabe-Beispiel:
+    //   "... 5 Minuten anbacken. Den Ofen auf 210 °C herunterdrehen.
+    //    Den Dampf 20 Minuten nach dem Einschießen ablassen. Insgesamt 50 Minuten ausbacken."
+    //
+    // Korrekte Ausgabe:
+    //   { instruction: "5 Minuten anbacken.",          duration: 5,  type: 'Backen' }
+    //   { instruction: "Den Ofen auf 210 °C herunterdrehen.", duration: 0, type: 'Aktion' }
+    //   { instruction: "Den Dampf ablassen.",           duration: 0,  type: 'Aktion' }
+    //   { instruction: "Weiterbacken.",                 duration: 30, type: 'Backen' }
+    //
+    // Logik: "X Minuten nach dem Einschießen" ist KEINE Schritt-Dauer, sondern ein
+    // absoluter Zeitpunkt relativ zum Einschießen. Die verbleibende Backzeit ergibt sich
+    // aus (Gesamtdauer - Zeitpunkt der letzten relativen Angabe).
+    const parseBakingSequence = (text) => {
+      // Nur anwenden wenn "nach dem Einschießen"-Muster vorkommt
+      if (!/nach\s+dem\s+ein(?:schießen|schiessen)/i.test(text)) return null;
+
+      const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+      const steps = [];
+
+      // Sammle alle "insgesamt X Minuten"-Angaben für die Gesamtdauer
+      const totalMatch = text.match(/insgesamt\s+(\d+)\s*min(?:uten?)?/i);
+      const totalMinutes = totalMatch ? parseInt(totalMatch[1]) : null;
+
+      for (const raw of sentences) {
+        const s = raw.trim();
+        if (!s || s.length < 5) continue;
+
+        // Muster: "X Minuten nach dem Einschießen <Verb>"
+        // → Aktion zum Zeitpunkt t=X, keine eigene Wartezeit
+        const nachEinMatch = s.match(/(\d+)\s*min(?:uten?)?\s+nach\s+dem\s+ein(?:schießen|schiessen)\s+(.+)/i);
+        if (nachEinMatch) {
+          const zeitpunkt = parseInt(nachEinMatch[1]);
+          const verb = nachEinMatch[2].trim();
+          // Normalisiere zu "Den Dampf ablassen." o.ä. ohne die Zeitangabe
+          const instruction = verb.charAt(0).toUpperCase() + verb.slice(1).replace(/\.$/, '') + '.';
+          steps.push({ instruction, duration: 0, type: 'Aktion' });
+
+          // Füge verbleibende Backzeit als eigenen Step ein
+          if (totalMinutes !== null) {
+            const remaining = totalMinutes - zeitpunkt;
+            if (remaining > 0) {
+              steps.push({ instruction: `Weitere ${remaining} Minuten ausbacken.`, duration: remaining, type: 'Backen' });
+            }
+          }
+          continue;
+        }
+
+        // Muster: "Insgesamt X Minuten ausbacken" → bereits durch nachEinMatch abgedeckt,
+        // hier überspringen damit kein doppelter Step entsteht
+        if (/insgesamt\s+\d+\s*min/i.test(s) && totalMinutes !== null) continue;
+
+        // Muster: "X Minuten anbacken" → normaler Backschritt
+        const anbackenMatch = s.match(/(\d+)\s*min(?:uten?)?\s+anbacken/i);
+        if (anbackenMatch) {
+          steps.push({ instruction: s, duration: parseInt(anbackenMatch[1]), type: 'Backen' });
+          continue;
+        }
+
+        // Alles andere (z.B. "Den Ofen herunterdrehen", "Sofort bedampfen") → Aktion
+        const dur = extractDurationMinutes(s);
+        const type = classifyStep(s);
+        steps.push({ instruction: s, duration: dur === 5 && !/\d+\s*min/i.test(s) ? 0 : dur, type });
+      }
+
+      return steps.length > 0 ? steps : null;
+    };
+
     // parseRepeatingActions – unterstützt beide Plötzblog-Formate inkl. Stunden
     const parseRepeatingActions = (instruction, totalDuration) => {
       const buildMainInstruction = (text) => {
@@ -360,31 +430,31 @@ const scrapePloetz = async (url) => {
         const duration = (isBakingStep(text) ? sumAllDurations(text) : extractDurationMinutes(text)) || 5;
         const type = classifyStep(text);
 
-        // FIX 2+3: Dehnen-und-Falten Steps aufteilen
-        const repeated = parseRepeatingActions(text, duration);
-        if (repeated) {
-          repeated.forEach(s => {
-            currentSection.steps.push(s);
-            const subNormKey = `${currentSection.name}::norm::${normalizeStepText(s.instruction)}`;
-            seenSteps.add(subNormKey);
-          });
+        // Backen-Sequenz mit relativen Zeitangaben ("nach dem Einschießen") speziell parsen
+        const bakingSeq = parseBakingSequence(text);
+        if (bakingSeq) {
+          bakingSeq.forEach(s => currentSection.steps.push(s));
         } else {
-          // FIX: "X Minuten nach dem Einschießen"-Steps korrigieren.
-          // splitCompoundStep kann solche Sätze als Warten-Steps mit duration=20 ausgeben,
-          // obwohl "20 Minuten nach dem Einschießen ablassen" eine relative Zeitangabe ist –
-          // kein eigenständiger Warteschritt. → duration auf 0, type auf Aktion setzen.
-          // FIX: "X Minuten nach dem Einschießen" ist eine relative Zeitangabe,
-          // kein eigenständiger Warteschritt → duration auf 0, type auf Aktion.
-          // WICHTIG: Kein generischer duration-Filter hier – Steps ohne Zeitangabe
-          // (z.B. "Mischen, bis sich die Zutaten verbunden haben") dürfen nicht
-          // verloren gehen, auch wenn ihr duration-Feld undefined oder 0 ist.
-          splitCompoundStep(text).forEach(step => {
-            if (/\d+\s*min(?:uten?)?\s+nach\s+dem\s+ein(?:schießen|schiessen)/i.test(step.instruction)) {
-              currentSection.steps.push({ ...step, duration: 0, type: 'Aktion' });
-            } else {
-              currentSection.steps.push(step);
-            }
-          });
+          // FIX 2+3: Dehnen-und-Falten Steps aufteilen
+          const repeated = parseRepeatingActions(text, duration);
+          if (repeated) {
+            repeated.forEach(s => {
+              currentSection.steps.push(s);
+              const subNormKey = `${currentSection.name}::norm::${normalizeStepText(s.instruction)}`;
+              seenSteps.add(subNormKey);
+            });
+          } else {
+            // splitCompoundStep aufteilen; "X Minuten nach dem Einschießen"-Sätze
+            // können hier nicht mehr ankommen (parseBakingSequence greift zuerst),
+            // aber zur Sicherheit bleibt der Guard erhalten.
+            splitCompoundStep(text).forEach(step => {
+              if (/\d+\s*min(?:uten?)?\s+nach\s+dem\s+ein(?:schießen|schiessen)/i.test(step.instruction)) {
+                currentSection.steps.push({ ...step, duration: 0, type: 'Aktion' });
+              } else {
+                currentSection.steps.push(step);
+              }
+            });
+          }
         }
       }
     });
