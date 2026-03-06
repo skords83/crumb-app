@@ -373,13 +373,18 @@ const scrapePloetz = async (url) => {
           // splitCompoundStep kann solche Sätze als Warten-Steps mit duration=20 ausgeben,
           // obwohl "20 Minuten nach dem Einschießen ablassen" eine relative Zeitangabe ist –
           // kein eigenständiger Warteschritt. → duration auf 0, type auf Aktion setzen.
-          const fixedSteps = splitCompoundStep(text).map(step => {
+          // FIX: "X Minuten nach dem Einschießen" ist eine relative Zeitangabe,
+          // kein eigenständiger Warteschritt → duration auf 0, type auf Aktion.
+          // WICHTIG: Kein generischer duration-Filter hier – Steps ohne Zeitangabe
+          // (z.B. "Mischen, bis sich die Zutaten verbunden haben") dürfen nicht
+          // verloren gehen, auch wenn ihr duration-Feld undefined oder 0 ist.
+          splitCompoundStep(text).forEach(step => {
             if (/\d+\s*min(?:uten?)?\s+nach\s+dem\s+ein(?:schießen|schiessen)/i.test(step.instruction)) {
-              return { ...step, duration: 0, type: 'Aktion' };
+              currentSection.steps.push({ ...step, duration: 0, type: 'Aktion' });
+            } else {
+              currentSection.steps.push(step);
             }
-            return step;
-          }).filter(step => step.duration > 0 || step.type === 'Aktion');
-          fixedSteps.forEach(step => currentSection.steps.push(step));
+          });
         }
       }
     });
