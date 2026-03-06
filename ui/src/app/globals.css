@@ -14,14 +14,17 @@
 @layer base {
   html {
     color-scheme: light;
+    background-color: #F4F7F8;
   }
 
   html.dark {
     color-scheme: dark;
+    background-color: #0F172A;
   }
 
   body {
     @apply antialiased;
+    background-color: inherit;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
