@@ -234,14 +234,16 @@ const scrapeHomebaking = async (url) => {
             s = s.next();
           }
         } else {
-          // Normale Phase (Brotaroma, Hauptteig, …)
-          const ingredients = [];
+          // Normale Phase (Brotaroma, Hauptteig, …) – Zutaten + p-Schritte
+          const ingredients = [], steps = [];
           let s = $(el).next();
           while (s.length && !s.is('h3, h2')) {
             if (s.is('figure') || s.is('div')) ingredients.push(...parseIngredientsFromTable(s));
+            if (s.is('p') && s.text().trim().length > 15)
+              splitCompoundStep(s.text().trim()).forEach(step => steps.push(step));
             s = s.next();
           }
-          dough_sections.push({ name: h3Name, is_parallel: detectIsParallel(h3Name), ingredients, steps: [] });
+          dough_sections.push({ name: h3Name, is_parallel: detectIsParallel(h3Name), ingredients, steps });
         }
       });
     }
@@ -316,11 +318,14 @@ const scrapeHomebaking = async (url) => {
                 if (text.length < 15 || SKIP_TEXT.test(text)) return;
                 validLis.push(text);
               });
-              // Backen-LIs zusammenführen
+              // Backen-LIs: ab dem ersten Backen-LI jeden als eigenen Schritt belassen.
+              // Hintergrund: Jedes Backen-LI kann eine separate User-Aktion sein
+              // (Schwaden geben → ablassen → Temperatur reduzieren).
+              // Kein join zu einem String – splitCompoundStep darf jeden LI noch weiter aufteilen.
               const firstBakenIdx = validLis.findIndex(t => BACKEN_LI_RE.test(t));
               if (firstBakenIdx >= 0) {
                 validLis.slice(0, firstBakenIdx).forEach(t => assignToHauptteig(t));
-                assignToHauptteig(validLis.slice(firstBakenIdx).join('\n'));
+                validLis.slice(firstBakenIdx).forEach(t => assignToHauptteig(t));
               } else {
                 validLis.forEach(t => assignToHauptteig(t));
               }
