@@ -144,10 +144,46 @@ function _tokenize(text) {
  * @param {string} text
  * @returns {Array<{instruction: string, duration: number, type: string}>}
  */
+// Erkennt ob ein Text eine Backphase beschreibt
+const BACKZEIT_RE  = /\b(?:backzeit|gesamtbackzeit)\b/i;
+const BACKEN_BROAD = /\b(?:gebacken|backen|ausbacken|anbacken|einschießen|schwaden|backrohr)\b/i;
+
+function _isBakingBlock(text) {
+  const hasBakenSignal = BACKEN_BROAD.test(text) || BACKZEIT_RE.test(text);
+  if (!hasBakenSignal || !/\d/.test(text)) return false;
+  // Reines Vorheizen ohne echtes Backen ausschließen
+  const hasRealBaking = /\b(?:gebacken|backen|ausbacken|anbacken|einschießen|schwaden|backzeit|gesamtbackzeit)\b/i.test(text);
+  if (!hasRealBaking && /\b(?:vorheizen|aufheizen)\b/i.test(text)) return false;
+  return true;
+}
+// Extrahiert die explizite Backzeit ("Backzeit 55 Minuten", "Gesamtbackzeit 65 Min")
+// Fallback: größte einzelne Zeitangabe im Text (nicht Summe)
+function _bakingDuration(text) {
+  const m = text.match(/\b(?:backzeit|gesamtbackzeit)\s*:?\s*(?:ca\.?\s*)?(\d+)\s*(?:minuten?|min\.?\b)/i);
+  if (m) return parseInt(m[1]);
+  const UNIT = String.raw`(?:tage?n?|stunden?|std\.?|h\b|minuten?|min\.?\b)`;
+  let max = 0;
+  for (const rm of text.matchAll(new RegExp(`(\\d+[,.]?\\d*)\\s*[-\u2013]\\s*(\\d+[,.]?\\d*)\\s*(${UNIT})`, 'gi'))) {
+    const avg = (parseFloat(rm[1]) + parseFloat(rm[2])) / 2;
+    max = Math.max(max, _toMinutes(String(avg), rm[3]));
+  }
+  for (const sm of text.matchAll(new RegExp(`(\\d+[,.]?\\d*)\\s*(${UNIT})`, 'gi'))) {
+    max = Math.max(max, _toMinutes(sm[1], sm[2]));
+  }
+  return max || 45;
+}
+
 function splitCompoundStep(text) {
   if (!text || text.length < 15) {
     const type = _classify(text || '');
     return [{ instruction: text || '', duration: stepDuration(text || '', type), type }];
+  }
+
+  // Backphase-Kurzschluss: gesamten Text als einen Backen-Schritt zurückgeben
+  // Begründung: Anweisungen wie "Schwaden geben", "Temperatur reduzieren" sind
+  // Teilschritte *während* des Backens, kein eigener Workflow.
+  if (_isBakingBlock(text)) {
+    return [{ instruction: text.trim(), duration: _bakingDuration(text), type: 'Backen' }];
   }
 
   const segments = _tokenize(text);
