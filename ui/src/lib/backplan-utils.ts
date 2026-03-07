@@ -25,13 +25,31 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
   const phaseNames = sections.map((s: any) => s.name as string);
 
   // Dependency Graph aufbauen
+  // Matcht auch wenn der Phasename nummeriert ist ("1. Stufe Anfrischsauer")
+  // und die Zutat nur den Kern-Begriff enthält ("reifer Anfrischsauer").
+  // Strategie: Phasename normalisieren → Ziffern/Stufenpräfixe entfernen,
+  // dann prüfen ob der normalisierte Kern in der Zutat vorkommt.
+  const normalizePhaseName = (name: string): string =>
+    name
+      .toLowerCase()
+      .replace(/^\d+\.\s*/, '')           // "1. " am Anfang
+      .replace(/\bstufe\s+\d+\b/g, '')    // "Stufe 1" irgendwo
+      .replace(/\breifer?\b/g, '')         // "reifer" / "reife"
+      .replace(/\bfrischer?\b/g, '')       // "frischer" / "frische"
+      .replace(/\bfertig[a-z]*\b/g, '')   // "fertiger" etc.
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const deps: Record<string, string[]> = {};
   sections.forEach((section: any) => {
     deps[section.name] = [];
     (section.ingredients || []).forEach((ing: any) => {
-      const ingName = (ing.name || '').toLowerCase();
+      const ingName = normalizePhaseName(ing.name || '');
       phaseNames.forEach(otherName => {
-        if (otherName !== section.name && ingName.includes(otherName.toLowerCase())) {
+        if (otherName === section.name) return;
+        const normOther = normalizePhaseName(otherName);
+        // Match wenn normierter Phasename in normierter Zutat vorkommt (oder umgekehrt)
+        if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName))) {
           if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
         }
       });
@@ -98,13 +116,26 @@ export function formatTimeManual(date: Date): string {
 export function calcTotalDuration(sections: any[]): number {
   if (!sections?.length) return 0;
   const phaseNames = sections.map((s: any) => s.name as string);
+  const normalizePhaseName = (name: string): string =>
+    name
+      .toLowerCase()
+      .replace(/^\d+\.\s*/, '')
+      .replace(/\bstufe\s+\d+\b/g, '')
+      .replace(/\breifer?\b/g, '')
+      .replace(/\bfrischer?\b/g, '')
+      .replace(/\bfertig[a-z]*\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const deps: Record<string, string[]> = {};
   sections.forEach((section: any) => {
     deps[section.name] = [];
     (section.ingredients || []).forEach((ing: any) => {
-      const ingName = (ing.name || '').toLowerCase();
+      const ingName = normalizePhaseName(ing.name || '');
       phaseNames.forEach((otherName: string) => {
-        if (otherName !== section.name && ingName.includes(otherName.toLowerCase()))
+        if (otherName === section.name) return;
+        const normOther = normalizePhaseName(otherName);
+        if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
           if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
       });
     });
