@@ -61,10 +61,17 @@ function stepDuration(text, type) {
 
 const WAIT_VERB_RE       = /(?:stehen|reifen|ruhen|gehen|rasten|quellen|kühlen|lagern|fermentieren|entspannen)\s+lassen/i;
 const WAIT_VERB_NOLASSEN = /\b(?:lagern|kühlen|fermentieren)\b/i;
+const WAIT_NOUN_RE       = /\b(?:reifezeit|ruhezeit|gehzeit|rastzeit|stockgare|stückgare|gare|kühlzeit)\b/i;
 const TRANSITION_RE      = /^(?:anschließend|dann|danach|nun|jetzt|zuletzt|abschließend|zum\s+schluss)\b\s*/i;
 
+// Reifezeit-Appendix am Satzende, auch mit Teigtemperatur-Prefix:
+// "... / Reifezeit 3 Stunden." oder "Teigtemperatur 28°C / Reifezeit 3 Stunden"
+const REIFEZEIT_APPENDIX_RE = /[\s/|–\-]+(?:gewünschte\s+teigtemperatur[^/]*\/\s*)?(?:reifezeit|ruhezeit|gehzeit|rastzeit|stockgare|stückgare|gare(?:zeit)?|kühlzeit)\s*:?\s*[\d].*/i;
+
 function _isWait(text) {
-  return WAIT_VERB_RE.test(text) || WAIT_VERB_NOLASSEN.test(text) || /über\s+nacht/i.test(text);
+  return WAIT_VERB_RE.test(text) || WAIT_VERB_NOLASSEN.test(text)
+    || /über\s+nacht/i.test(text)
+    || WAIT_NOUN_RE.test(text);
 }
 
 function _classify(text) {
@@ -75,7 +82,11 @@ function _classify(text) {
 }
 
 function _cleanInstr(t) {
-  return t.replace(/\s+und\.?\s*$/i, '').replace(/\.\s*$/, '').trim() + '.';
+  return t
+    .replace(/\s+und\.?\s*$/i, '')         // hängendes "und" am Ende
+    .replace(/(\.\s*)(anschließend\b)/i, ' $2')  // "und. anschließend" → "und anschließend"
+    .replace(/\.\s*$/, '')
+    .trim() + '.';
 }
 
 function _splitWaitChain(text, segments) {
@@ -93,6 +104,17 @@ function _tokenize(text) {
   const segments = [];
   for (const sentence of sentences) {
     const s = sentence.replace(TRANSITION_RE, '').trim();
+
+    // Reifezeit-Appendix: "Aktion. Reifezeit 3 Stunden." oder "Aktion / Reifezeit 3 Std."
+    // Auch mit Teigtemperatur-Prefix: "Aktion. Gewünschte Teigtemperatur 28°C / Reifezeit 3 Std."
+    const reifezeitM = s.match(/^(.{10,?}?)\s*[.!]?\s*((?:(?:gewünschte\s+)?teigtemperatur[^/\.]*[/\\|]\s*)?(?:reifezeit|ruhezeit|gehzeit|rastzeit|stockgare|stückgare|gare(?:zeit)?|kühlzeit)\s*:?\s*[\d].*)$/i);
+    if (reifezeitM) {
+      const action = reifezeitM[1].trim();
+      const wait   = reifezeitM[2].trim();
+      if (action.length >= 5) segments.push({ text: action, type: _classify(action) });
+      segments.push({ text: wait, type: 'Warten' });
+      continue;
+    }
 
     // Komma vor Wartezeit: "Aktion, ZEIT reifen lassen [und ZEIT lagern]"
     const commaM = s.match(/^(.{5,}?),\s*((?:.*?(?:reifen|stehen|ruhen|lagern|kühlen|fermentieren|quellen|rasten|gehen)\s*(?:lassen)?.*))$/i);
