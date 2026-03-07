@@ -61,7 +61,7 @@ function stepDuration(text, type) {
 
 const WAIT_VERB_RE       = /(?:stehen|reifen|ruhen|gehen|rasten|quellen|kühlen|lagern|fermentieren|entspannen)\s+lassen/i;
 const WAIT_VERB_NOLASSEN = /\b(?:lagern|kühlen|fermentieren)\b/i;
-const WAIT_NOUN_RE       = /\b(?:reifezeit|ruhezeit|gehzeit|rastzeit|stockgare|stückgare|gare|kühlzeit)\b/i;
+const WAIT_NOUN_RE       = /\b(?:reifezeit|ruhezeit|gehzeit|rastzeit|stockgare|stückgare|endgare|kühlzeit)\b/i;
 const TRANSITION_RE      = /^(?:anschließend|dann|danach|nun|jetzt|zuletzt|abschließend|zum\s+schluss)\b\s*/i;
 
 // Reifezeit-Appendix am Satzende, auch mit Teigtemperatur-Prefix:
@@ -98,7 +98,7 @@ function _splitWaitChain(text, segments) {
 
 function _tokenize(text) {
   const sentences = text
-    .split(/(?<=\.)\s+(?=[A-ZÄÖÜ0-9])|(?<![.])\s+(?=(?:Anschließend|Dann|Danach|Nun|Jetzt|Zuletzt|Abschließend)\b)/i)
+    .split(/(?<!(?:ca|min|std|bzw|ca|mind|max|inkl|bspw))\.\s+(?=[A-ZÄÖÜ0-9])|(?<![.])\s+(?=(?:Anschließend|Dann|Danach|Nun|Jetzt|Zuletzt|Abschließend)\b)/i)
     .map(s => s.trim()).filter(s => s.length > 3);
 
   const segments = [];
