@@ -277,16 +277,20 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           /* Seitenformat */
           @page { margin: 1.5cm 2cm; size: A4; }
 
-          /* Alles ausblenden was nicht zum Rezept gehört */
-          body > *:not(#__next) { display: none !important; }
-          .no-print { display: none !important; }
-
           /* Hintergrundfarben erlauben */
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+          /* UI-Elemente ausblenden */
+          .no-print { display: none !important; }
+          .print-hide { display: none !important; }
+
+          /* Seiten-Hintergrund entfernen */
+          body { background: white !important; }
 
           /* Karte nimmt volle Breite, kein shadow, kein overflow-hidden */
           .print-card {
             max-width: 100% !important;
+            margin: 0 !important;
             box-shadow: none !important;
             border: none !important;
             border-radius: 0 !important;
@@ -294,7 +298,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           }
 
           /* Hero-Bild kompakter */
-          .print-hero { height: 200px !important; }
+          .print-hero { height: 200px !important; border-radius: 0 !important; }
 
           /* Infobar + Beschreibung + Gesamt-Zutaten normal */
           .print-content { padding: 0 !important; }
@@ -304,9 +308,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
           /* Seitenumbrüche */
           .print-section { page-break-inside: avoid; break-inside: avoid; }
-
-          /* ScalerBar, Footer-Button, Backplan-Box ausblenden */
-          .print-hide { display: none !important; }
         }
       `}</style>
       <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
