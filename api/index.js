@@ -295,9 +295,93 @@ app.post('/api/import/html', async (req, res) => {
 // ============================================================
 app.get('/api/recipes', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM recipes WHERE user_id = $1 ORDER BY created_at DESC', [req.user.userId]);
+    const { q, filter, sort } = req.query;
+    const params = [req.user.userId];
+    const conditions = ['user_id = $1'];
+
+    // Volltextsuche über title, description und Zutaten-Namen in dough_sections
+    if (q) {
+      const idx = params.push(`%${q}%`);
+      conditions.push(`(
+        title ILIKE $${idx}
+        OR description ILIKE $${idx}
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                        jsonb_array_elements(section->'ingredients') AS ing
+          WHERE ing->>'name' ILIKE $${idx}
+        )
+      )`);
+    }
+
+    // Filter
+    if (filter) {
+      switch (filter) {
+        case 'Favoriten':
+          conditions.push('is_favorite = true');
+          break;
+        case 'Sauerteig':
+          conditions.push(`(
+            title ILIKE '%sauerteig%' OR description ILIKE '%sauerteig%'
+            OR title ILIKE '%anstellgut%' OR description ILIKE '%anstellgut%'
+            OR EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%sauerteig%' OR ing->>'name' ILIKE '%anstellgut%'
+            )
+          )`);
+          break;
+        case 'Hefeteig':
+          conditions.push(`(
+            (title ILIKE '%hefe%' OR description ILIKE '%hefe%'
+              OR EXISTS (
+                SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                              jsonb_array_elements(section->'ingredients') AS ing
+                WHERE ing->>'name' ILIKE '%hefe%'
+              )
+            )
+            AND NOT (
+              title ILIKE '%sauerteig%' OR description ILIKE '%sauerteig%'
+              OR EXISTS (
+                SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                              jsonb_array_elements(section->'ingredients') AS ing
+                WHERE ing->>'name' ILIKE '%sauerteig%'
+              )
+            )
+          )`);
+          break;
+        case 'Vollkorn':
+          conditions.push(`(
+            title ILIKE '%vollkorn%' OR description ILIKE '%vollkorn%'
+            OR EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%vollkorn%'
+            )
+          )`);
+          break;
+        // 'Heute fertig' bleibt clientseitig – braucht Laufzeitberechnung
+      }
+    }
+
+    // Sortierung
+    const orderMap = {
+      newest:  'created_at DESC',
+      oldest:  'created_at ASC',
+      az:      'title ASC',
+      za:      'title DESC',
+    };
+    const orderBy = orderMap[sort] || 'created_at DESC';
+
+    const where = conditions.join(' AND ');
+    const result = await pool.query(
+      `SELECT * FROM recipes WHERE ${where} ORDER BY ${orderBy}`,
+      params
+    );
     res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('❌ recipes GET Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/recipes/:id', async (req, res) => {

@@ -17,6 +17,7 @@ const SORT_OPTIONS = [
   { value: 'za', label: 'Z → A' },
 ];
 
+// "Heute fertig" bleibt clientseitig (Laufzeitberechnung)
 const FILTERS = ["Alle", "Sauerteig", "Hefeteig", "Vollkorn", "Heute fertig", "Favoriten"];
 
 function HomePageContent() {
@@ -24,6 +25,7 @@ function HomePageContent() {
   const searchParams = useSearchParams();
 
   const [recipes, setRecipes] = useState<any[]>([]);
+  const [allRecipes, setAllRecipes] = useState<any[]>([]); // ungefiltert, nur für "Heute fertig" + Counts
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(true);
   const [showPlanModal, setShowPlanModal] = useState(false);
@@ -69,8 +71,30 @@ function HomePageContent() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Alle Rezepte einmalig laden (ungefiltert, für Counts + "Heute fertig")
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
+    })
+      .then(res => res.json())
+      .then(data => setAllRecipes(Array.isArray(data) ? data : []))
+      .catch(err => console.error("Ladefehler (alle):", err));
+  }, []);
+
+  // Gefilterte Rezepte vom Backend laden wenn URL-Parameter sich ändern
+  useEffect(() => {
+    setIsLoading(true);
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('q', searchQuery);
+    // "Heute fertig" wird clientseitig behandelt – alle laden, dann filtern
+    if (activeFilter && activeFilter !== 'Alle' && activeFilter !== 'Heute fertig') {
+      params.set('filter', activeFilter);
+    }
+    if (activeSort && activeSort !== 'newest') params.set('sort', activeSort);
+
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/recipes${params.toString() ? '?' + params.toString() : ''}`;
+
+    fetch(url, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
     })
       .then(res => res.json())
@@ -82,11 +106,12 @@ function HomePageContent() {
         console.error("Ladefehler:", err);
         setIsLoading(false);
       });
-  }, []);
+  }, [searchQuery, activeFilter, activeSort]);
 
   // Optimistisches Favoriten-Toggle mit Rollback
   const toggleFavorite = async (id: number, status: boolean) => {
     setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
+    setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'PATCH',
@@ -98,9 +123,11 @@ function HomePageContent() {
       });
       if (!res.ok) {
         setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
+        setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
       }
     } catch (err) {
       setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
+      setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
       console.error("Favorit-Fehler:", err);
     }
   };
@@ -116,77 +143,48 @@ function HomePageContent() {
     return totalMinutes;
   };
 
-  // Gezielte Suche – kein JSON.stringify mehr
-  const matchesSearch = (recipe: any, query: string) => {
-    const q = query.toLowerCase();
-    if (recipe.title?.toLowerCase().includes(q)) return true;
-    if (recipe.description?.toLowerCase().includes(q)) return true;
-    if (recipe.dough_sections?.some((s: any) =>
-      s.ingredients?.some((i: any) => i.name?.toLowerCase().includes(q)) ||
-      s.steps?.some((st: any) => st.description?.toLowerCase().includes(q))
-    )) return true;
-    return false;
-  };
-
-  // Hilfsfunktion: Rezept-Inhaltsstring für Filterlogik
-  const getRecipeContent = (recipe: any) => {
-    const title = (recipe.title ?? '').toLowerCase();
-    const desc = (recipe.description ?? '').toLowerCase();
-    const ingredients = recipe.dough_sections?.flatMap((s: any) =>
-      s.ingredients?.map((i: any) => i.name?.toLowerCase() ?? '') ?? []
-    ).join(' ') ?? '';
-    return `${title} ${desc} ${ingredients}`;
-  };
-
-  const matchesFilter = (recipe: any, filter: string) => {
-    const combined = getRecipeContent(recipe);
-    const duration = getRecipeDuration(recipe);
-    switch (filter) {
-      case 'Alle': return true;
-      case 'Favoriten': return recipe.is_favorite;
-      case 'Sauerteig': return combined.includes('sauerteig') || combined.includes('anstellgut');
-      case 'Hefeteig': return combined.includes('hefe') && !combined.includes('sauerteig');
-      case 'Vollkorn': return combined.includes('vollkorn');
-      case 'Heute fertig': {
-        if (duration <= 0) return false;
-        const now = new Date();
-        const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
-        return duration <= minutesLeft;
-      }
-      default: return true;
-    }
-  };
-
-  // Gefilterte + sortierte Rezepte als memo
+  // "Heute fertig" clientseitig filtern (braucht aktuelle Uhrzeit)
   const filteredRecipes = useMemo(() => {
-    let result = recipes.filter(r =>
-      (!searchQuery || matchesSearch(r, searchQuery)) &&
-      matchesFilter(r, activeFilter)
-    );
-    result.sort((a, b) => {
-      switch (activeSort) {
-        case 'oldest': return (a.id ?? 0) - (b.id ?? 0);
-        case 'az': return (a.title ?? '').localeCompare(b.title ?? '', 'de');
-        case 'za': return (b.title ?? '').localeCompare(a.title ?? '', 'de');
-        default: return (b.id ?? 0) - (a.id ?? 0); // newest
-      }
+    if (activeFilter !== 'Heute fertig') return recipes;
+    const now = new Date();
+    const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
+    return recipes.filter(r => {
+      const d = getRecipeDuration(r);
+      return d > 0 && d <= minutesLeft;
     });
-    return result;
-  }, [recipes, searchQuery, activeFilter, activeSort]);
+  }, [recipes, activeFilter]);
 
   // visibleCount zurücksetzen bei Filter/Suche/Sort-Wechsel
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [searchQuery, activeFilter, activeSort]);
 
-  // Filter-Anzahl-Badges
-  const filterCounts = useMemo(() =>
-    Object.fromEntries(FILTERS.map(f => [f, recipes.filter(r => matchesFilter(r, f)).length])),
-    [recipes]
-  );
+  // Filter-Counts aus allRecipes berechnen (clientseitig, kein Extra-Request)
+  const filterCounts = useMemo(() => {
+    const now = new Date();
+    const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
 
-  // IntersectionObserver für Infinite Scroll – callback ref statt useRef
-  // damit der Observer neu gesetzt wird wenn das Sentinel-Element ins DOM kommt
+    const check = (r: any, f: string): boolean => {
+      const title = (r.title ?? '').toLowerCase();
+      const desc = (r.description ?? '').toLowerCase();
+      const ings = r.dough_sections?.flatMap((s: any) =>
+        s.ingredients?.map((i: any) => i.name?.toLowerCase() ?? '') ?? []
+      ).join(' ') ?? '';
+      const combined = `${title} ${desc} ${ings}`;
+      switch (f) {
+        case 'Alle': return true;
+        case 'Favoriten': return r.is_favorite;
+        case 'Sauerteig': return combined.includes('sauerteig') || combined.includes('anstellgut');
+        case 'Hefeteig': return combined.includes('hefe') && !combined.includes('sauerteig');
+        case 'Vollkorn': return combined.includes('vollkorn');
+        case 'Heute fertig': { const d = getRecipeDuration(r); return d > 0 && d <= minutesLeft; }
+        default: return true;
+      }
+    };
+    return Object.fromEntries(FILTERS.map(f => [f, allRecipes.filter(r => check(r, f)).length]));
+  }, [allRecipes]);
+
+  // IntersectionObserver für Infinite Scroll – callback ref
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
     if (observerRef.current) observerRef.current.disconnect();
@@ -264,7 +262,7 @@ function HomePageContent() {
                 }`}
               >
                 {filter}
-                {!isLoading && (
+                {allRecipes.length > 0 && (
                   <span className={`text-xs font-normal px-1.5 py-0.5 rounded-full ${
                     activeFilter === filter
                       ? 'bg-white/20 text-white'
