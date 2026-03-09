@@ -39,7 +39,6 @@ function HomePageContent() {
   const activeFilter = searchParams.get('filter') ?? 'Alle';
   const activeSort = searchParams.get('sort') ?? 'newest';
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
   const updateParams = (updates: Record<string, string | null>) => {
@@ -186,16 +185,18 @@ function HomePageContent() {
     [recipes]
   );
 
-  // IntersectionObserver für Infinite Scroll
-  const handleObserver = useCallback((entries: IntersectionObserverEntry[]) => {
-    if (entries[0].isIntersecting) setVisibleCount(prev => prev + PAGE_SIZE);
+  // IntersectionObserver für Infinite Scroll – callback ref statt useRef
+  // damit der Observer neu gesetzt wird wenn das Sentinel-Element ins DOM kommt
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!node) return;
+    observerRef.current = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) setVisibleCount(prev => prev + PAGE_SIZE); },
+      { root: null, rootMargin: '200px', threshold: 0 }
+    );
+    observerRef.current.observe(node);
   }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(handleObserver, { root: null, rootMargin: '200px', threshold: 0 });
-    if (sentinelRef.current) observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [handleObserver]);
 
   const visibleRecipes = filteredRecipes.slice(0, visibleCount);
   const hasMore = visibleCount < filteredRecipes.length;
