@@ -1,7 +1,8 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
 import { calcTotalDuration } from "@/lib/backplan-utils";
 import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
@@ -114,6 +115,9 @@ const getRecipeLabels = (recipe: any) => {
 export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeCardProps) {
   const stats = getStats(recipe);
   const labels = getRecipeLabels(recipe);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  const imageSrc = recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=800&auto=format&fit=crop';
 
   return (
     <Link
