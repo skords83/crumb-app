@@ -9,8 +9,10 @@ import {
   List, 
   Edit3, 
   Type, 
-  Thermometer as TempIcon 
+  Thermometer as TempIcon,
+  Images
 } from 'lucide-react';
+import ImageSelectModal from '@/components/ImageSelectModal';
 
 export const PHASE_TYPES = [
   { label: "Sauerteig", isParallel: true },
@@ -33,7 +35,8 @@ export default function RecipeForm({
   doughSections,
   setDoughSections,
   onSubmit,
-  isSubmitting
+  isSubmitting,
+  availableImages = [],
 }: any) {
 
   const addSection = () => {
@@ -86,6 +89,7 @@ export default function RecipeForm({
   };
 
   const [isUploading, setIsUploading] = React.useState(false);
+  const [showImageModal, setShowImageModal] = React.useState(false);
 
   const totalIngredients = useMemo(() => {
     if (!Array.isArray(doughSections)) return [];
@@ -183,6 +187,16 @@ export default function RecipeForm({
               onChange={(e) => setImageUrl(e.target.value)} 
               placeholder="Bild URL..."
             />
+            {availableImages.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowImageModal(true)}
+                className="flex items-center gap-2 text-xs font-bold text-[#8B7355] hover:text-[#766248] bg-[#8B7355]/5 hover:bg-[#8B7355]/10 border border-[#8B7355]/20 px-3 py-2 rounded-xl transition-all"
+              >
+                <Images size={14} />
+                Aus {availableImages.length} Bildern wählen
+              </button>
+            )}
           </div>
         </div>
 
@@ -387,6 +401,14 @@ export default function RecipeForm({
           </div>
         </div>
       </div>
+
+      {showImageModal && availableImages.length > 1 && (
+        <ImageSelectModal
+          images={availableImages}
+          onSelect={(url) => { setImageUrl(url); setShowImageModal(false); }}
+          onSkip={() => setShowImageModal(false)}
+        />
+      )}
     </form>
   );
 }

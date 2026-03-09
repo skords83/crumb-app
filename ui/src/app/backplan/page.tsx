@@ -24,6 +24,7 @@ export default function BackplanPage() {
   });
   const [activeTab, setActiveTab] = useState<'schritte' | 'zeitplan'>('schritte');
   const [activeRecipeIdx, setActiveRecipeIdx] = useState(0);
+  const [finishModalRecipeId, setFinishModalRecipeId] = useState<number | null>(null);
   const activeCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -147,7 +148,6 @@ export default function BackplanPage() {
   };
 
   const finishBaking = async (recipeId: number) => {
-    if (!confirm("Brot fertig?")) return;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PATCH',
@@ -155,12 +155,12 @@ export default function BackplanPage() {
         body: JSON.stringify({ planned_at: null }),
       });
       if (res.ok) {
-        // localStorage aufräumen
         setCompletedSteps(prev => { const next = new Set(prev); [...next].filter(k => k.startsWith(`${recipeId}-`)).forEach(k => next.delete(k)); return next; });
         setStepCompletedAt(prev => { const next = { ...prev }; Object.keys(next).filter(k => k.startsWith(`${recipeId}-`)).forEach(k => delete next[k]); return next; });
         const remaining = plannedRecipes.filter(r => r.id !== recipeId);
         setPlannedRecipes(remaining);
         setActiveRecipeIdx(0);
+        setFinishModalRecipeId(null);
         if (remaining.length === 0) window.location.href = "/";
       }
     } catch { alert("Fehler"); }
@@ -243,6 +243,52 @@ export default function BackplanPage() {
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-gray-900 pb-32 transition-colors duration-200">
 
+      {/* ── FERTIG-MODAL ── */}
+      {finishModalRecipeId !== null && (() => {
+        const modalRecipe = plannedRecipes.find(r => r.id === finishModalRecipeId);
+        if (!modalRecipe) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinishModalRecipeId(null)} />
+            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden">
+              {/* Bild-Header */}
+              <div className="relative h-32 overflow-hidden">
+                <img
+                  src={modalRecipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=400'}
+                  className="w-full h-full object-cover"
+                  alt=""
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-3 left-4 right-4">
+                  <p className="text-white font-extrabold text-[15px] leading-tight truncate">{modalRecipe.title}</p>
+                  <p className="text-white/70 text-[11px] font-bold mt-0.5">Fertig um {extractTimeFromString(modalRecipe.planned_at)} Uhr</p>
+                </div>
+              </div>
+              {/* Content */}
+              <div className="p-5">
+                <div className="w-14 h-14 rounded-2xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3 text-3xl">
+                  🍞
+                </div>
+                <h3 className="text-center text-[17px] font-extrabold text-gray-800 dark:text-gray-100 mb-1">Brot fertig?</h3>
+                <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mb-5">Der Backplan wird abgeschlossen und aus deiner Liste entfernt.</p>
+                <button
+                  onClick={() => finishBaking(finishModalRecipeId)}
+                  className="w-full py-3.5 rounded-2xl bg-green-500 hover:bg-green-600 active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-green-200 dark:shadow-green-900/30 mb-2"
+                >
+                  Ja, Brot ist fertig 🎉
+                </button>
+                <button
+                  onClick={() => setFinishModalRecipeId(null)}
+                  className="w-full py-3 rounded-2xl bg-[#F5F0E8] dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold text-[13px] transition-colors hover:bg-[#EDE8DF] dark:hover:bg-gray-600"
+                >
+                  Weiterbacken
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── REZEPT-SWITCHER ── */}
       {plannedRecipes.length > 1 && (
         <div className="bg-white dark:bg-gray-800 border-b border-[#F0EBE3] dark:border-gray-700">
@@ -323,7 +369,7 @@ export default function BackplanPage() {
                   </button>
                 </div>
               )}
-              <button onClick={() => finishBaking(recipe.id)}
+              <button onClick={() => setFinishModalRecipeId(recipe.id)}
                 className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-[11px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors">
                 Fertig
               </button>

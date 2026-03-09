@@ -231,6 +231,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     } catch (err) { console.error(err); }
   };
 
+  const handlePrint = () => {
+    setShowMenu(false);
+    setTimeout(() => window.print(), 100);
+  };
+
   const totalIngredients = useMemo(() => {
     if (!recipe?.dough_sections) return [];
     const totals: Record<string, { name: string; amount: number; unit: string }> = {};
@@ -267,10 +272,47 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-      <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
+      <style>{`
+        @media print {
+          /* Seitenformat */
+          @page { margin: 1.5cm 2cm; size: A4; }
+
+          /* Alles ausblenden was nicht zum Rezept gehört */
+          body > *:not(#__next) { display: none !important; }
+          .no-print { display: none !important; }
+
+          /* Hintergrundfarben erlauben */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+          /* Karte nimmt volle Breite, kein shadow, kein overflow-hidden */
+          .print-card {
+            max-width: 100% !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            overflow: visible !important;
+          }
+
+          /* Hero-Bild kompakter */
+          .print-hero { height: 200px !important; }
+
+          /* Infobar + Beschreibung + Gesamt-Zutaten normal */
+          .print-content { padding: 0 !important; }
+
+          /* Phasen nebeneinander auf Druck */
+          .print-phase-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1.5rem !important; }
+
+          /* Seitenumbrüche */
+          .print-section { page-break-inside: avoid; break-inside: avoid; }
+
+          /* ScalerBar, Footer-Button, Backplan-Box ausblenden */
+          .print-hide { display: none !important; }
+        }
+      `}</style>
+      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
         {/* HERO IMAGE */}
-        <div className="relative h-96 w-full rounded-[1.5rem] overflow-hidden">
+        <div className="print-hero relative h-96 w-full rounded-[1.5rem] overflow-hidden">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
             className="w-full h-full object-cover object-[center_65%]"
@@ -278,11 +320,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/65 from-[0%] via-black/25 via-[45%] to-black/15 pointer-events-none" />
 
-          <Link href="/" className="absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
+          <Link href="/" className="no-print absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
             <Icons.ChevronLeft size={20} className="text-gray-700 dark:text-gray-200" />
           </Link>
 
-          <div className="absolute top-4 right-4 z-10 flex gap-2">
+          <div className="no-print absolute top-4 right-4 z-10 flex gap-2">
             <button
               onClick={toggleFavorite}
               className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm transition-all hover:scale-110"
@@ -308,14 +350,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                       <span className="text-sm font-medium">Bearbeiten</span>
                     </button>
                     <button
-                      disabled
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-gray-300 dark:text-gray-600 border-b border-gray-100 dark:border-gray-700 cursor-not-allowed"
+                      onClick={handlePrint}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
                     >
-                      <div className="flex items-center gap-3">
-                        <Icons.Printer size={15} />
-                        <span className="text-sm">Drucken / Export</span>
-                      </div>
-                      <span className="text-[9px] font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-2 py-0.5 rounded">bald</span>
+                      <Icons.Printer size={15} className="text-gray-400" />
+                      <span className="text-sm font-medium">Drucken / PDF</span>
                     </button>
                     <button
                       onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
@@ -409,7 +448,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
           {/* BACKPLAN ANZEIGE */}
           {calculatedTimeline.length > 0 && (
-            <div className="mb-10 bg-orange-50/50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-2xl p-6">
+            <div className="print-hide mb-10 bg-orange-50/50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-2xl p-6">
               <h3 className="font-black text-orange-800 dark:text-orange-200 mb-4 flex items-center gap-2 text-xs uppercase tracking-widest">
                 <Icons.Calendar size={16} /> Dein Zeitplan
               </h3>
@@ -426,7 +465,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           )}
 
           {/* SKALIERUNGS-STEPPER */}
-          <ScalerBar multiplier={multiplier} onChange={setMultiplier} />
+          <div className="print-hide"><ScalerBar multiplier={multiplier} onChange={setMultiplier} /></div>
 
           {/* PHASEN LOOP */}
           <div className="space-y-12">
@@ -434,7 +473,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               const flourBase = calcFlourBase(section.ingredients || []) * multiplier;
 
               return (
-                <section key={sIdx}>
+                <section key={sIdx} className="print-section">
                   <div className="flex items-center gap-4 mb-6">
                     <span className="bg-[#8B4513] text-white w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shadow-sm">{sIdx + 1}</span>
                     <h2 className="text-lg font-black uppercase text-gray-800 dark:text-gray-100 tracking-wide">{section.name}</h2>
@@ -446,7 +485,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                     <div className="grow h-px bg-gray-100 dark:bg-gray-700" />
                   </div>
 
-                  <div className="grid lg:grid-cols-2 gap-8">
+                  <div className="print-phase-grid grid lg:grid-cols-2 gap-8">
                     {/* ZUTATEN */}
                     <div className="space-y-2">
                       <span className="text-[10px] font-bold uppercase text-gray-300 dark:text-gray-500 tracking-widest block mb-2">Zutaten</span>
@@ -517,7 +556,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         {/* FOOTER ACTION */}
-        <div className="p-8 bg-gray-50/50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-center">
+        <div className="no-print p-8 bg-gray-50/50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-center">
           <button
             onClick={() => setShowPlanModal(true)}
             className="flex items-center gap-3 bg-[#8B4513] text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-[#6F360F] transition-all transform hover:-translate-y-0.5 active:translate-y-0"
