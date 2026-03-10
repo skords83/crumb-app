@@ -149,22 +149,42 @@
   }
 
   /* ── ABSTÄNDE KOMPRIMIEREN ────────────────────────────── */
+  /* Phasen-Abstand: so klein wie möglich damit mehr pro Seite passen */
   .space-y-12 > * + * {
-    margin-top: 1.25rem !important;
+    margin-top: 0.6rem !important;
   }
   .space-y-5 > * + * {
-    margin-top: 0.6rem !important;
+    margin-top: 0.4rem !important;
+  }
+  /* mb-10 überall (Beschreibung, Zutatenliste, Infobar, ScalerBar) */
+  .print-card .mb-10 {
+    margin-bottom: 0.5rem !important;
+  }
+  .print-card .mb-6 {
+    margin-bottom: 0.35rem !important;
+  }
+  .print-card .mb-4 {
+    margin-bottom: 0.25rem !important;
+  }
+  /* Padding in Zutaten/Schritte-Boxen kompakter */
+  .print-card .p-6 {
+    padding: 0.6rem !important;
+  }
+  .print-card .py-1\.5 {
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
+  }
+  /* Hero noch kleiner */
+  .print-hero {
+    height: 110px !important;
   }
 
   /* ── SEITENUMBRÜCHE ───────────────────────────────────── */
-  /* Nur Header mit Grid zusammenhalten (kein Waisenkopf),
-     Phase selbst darf über Seitenumbrüche fließen */
-  .print-section > div:first-child {
-    break-after: avoid;
-    page-break-after: avoid;
-  }
-  /* Einzelne Schritte nicht mitten im Umbruch trennen */
-  .print-section .flex.gap-4 {
+  /* Jede Phase komplett zusammenhalten.
+     Damit das funktioniert ohne Leerseiten zu erzeugen,
+     müssen die Abstände klein genug sein dass 2+ Phasen
+     pro Seite passen — siehe space-y und mb Overrides oben. */
+  .print-section {
     break-inside: avoid;
     page-break-inside: avoid;
   }
