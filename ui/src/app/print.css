@@ -157,13 +157,16 @@
   }
 
   /* ── SEITENUMBRÜCHE ───────────────────────────────────── */
-  .print-section {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
+  /* Nur Header mit Grid zusammenhalten (kein Waisenkopf),
+     Phase selbst darf über Seitenumbrüche fließen */
   .print-section > div:first-child {
     break-after: avoid;
     page-break-after: avoid;
+  }
+  /* Einzelne Schritte nicht mitten im Umbruch trennen */
+  .print-section .flex.gap-4 {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* ── LINKS ────────────────────────────────────────────── */
