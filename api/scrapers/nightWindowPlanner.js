@@ -170,9 +170,19 @@ function planWithNightWindow(sections, nightWindow, targetTime, baseDate = new D
     return buildResult(baseSteps, basePlannedAt, warnings, nightStartMin, nightEndMin);
   }
 
-  const candidate = candidates[candidates.length - 1];
-
-  if (candidate.step.duration > nightDurMin) {
+  // Besten Kandidaten wählen: bevorzuge den Warteschritt der am besten ins Nachtfenster passt.
+  // Kriterium: Dauer möglichst nah am Nachtfenster (aber ≤), sonst längster verfügbarer.
+  // Bei Gleichstand: früherer Schritt bevorzugt (damit spätere Aktionen tagsüber bleiben).
+  const fitsInWindow = candidates.filter(c => c.step.duration <= nightDurMin);
+  let candidate;
+  if (fitsInWindow.length > 0) {
+    // Den längsten der noch ins Fenster passt – aber nicht den letzten im Rezept,
+    // sondern den, nach dem die wenigsten Aktionsschritte noch nachts fallen würden.
+    // Einfache Heuristik: nimm den letzten der ins Fenster passt.
+    candidate = fitsInWindow[fitsInWindow.length - 1];
+  } else {
+    // Alle Kandidaten länger als Nachtfenster → nimm den kürzesten (kleinste Überschreitung)
+    candidate = candidates.reduce((a, b) => a.step.duration < b.step.duration ? a : b);
     warnings.push(
       `"${candidate.step.instruction.slice(0, 50)}…" dauert ${candidate.step.duration} Min – ` +
       `länger als das Nachtfenster (${nightDurMin} Min). Schritt beginnt im Fenster.`
@@ -180,16 +190,16 @@ function planWithNightWindow(sections, nightWindow, targetTime, baseDate = new D
   }
 
   // Verschiebung berechnen: Kandidat soll um nightEnd enden
-  const currentEndMod = minOfDay(candidate.endTime);
-  let minutesToShift = nightEndMin - currentEndMod;
-
-  // Falls Kandidat länger als Nachtfenster: Kandidat soll bei nightStart beginnen
+  let minutesToShift;
   if (candidate.step.duration > nightDurMin) {
-    const currentStartMod = minOfDay(candidate.startTime);
-    minutesToShift = nightStartMin - currentStartMod;
+    // Kandidat startet bei nightStart
+    minutesToShift = nightStartMin - minOfDay(candidate.startTime);
+  } else {
+    // Kandidat endet bei nightEnd
+    minutesToShift = nightEndMin - minOfDay(candidate.endTime);
   }
 
-  // Besten plannedAt finden: human-friendly Startzeit (06:00–23:00), Zukunft
+  // Besten plannedAt finden: human-friendly Startzeit (06:00–23:00)
   let bestPlannedAt = null;
 
   for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
@@ -210,7 +220,82 @@ function planWithNightWindow(sections, nightWindow, targetTime, baseDate = new D
   }
 
   const finalSteps = buildSteps(sections, bestPlannedAt, startOffsets);
-  return buildResult(finalSteps, bestPlannedAt, warnings, nightStartMin, nightEndMin);
+  const result = buildResult(finalSteps, bestPlannedAt, warnings, nightStartMin, nightEndMin);
+
+  // Wenn nicht viable: alternativen Plan berechnen der alle Aktionen VOR die Nacht legt.
+  // Strategie: letzter Aktionsschritt vor Nacht muss um nightStart fertig sein.
+  if (!result.viable) {
+    const altResult = calcAlternativePlan(finalSteps, sections, startOffsets, nightStartMin, nightEndMin, nightDurMin);
+    if (altResult) result.alternative = altResult;
+  }
+
+  return result;
+}
+
+/**
+ * Alternativer Plan: alle Aktionsschritte enden vor nightStart.
+ * Findet den letzten Aktionsschritt der noch vor der Nacht liegen soll,
+ * und berechnet rückwärts einen Startpunkt.
+ */
+function calcAlternativePlan(currentSteps, sections, startOffsets, nightStartMin, nightEndMin, nightDurMin) {
+  // Letzter Aktionsschritt im aktuellen Plan der nachts fällt
+  const nightActions = currentSteps.filter(s =>
+    !isPassive(s.step) && isInNightWindow(minOfDay(s.startTime), nightStartMin, nightEndMin)
+  );
+  if (nightActions.length === 0) return null;
+
+  // Letzter Aktionsschritt der nachts fällt – dieser soll jetzt vor nightStart enden
+  const lastNightAction = nightActions[nightActions.length - 1];
+
+  // Verschiebung: lastNightAction.endTime soll nightStart sein
+  const currentEndMod = minOfDay(lastNightAction.endTime);
+  let shift = nightStartMin - currentEndMod;
+
+  // Sicherstellen dass Startzeit human-friendly bleibt
+  let altPlannedAt = null;
+  for (let dayOffset = -1; dayOffset <= 2; dayOffset++) {
+    const trialShift = shift + dayOffset * 1440;
+    // plannedAt des alternativen Plans = aktuelles plannedAt + trialShift
+    const currentPlannedAt = currentSteps[currentSteps.length - 1]?.endTime ?? new Date();
+    const trialPlannedAt = new Date(currentPlannedAt.getTime() + trialShift * 60000);
+    const trialSteps = buildSteps(sections, trialPlannedAt, startOffsets);
+    const startMod = minOfDay(trialSteps[0]?.startTime ?? trialPlannedAt);
+
+    if (startMod >= 360 && startMod <= 1380) {
+      altPlannedAt = trialPlannedAt;
+      break;
+    }
+  }
+
+  if (!altPlannedAt) return null;
+
+  const altSteps = buildSteps(sections, altPlannedAt, startOffsets);
+  const altPlan = altSteps.map(item => ({
+    section: item.section,
+    instruction: item.step.instruction,
+    type: item.step.type,
+    duration: item.step.duration,
+    startTime: item.startTime,
+    endTime: item.endTime,
+    isNightStep: item.step.duration > 0 &&
+      isInNightWindow(minOfDay(item.startTime), nightStartMin, nightEndMin) &&
+      isInNightWindow(minOfDay(item.endTime), nightStartMin, nightEndMin),
+    needsAttention: false,
+  }));
+
+  return {
+    plannedAt: altPlannedAt,
+    startTime: altSteps[0]?.startTime ?? altPlannedAt,
+    plan: altPlan,
+    description: `Früherer Start: alle Aktionen vor ${minutesToTime(nightStartMin)} Uhr erledigt, Wartezeit läuft über Nacht.`,
+  };
+}
+
+/** Minuten seit Mitternacht → "HH:MM" */
+function minutesToTime(min) {
+  const h = Math.floor(min / 60).toString().padStart(2, '0');
+  const m = (min % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
 }
 
 module.exports = { planWithNightWindow };

@@ -38,6 +38,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     plan: any[];
     warnings: string[];
     viable: boolean;
+    alternative?: {
+      plannedAt: string;
+      startTime: string;
+      plan: any[];
+      description: string;
+    };
   } | null>(null);
 
   // Reset beim Öffnen
@@ -544,6 +550,50 @@ const toLocalISOString = (d: Date): string => {
                         <span className="text-[11px] text-amber-700 dark:text-amber-300 leading-snug">{w}</span>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Alternativer Plan bei viable:false */}
+                {!nightResult.viable && nightResult.alternative && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-4 border border-blue-200 dark:border-blue-800 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <AlarmClock size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span className="text-[12px] font-bold text-blue-700 dark:text-blue-300">
+                        Alternative: Früher starten
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-blue-600 dark:text-blue-400 leading-snug">
+                      {nightResult.alternative.description}
+                    </p>
+                    <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl p-3 border border-blue-100 dark:border-blue-700">
+                      <div className="text-center">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start</div>
+                        <div className="text-[14px] font-extrabold text-blue-600 dark:text-blue-400">
+                          {formatRelative(new Date(nightResult.alternative.startTime))}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-1 px-3">
+                        <div className="w-10 h-0.5 bg-blue-200 dark:bg-blue-700 rounded-full" />
+                        <span className="text-[10px] font-bold text-gray-300 dark:text-gray-500">
+                          {totalHours}h {totalMins}m
+                        </span>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fertig</div>
+                        <div className="text-[14px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
+                          {formatRelative(new Date(nightResult.alternative.plannedAt))}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const timeline = calculateBackplan(nightResult.alternative!.plannedAt, recipe.dough_sections);
+                        onConfirm(nightResult.alternative!.plannedAt, multiplier, timeline);
+                      }}
+                      className="w-full py-2.5 rounded-xl text-[12px] font-bold bg-blue-600 dark:bg-blue-700 text-white hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+                    >
+                      Diesen Plan verwenden
+                    </button>
                   </div>
                 )}
 
