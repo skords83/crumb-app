@@ -8,6 +8,7 @@ const fs = require('fs');
 const { Pool } = require('pg');
 const { getScraper } = require('./scrapers/index');
 const parseHtmlImport = require('./scrapers/smry');
+const { planWithNightWindow } = require('./scrapers/nightWindowPlanner');
 const { v4: uuidv4 } = require('uuid');
 const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 
@@ -498,6 +499,95 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
   } catch (err) {
     console.error('❌ complete-step Fehler:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// NACHTFENSTER-PLANUNG
+// ============================================================
+
+/**
+ * POST /api/recipes/:id/plan-night
+ *
+ * Berechnet einen Backplan so, dass lange Warteschritte ins Nachtfenster fallen.
+ * Speichert noch nichts – nur Vorschau.
+ *
+ * Body: {
+ *   nightWindow: { start: "22:00", end: "06:30" },
+ *   targetTime:  "10:00",
+ *   targetDate:  "2024-03-15"   // optional, default: heute
+ * }
+ */
+app.post('/api/recipes/:id/plan-night', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nightWindow, targetTime, targetDate } = req.body;
+
+    if (!nightWindow?.start || !nightWindow?.end) {
+      return res.status(400).json({ error: 'nightWindow mit start und end erforderlich' });
+    }
+    if (!targetTime || !/^\d{2}:\d{2}$/.test(targetTime)) {
+      return res.status(400).json({ error: 'targetTime im Format HH:MM erforderlich' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM recipes WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Rezept nicht gefunden' });
+    }
+
+    const sections = result.rows[0].dough_sections;
+    if (!sections || sections.length === 0) {
+      return res.status(400).json({ error: 'Rezept hat keine Phasen (dough_sections)' });
+    }
+
+    const baseDate = targetDate ? new Date(targetDate) : new Date();
+    const planResult = planWithNightWindow(sections, nightWindow, targetTime, baseDate);
+
+    res.json({
+      plannedAt: planResult.plannedAt,
+      startTime: planResult.startTime,
+      plan:      planResult.plan,
+      warnings:  planResult.warnings,
+      viable:    planResult.viable,
+    });
+  } catch (err) {
+    console.error('❌ plan-night Fehler:', err.message);
+    res.status(500).json({ error: 'Planungsfehler', details: err.message });
+  }
+});
+
+/**
+ * POST /api/recipes/:id/plan-night/save
+ *
+ * Speichert den berechneten plannedAt in der DB.
+ *
+ * Body: { plannedAt: "2024-03-14T08:00:00.000Z" }
+ */
+app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { plannedAt } = req.body;
+
+    if (!plannedAt) {
+      return res.status(400).json({ error: 'plannedAt erforderlich' });
+    }
+
+    const result = await pool.query(
+      'UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [new Date(plannedAt), id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Rezept nicht gefunden' });
+    }
+
+    clearSentNotificationsForRecipe(id);
+    res.json({ ok: true, recipe: result.rows[0] });
+  } catch (err) {
+    console.error('❌ plan-night/save Fehler:', err.message);
+    res.status(500).json({ error: 'Speicherfehler', details: err.message });
   }
 });
 
