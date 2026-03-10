@@ -37,11 +37,14 @@ function DescriptionBox({ description }: { description: string }) {
   const needsExpansion = description.length > 150;
   return (
     <div className="mb-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 rounded-2xl border border-amber-100/50 dark:border-amber-800/50">
-      {/* Beim Drucken immer voller Text (via print-description-text), im Browser gekürzt */}
-      <p className="print-description-text text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+      {/* Voller Text: nur beim Drucken sichtbar (hidden im Browser, block via print.css) */}
+      <p className="print-description-full hidden text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+        {description}
+      </p>
+      {/* Gekürzter Text: im Browser sichtbar, beim Drucken ausgeblendet via print.css */}
+      <p className="print-description-preview text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
         {isExpanded ? description : preview + (needsExpansion ? '...' : '')}
       </p>
-      {/* Nur im Browser sichtbar, beim Drucken ausgeblendet via print-description-toggle */}
       {needsExpansion && (
         <button onClick={() => setIsExpanded(!isExpanded)}
           className="print-description-toggle mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors">
@@ -273,7 +276,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
+    <div className="print-card-wrapper min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
       <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
         {/* HERO IMAGE */}

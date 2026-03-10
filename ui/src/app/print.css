@@ -8,7 +8,7 @@
   /* ── SEITENFORMAT ─────────────────────────────────────── */
   @page {
     size: A4;
-    margin: 1.5cm 2cm;
+    margin: 1.2cm 1.5cm;
   }
 
   /* ── HINTERGRUNDFARBEN ERLAUBEN ───────────────────────── */
@@ -17,47 +17,32 @@
     print-color-adjust: exact !important;
   }
 
-  /* ── APP-SHELL AUSBLENDEN ─────────────────────────────── */
-
-  /* Desktop Header + Desktop Nav */
-  header {
-    display: none !important;
-  }
-
-  /* Mobile Bottom Nav */
-  nav.md\:hidden {
-    display: none !important;
-  }
-
-  /* Floating Action Button (Link mit fixed bottom-24) */
-  a.fixed {
-    display: none !important;
-  }
-
-  /* Utility-Klassen zum manuellen Ausblenden */
+  /* ── APP-SHELL KOMPLETT AUSBLENDEN ───────────────────── */
+  header,
+  nav,
+  a.fixed,
   .no-print,
   .print-hide {
     display: none !important;
   }
 
-  /* ── SEITEN-HINTERGRUND ───────────────────────────────── */
-  html,
-  body {
+  /* ── SEITE & WRAPPER ──────────────────────────────────── */
+  html, body {
     background: white !important;
-    color: black !important;
+    color: #1a1a1a !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Wrapper der Seite — Padding/Margin entfernen */
-  body > * {
-    padding-top: 0 !important;
-  }
-
-  /* MainWrapper-Padding (pb-safe, md:pt) neutralisieren */
-  main,
-  [class*="MainWrapper"],
-  .main-wrapper {
+  /* Alle umgebenden Wrapper flachlegen */
+  body > *,
+  body > * > *,
+  main {
     padding: 0 !important;
     margin: 0 !important;
+    background: white !important;
+    /* WICHTIG: overflow-hidden killt Inhalt beim Drucken */
+    overflow: visible !important;
   }
 
   /* ── REZEPT-CARD ──────────────────────────────────────── */
@@ -70,90 +55,120 @@
     border: none !important;
     border-radius: 0 !important;
     overflow: visible !important;
-    /* Dark-Mode Hintergrund überschreiben */
     background: white !important;
-    color: black !important;
+    color: #1a1a1a !important;
   }
 
   /* ── HERO-BILD ────────────────────────────────────────── */
   .print-hero {
-    height: 160px !important;
+    height: 140px !important;
     border-radius: 0 !important;
     overflow: hidden !important;
+    position: relative !important;
+  }
+
+  /* ── CONTENT-BEREICH ──────────────────────────────────── */
+  .print-card .p-6,
+  .print-card .md\:p-10 {
+    padding: 0.75rem !important;
   }
 
   /* ── BESCHREIBUNGS-BOX ────────────────────────────────── */
-  /* Immer vollständig anzeigen, Expand-Button ausblenden */
-  .print-description-text {
-    display: block !important;
-    overflow: visible !important;
-    max-height: none !important;
-  }
   .print-description-toggle {
     display: none !important;
   }
-
-  /* ── GESAMT-ZUTATENLISTE ──────────────────────────────── */
-  /* Dark-Mode Hintergrund auf hellgrau für Druck */
-  .print-card .bg-gray-50,
-  .print-card .bg-gray-700,
-  .print-card [class*="dark:bg-gray"] {
-    background-color: #f5f5f5 !important;
-    color: black !important;
+  .print-description-full {
+    display: block !important;
+  }
+  .print-description-preview {
+    display: none !important;
   }
 
-  /* ── INFO-BAR ─────────────────────────────────────────── */
-  .print-card .bg-\[\#FDFCFB\] {
+  /* Abstände kompakter */
+  .print-card .mb-10 {
+    margin-bottom: 0.75rem !important;
+  }
+  .print-card .mb-6 {
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* ── DARK-MODE HINTERGRÜNDE → WEISS/HELLGRAU ─────────── */
+  .print-card [class*="bg-gray-800"],
+  .print-card [class*="bg-gray-700"],
+  .print-card [class*="bg-gray-900"] {
+    background-color: #f5f5f5 !important;
+  }
+  .print-card [class*="bg-gray-50"],
+  .print-card [class*="bg-gray-700\/50"],
+  .print-card [class*="bg-gray-50\/80"] {
     background-color: #fafafa !important;
+  }
+  .print-card [class*="bg-amber-900"] {
+    background-color: #fef9f0 !important;
+  }
+  .print-card [class*="bg-orange-900"] {
+    background-color: #fff7ed !important;
+  }
+
+  /* ── DARK-MODE TEXTFARBEN → SCHWARZ/GRAU ─────────────── */
+  .print-card [class*="text-gray-100"],
+  .print-card [class*="text-gray-200"],
+  .print-card [class*="text-gray-300"] {
+    color: #1a1a1a !important;
+  }
+  .print-card [class*="text-gray-400"],
+  .print-card [class*="text-gray-500"] {
+    color: #666 !important;
+  }
+
+  /* Weiße Texte auf farbigen Hintergründen behalten */
+  .print-card .bg-\[\#8B4513\] {
+    color: white !important;
+  }
+  .print-card .bg-red-500 {
+    color: white !important;
+  }
+
+  /* ── BORDER-FARBEN ────────────────────────────────────── */
+  .print-card [class*="border-gray-700"],
+  .print-card [class*="border-gray-600"] {
     border-color: #e5e5e5 !important;
   }
 
   /* ── PHASEN-LAYOUT ────────────────────────────────────── */
-  /* Zutaten + Schritte nebeneinander */
   .print-phase-grid {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
-    gap: 1.5rem !important;
+    gap: 1rem !important;
   }
 
-  /* Schritte-Box: Dark-Mode Hintergrund aufhellen */
   .print-phase-grid > div:last-child {
     background-color: #f9f9f9 !important;
     border-color: #e5e5e5 !important;
-    border-radius: 0.75rem !important;
+    border-radius: 0.5rem !important;
   }
 
-  /* ── TEXT-FARBEN FÜR DRUCK ────────────────────────────── */
-  /* Dark-Mode Textfarben auf schwarz/grau zurücksetzen */
-  .print-card [class*="dark:text-gray-100"],
-  .print-card [class*="dark:text-gray-200"],
-  .print-card [class*="dark:text-gray-300"] {
-    color: #1a1a1a !important;
+  /* ── ABSTÄNDE KOMPRIMIEREN ────────────────────────────── */
+  .space-y-12 > * + * {
+    margin-top: 1.25rem !important;
   }
-  .print-card [class*="dark:text-gray-400"],
-  .print-card [class*="dark:text-gray-500"] {
-    color: #666 !important;
+  .space-y-5 > * + * {
+    margin-top: 0.6rem !important;
   }
 
   /* ── SEITENUMBRÜCHE ───────────────────────────────────── */
   .print-section {
-    page-break-inside: avoid;
     break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-section > div:first-child {
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
-  /* Abstände zwischen Phasen etwas kompakter */
-  .space-y-12 > * + * {
-    margin-top: 2rem !important;
-  }
-
-  /* ── CONTENT-PADDING REDUZIEREN ───────────────────────── */
-  .print-card > div > .p-6,
-  .print-card > div > .md\:p-10 {
-    padding: 1rem !important;
-  }
-
-  /* ── LINKS NICHT UNTERSTREICHEN ───────────────────────── */
+  /* ── LINKS ────────────────────────────────────────────── */
   a {
     text-decoration: none !important;
+    color: inherit !important;
   }
 }
