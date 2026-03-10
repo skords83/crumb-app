@@ -547,11 +547,9 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
     const planResult = planWithNightWindow(sections, nightWindow, targetTime, baseDate);
 
     res.json({
-      plannedAt: planResult.plannedAt,
-      startTime: planResult.startTime,
-      plan:      planResult.plan,
-      warnings:  planResult.warnings,
-      viable:    planResult.viable,
+      options:      planResult.options,
+      hasViable:    planResult.hasViable,
+      noNightSteps: planResult.noNightSteps ?? false,
     });
   } catch (err) {
     console.error('❌ plan-night Fehler:', err.message);
