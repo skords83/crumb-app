@@ -231,9 +231,12 @@ const toLocalISOString = (d: Date): string => {
     setNightLoading(true);
     setNightResult(null);
     try {
-      const res = await fetch(`/api/recipes/${recipe.id}/plan-night`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipe.id}/plan-night`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("crumb_token")}`,
+        },
         body: JSON.stringify({
           nightWindow: { start: nightStart, end: nightEnd },
           targetTime: nightTargetTime,
