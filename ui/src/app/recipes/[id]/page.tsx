@@ -37,12 +37,14 @@ function DescriptionBox({ description }: { description: string }) {
   const needsExpansion = description.length > 150;
   return (
     <div className="mb-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 rounded-2xl border border-amber-100/50 dark:border-amber-800/50">
-      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+      {/* Beim Drucken immer voller Text (via print-description-text), im Browser gekürzt */}
+      <p className="print-description-text text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
         {isExpanded ? description : preview + (needsExpansion ? '...' : '')}
       </p>
+      {/* Nur im Browser sichtbar, beim Drucken ausgeblendet via print-description-toggle */}
       {needsExpansion && (
         <button onClick={() => setIsExpanded(!isExpanded)}
-          className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors">
+          className="print-description-toggle mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors">
           {isExpanded ? <><Icons.ChevronUp size={14} />Weniger anzeigen</> : <><Icons.ChevronDown size={14} />Mehr lesen</>}
         </button>
       )}
@@ -272,44 +274,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-      <style>{`
-        @media print {
-          /* Seitenformat */
-          @page { margin: 1.5cm 2cm; size: A4; }
-
-          /* Hintergrundfarben erlauben */
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-
-          /* UI-Elemente ausblenden */
-          .no-print { display: none !important; }
-          .print-hide { display: none !important; }
-
-          /* Seiten-Hintergrund entfernen */
-          body { background: white !important; }
-
-          /* Karte nimmt volle Breite, kein shadow, kein overflow-hidden */
-          .print-card {
-            max-width: 100% !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            overflow: visible !important;
-          }
-
-          /* Hero-Bild kompakter */
-          .print-hero { height: 200px !important; border-radius: 0 !important; }
-
-          /* Infobar + Beschreibung + Gesamt-Zutaten normal */
-          .print-content { padding: 0 !important; }
-
-          /* Phasen nebeneinander auf Druck */
-          .print-phase-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1.5rem !important; }
-
-          /* Seitenumbrüche */
-          .print-section { page-break-inside: avoid; break-inside: avoid; }
-        }
-      `}</style>
       <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
         {/* HERO IMAGE */}

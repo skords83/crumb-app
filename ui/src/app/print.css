@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════════
+   CRUMB — Print Stylesheet
+   Einbinden in app/layout.tsx: import './print.css'
+   ═══════════════════════════════════════════════════════════ */
+
+@media print {
+
+  /* ── SEITENFORMAT ─────────────────────────────────────── */
+  @page {
+    size: A4;
+    margin: 1.5cm 2cm;
+  }
+
+  /* ── HINTERGRUNDFARBEN ERLAUBEN ───────────────────────── */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── APP-SHELL AUSBLENDEN ─────────────────────────────── */
+
+  /* Desktop Header + Desktop Nav */
+  header {
+    display: none !important;
+  }
+
+  /* Mobile Bottom Nav */
+  nav.md\:hidden {
+    display: none !important;
+  }
+
+  /* Floating Action Button (Link mit fixed bottom-24) */
+  a.fixed {
+    display: none !important;
+  }
+
+  /* Utility-Klassen zum manuellen Ausblenden */
+  .no-print,
+  .print-hide {
+    display: none !important;
+  }
+
+  /* ── SEITEN-HINTERGRUND ───────────────────────────────── */
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Wrapper der Seite — Padding/Margin entfernen */
+  body > * {
+    padding-top: 0 !important;
+  }
+
+  /* MainWrapper-Padding (pb-safe, md:pt) neutralisieren */
+  main,
+  [class*="MainWrapper"],
+  .main-wrapper {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* ── REZEPT-CARD ──────────────────────────────────────── */
+  .print-card {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    /* Dark-Mode Hintergrund überschreiben */
+    background: white !important;
+    color: black !important;
+  }
+
+  /* ── HERO-BILD ────────────────────────────────────────── */
+  .print-hero {
+    height: 160px !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* ── BESCHREIBUNGS-BOX ────────────────────────────────── */
+  /* Immer vollständig anzeigen, Expand-Button ausblenden */
+  .print-description-text {
+    display: block !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  .print-description-toggle {
+    display: none !important;
+  }
+
+  /* ── GESAMT-ZUTATENLISTE ──────────────────────────────── */
+  /* Dark-Mode Hintergrund auf hellgrau für Druck */
+  .print-card .bg-gray-50,
+  .print-card .bg-gray-700,
+  .print-card [class*="dark:bg-gray"] {
+    background-color: #f5f5f5 !important;
+    color: black !important;
+  }
+
+  /* ── INFO-BAR ─────────────────────────────────────────── */
+  .print-card .bg-\[\#FDFCFB\] {
+    background-color: #fafafa !important;
+    border-color: #e5e5e5 !important;
+  }
+
+  /* ── PHASEN-LAYOUT ────────────────────────────────────── */
+  /* Zutaten + Schritte nebeneinander */
+  .print-phase-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 1.5rem !important;
+  }
+
+  /* Schritte-Box: Dark-Mode Hintergrund aufhellen */
+  .print-phase-grid > div:last-child {
+    background-color: #f9f9f9 !important;
+    border-color: #e5e5e5 !important;
+    border-radius: 0.75rem !important;
+  }
+
+  /* ── TEXT-FARBEN FÜR DRUCK ────────────────────────────── */
+  /* Dark-Mode Textfarben auf schwarz/grau zurücksetzen */
+  .print-card [class*="dark:text-gray-100"],
+  .print-card [class*="dark:text-gray-200"],
+  .print-card [class*="dark:text-gray-300"] {
+    color: #1a1a1a !important;
+  }
+  .print-card [class*="dark:text-gray-400"],
+  .print-card [class*="dark:text-gray-500"] {
+    color: #666 !important;
+  }
+
+  /* ── SEITENUMBRÜCHE ───────────────────────────────────── */
+  .print-section {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Abstände zwischen Phasen etwas kompakter */
+  .space-y-12 > * + * {
+    margin-top: 2rem !important;
+  }
+
+  /* ── CONTENT-PADDING REDUZIEREN ───────────────────────── */
+  .print-card > div > .p-6,
+  .print-card > div > .md\:p-10 {
+    padding: 1rem !important;
+  }
+
+  /* ── LINKS NICHT UNTERSTREICHEN ───────────────────────── */
+  a {
+    text-decoration: none !important;
+  }
+}
