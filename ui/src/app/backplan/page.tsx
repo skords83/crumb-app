@@ -234,10 +234,10 @@ export default function BackplanPage() {
     return aStart - bStart;
   });
 
-  const totalDuration = timeline.reduce((s, t) => s + t.duration, 0);
-  const activeIndex = timeline.findIndex((s, i) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime >= s.start && currentTime < s.end);
+  const totalDuration = timeline.reduce((s: number, t: any) => s + t.duration, 0);
+  const activeIndex = timeline.findIndex((s: any, i: number) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime >= s.start && currentTime < s.end);
   // nextIndex: first non-completed future step — robust when activeIndex === -1 (between steps)
-  const nextIndex = timeline.findIndex((s, i) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime < s.start);
+  const nextIndex = timeline.findIndex((s: any, i: number) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime < s.start);
   const activeStep = activeIndex >= 0 ? timeline[activeIndex] : null;
   const remainingSeconds = activeStep ? Math.max(0, Math.floor((activeStep.end.getTime() - currentTime.getTime()) / 1000)) : 0;
   const stepProgress = activeStep ? Math.min(1, (currentTime.getTime() - activeStep.start.getTime()) / (activeStep.duration * 60000)) : 0;
@@ -380,7 +380,7 @@ export default function BackplanPage() {
 
           {/* Fortschrittsbalken */}
           <div className="flex gap-[2px] mb-3">
-            {timeline.map((step, i) => {
+            {timeline.map((step: any, i: number) => {
               const isDone = completedSteps.has(`${recipe.id}-${i}`) || currentTime > step.end;
               const isActiveStep = i === activeIndex;
               const widthPercent = totalDuration > 0 ? (step.duration / totalDuration) * 100 : 0;
@@ -410,7 +410,7 @@ export default function BackplanPage() {
       {activeTab === 'schritte' && (
         <div className="max-w-3xl mx-auto px-4 pt-5">
           {sortedSections.map((section: any, sIdx: number) => {
-            const sectionSteps = timeline.map((t, i) => ({ ...t, globalIdx: i })).filter(t => t.phase === section.name);
+            const sectionSteps = timeline.map((t: any, i: number) => ({ ...t, globalIdx: i })).filter((t: any) => t.phase === section.name);
             if (sectionSteps.length === 0) return null;
             const sectionStart = sectionSteps[0].start;
             const sectionEnd = sectionSteps[sectionSteps.length - 1].end;
