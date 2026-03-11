@@ -254,7 +254,7 @@ const toLocalISOString = (d: Date): string => {
       const validationError = validateEndTime(selectedTime);
       if (validationError) { setError(validationError); return; }
     }
-    const timeline = calculateBackplan(target, recipe.dough_sections);
+    const timeline = calculateBackplan(target, recipe?.dough_sections ?? []);
     onConfirm(target, multiplier, timeline);
   };
 
