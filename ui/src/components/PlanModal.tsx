@@ -16,10 +16,23 @@ interface PlanModalProps {
 }
 
 export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanModalProps) {
-  const hasNightCandidate = useMemo(() =>
-    recipe.dough_sections?.some(section =>
-      section.steps?.some((step: any) => step.type === "Warten" && step.duration >= 180)
-    ), [recipe.dough_sections]);
+  // Nacht-Tab zeigen wenn es zwischen zwei Aktionen eine Lücke von mind. 7h gibt
+  const hasNightCandidate = useMemo(() => {
+    if (!recipe.dough_sections) return false;
+    const allSteps: any[] = [];
+    recipe.dough_sections.forEach((section: any) => {
+      let cursor = 0;
+      (section.steps || []).forEach((step: any) => {
+        allSteps.push({ start: cursor, end: cursor + (step.duration || 0), type: step.type });
+        cursor += step.duration || 0;
+      });
+    });
+    const actions = allSteps.filter(s => s.type !== 'Warten').sort((a, b) => a.start - b.start);
+    for (let i = 0; i < actions.length - 1; i++) {
+      if (actions[i + 1].start - actions[i].end >= 420) return true;
+    }
+    return false;
+  }, [recipe.dough_sections]);
 
   const [mode, setMode] = useState<"now" | "end" | "night">("end");
   const [selectedTime, setSelectedTime] = useState("");
