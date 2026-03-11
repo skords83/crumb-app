@@ -550,16 +550,16 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={recipe}
-        onConfirm={async (plannedAt, multiplier, timeline) => {
-          try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-              },
-              body: JSON.stringify({ planned_at: plannedAt }),
-            });
+onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+      },
+      body: JSON.stringify({ planned_at: plannedAt, planned_timeline: plannedTimeline }),
+    });
             if (res.ok) {
               setCalculatedTimeline(timeline);
               setTargetTime(plannedAt);

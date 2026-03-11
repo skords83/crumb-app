@@ -431,11 +431,24 @@ app.delete('/api/recipes/:id', async (req, res) => {
 
 app.patch('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  const { is_favorite, planned_at } = req.body;
+  const { is_favorite, planned_at, planned_timeline } = req.body;
   try {
     let result;
-    if (planned_at !== undefined)        result = await pool.query("UPDATE recipes SET planned_at=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [planned_at, id, req.user.userId]);
-    else if (is_favorite !== undefined)  result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
+    if (planned_at !== undefined) {
+      if (planned_timeline !== undefined) {
+        result = await pool.query(
+          "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
+          [planned_at, JSON.stringify(planned_timeline), id, req.user.userId]
+        );
+      } else {
+        result = await pool.query(
+          "UPDATE recipes SET planned_at=$1, planned_timeline=NULL WHERE id=$2 AND user_id=$3 RETURNING *",
+          [planned_at, id, req.user.userId]
+        );
+      }
+    } else if (is_favorite !== undefined) {
+      result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
+    }
     if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Patch-Fehler" }); }

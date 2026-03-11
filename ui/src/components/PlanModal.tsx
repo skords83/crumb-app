@@ -7,12 +7,12 @@ import { calculateBackplan, formatTimeManual, calcTotalDuration } from "@/lib/ba
 interface PlanModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (plannedAt: string, multiplier: number, timeline: any[]) => void;
+  onConfirm: (plannedAt: string, multiplier: number, timeline: any[], plannedTimeline?: any[]) => void;
   recipe: {
     id: number | string;
     title: string;
     dough_sections: any[];
-  };
+  } | null;
 }
 
 export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanModalProps) {
@@ -244,9 +244,7 @@ const toLocalISOString = (d: Date): string => {
   const handleConfirm = () => {
     if (mode === "night") {
       if (!nightResult?.viable || !nightResult.endTime) return;
-      // Nutze den plan direkt vom Backend – nicht nochmal calculateBackplan aufrufen
-      // da der Nacht-Algorithmus Parallelität korrekt berechnet
-      onConfirm(nightResult.endTime, multiplier, nightResult.plan ?? []);
+      onConfirm(nightResult.endTime, multiplier, nightResult.plan ?? [], nightResult.plan ?? []);
       return;
     }
     const target = getTargetTimeString();

@@ -185,7 +185,9 @@ export default function BackplanPage() {
       );
     }
     return {
-      timeline: calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
+      timeline: recipe.planned_timeline
+        ? recipe.planned_timeline.map((s: any) => ({ ...s, start: new Date(s.start), end: new Date(s.end) }))
+        : calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
       newPlannedAt: parseLocalDate(recipe.planned_at),
       shifted: false,
     };

@@ -134,12 +134,12 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
       const firstAfter = actionsAfter[0];
 
       const plan = trialSteps.map(item => ({
-        section:     item.section,
+        phase:       item.section,
         instruction: item.step.instruction,
         type:        item.step.type,
         duration:    item.step.duration,
-        startTime:   item.startTime,
-        endTime:     item.endTime,
+        start:       item.startTime,
+        end:         item.endTime,
         isNightStep: item.startTime >= targetNightStart && item.endTime <= targetNightEnd,
       }));
 
