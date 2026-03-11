@@ -446,7 +446,7 @@ const toLocalISOString = (d: Date): string => {
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                   <CheckCircle size={14} className="text-green-600 dark:text-green-400 shrink-0" />
                   <span className="text-[12px] font-semibold text-green-700 dark:text-green-300">
-                    Kein Aufstehen nötig – {nightResult.nightPhase} läuft von {nightResult.nightStart} bis {nightResult.nightEnd}
+                    Kein Aufstehen nötig – letzte Aktion um {nightResult.lastActionBefore}, weiter um {nightResult.firstActionAfter}
                   </span>
                 </div>
                 <div className="bg-gradient-to-br from-[#FAF7F2] to-[#F5F0E8] dark:from-gray-700 dark:to-gray-800 rounded-2xl p-4 border border-[#E8E2D8] dark:border-gray-600">
