@@ -25,30 +25,18 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   // Night-Modus State
   const [nightStart, setNightStart] = useState("22:00");
   const [nightEnd, setNightEnd] = useState("06:30");
-  const [nightTargetTime, setNightTargetTime] = useState("10:00");
-  const [nightTargetDate, setNightTargetDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().slice(0, 10);
-  });
   const [nightLoading, setNightLoading] = useState(false);
   const [nightResult, setNightResult] = useState<{
-    options: Array<{
-      candidateSection: string;
-      candidateInstruction: string;
-      candidateDuration: number;
-      nightStart: string;
-      nightEnd: string;
-      plannedAt: string;
-      startTime: string;
-      plan: any[];
-      viable: boolean;
-      nightActionWarnings: string[];
-    }>;
-    hasViable: boolean;
-    noNightSteps?: boolean;
+    viable: boolean;
+    startTime?: string;
+    endTime?: string;
+    nightPhase?: string;
+    nightStart?: string;
+    nightEnd?: string;
+    plan?: any[];
+    fallbackStartTime?: string;
+    fallbackEndTime?: string;
   } | null>(null);
-  const [selectedOption, setSelectedOption] = useState<number>(0);
 
   // Reset beim Öffnen
   useEffect(() => {
@@ -60,11 +48,6 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       setError(null);
       setNightResult(null);
       setNightLoading(false);
-      setSelectedOption(0);
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      setNightTargetDate(tomorrow.toISOString().slice(0, 10));
-      setNightTargetTime("10:00");
     }
   }, [isOpen]);
 
@@ -250,8 +233,6 @@ const toLocalISOString = (d: Date): string => {
         },
         body: JSON.stringify({
           nightWindow: { start: nightStart, end: nightEnd },
-          targetTime: nightTargetTime,
-          targetDate: nightTargetDate,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -264,13 +245,11 @@ const toLocalISOString = (d: Date): string => {
     }
   };
 
-  const activeOption = nightResult?.options?.[selectedOption] ?? null;
-
   const handleConfirm = () => {
     if (mode === "night") {
-      if (!activeOption) return;
-      const timeline = calculateBackplan(activeOption.plannedAt, recipe.dough_sections);
-      onConfirm(activeOption.plannedAt, multiplier, timeline);
+      if (!nightResult?.viable || !nightResult.endTime) return;
+      const timeline = calculateBackplan(nightResult.endTime, recipe.dough_sections);
+      onConfirm(nightResult.endTime, multiplier, timeline);
       return;
     }
     const target = getTargetTimeString();
@@ -285,7 +264,7 @@ const toLocalISOString = (d: Date): string => {
 
   const canConfirm =
     mode === "night"
-      ? !!activeOption
+      ? !!nightResult?.viable
       : mode === "now" || (!!selectedTime && !error);
   const scaledWeight = baseWeight > 0
     ? `${((baseWeight * multiplier) / 1000).toFixed(2).replace(".", ",")} kg`
@@ -422,13 +401,13 @@ const toLocalISOString = (d: Date): string => {
             <div className="bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
               <div className="flex items-center gap-2 mb-3">
                 <Moon size={13} className="text-[#8B7355] dark:text-[#A0845C]" />
-                <span className="text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
-                  Nachtfenster (ich schlafe)
+                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                  Ich schlafe von … bis …
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
-                  <label className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mb-1 block">Von</label>
+                  <label className="text-[10px] text-gray-400 font-semibold mb-1 block">Von</label>
                   <input
                     type="time"
                     value={nightStart}
@@ -438,7 +417,7 @@ const toLocalISOString = (d: Date): string => {
                 </div>
                 <div className="text-gray-300 dark:text-gray-500 font-bold mt-4">–</div>
                 <div className="flex-1">
-                  <label className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold mb-1 block">Bis</label>
+                  <label className="text-[10px] text-gray-400 font-semibold mb-1 block">Bis</label>
                   <input
                     type="time"
                     value={nightEnd}
@@ -446,30 +425,6 @@ const toLocalISOString = (d: Date): string => {
                     className="w-full p-2.5 rounded-xl border-2 border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#2D2D2D] dark:text-gray-100 text-[15px] font-bold outline-none focus:border-[#8B7355] dark:focus:border-[#A0845C]"
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* Fertigzeit */}
-            <div className="bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
-              <div className="flex items-center gap-2 mb-3">
-                <AlarmClock size={13} className="text-[#8B7355] dark:text-[#A0845C]" />
-                <span className="text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
-                  Brot fertig am
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={nightTargetDate}
-                  onChange={(e) => { setNightTargetDate(e.target.value); setNightResult(null); }}
-                  className="flex-1 p-2.5 rounded-xl border-2 border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#2D2D2D] dark:text-gray-100 text-[14px] font-bold outline-none focus:border-[#8B7355] dark:focus:border-[#A0845C]"
-                />
-                <input
-                  type="time"
-                  value={nightTargetTime}
-                  onChange={(e) => { setNightTargetTime(e.target.value); setNightResult(null); }}
-                  className="w-28 p-2.5 rounded-xl border-2 border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#2D2D2D] dark:text-gray-100 text-[15px] font-bold outline-none focus:border-[#8B7355] dark:focus:border-[#A0845C]"
-                />
               </div>
             </div>
 
@@ -485,104 +440,78 @@ const toLocalISOString = (d: Date): string => {
                   Berechne…
                 </>
               ) : (
-                <>
-                  <Moon size={14} />
-                  Nachtplan berechnen
-                </>
+                <><Moon size={14} />Nachtplan berechnen</>
               )}
             </button>
 
-            {/* Ergebnis */}
-            {nightResult && (
-              <div className="space-y-3">
-                {/* Kein Nacht-Rezept möglich */}
-                {nightResult.noNightSteps && (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
-                    <AlertTriangle size={14} className="text-gray-400 shrink-0" />
-                    <span className="text-[12px] text-gray-500 dark:text-gray-400">
-                      Keine langen Warteschritte gefunden – dieses Rezept lässt sich nicht über Nacht planen.
-                    </span>
+            {/* Ergebnis: viable */}
+            {nightResult?.viable && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                  <CheckCircle size={14} className="text-green-600 dark:text-green-400 shrink-0" />
+                  <span className="text-[12px] font-semibold text-green-700 dark:text-green-300">
+                    Kein Aufstehen nötig – {nightResult.nightPhase} läuft von {nightResult.nightStart} bis {nightResult.nightEnd}
+                  </span>
+                </div>
+                <div className="bg-gradient-to-br from-[#FAF7F2] to-[#F5F0E8] dark:from-gray-700 dark:to-gray-800 rounded-2xl p-4 border border-[#E8E2D8] dark:border-gray-600">
+                  <div className="flex items-center justify-between">
+                    <div className="text-center flex-1">
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start</div>
+                      <div className="text-[14px] font-extrabold text-[#8B7355] dark:text-[#A0845C]">
+                        {formatRelative(new Date(nightResult.startTime!))}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 px-3">
+                      <div className="w-12 h-0.5 bg-gradient-to-r from-[#D4C9B8] via-[#8B7355] to-[#D4C9B8] rounded-full relative">
+                        <div className="absolute -right-1 -top-[3px] w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-l-[5px] border-l-[#8B7355]" />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-300 dark:text-gray-500">
+                        {totalHours}h {totalMins}m
+                      </span>
+                    </div>
+                    <div className="text-center flex-1">
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fertig</div>
+                      <div className="text-[14px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
+                        {formatRelative(new Date(nightResult.endTime!))}
+                      </div>
+                    </div>
                   </div>
-                )}
+                </div>
+              </div>
+            )}
 
-                {/* Optionen */}
-                {nightResult.options.map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedOption(i)}
-                    className={`w-full text-left rounded-2xl border-2 p-4 transition-all ${
-                      selectedOption === i
-                        ? opt.viable
-                          ? "border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20"
-                          : "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20"
-                        : "border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-[#D4C9B8] dark:hover:border-gray-500"
-                    }`}
-                  >
-                    {/* Phase + viable Badge */}
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider truncate pr-2">
-                        {opt.candidateSection}
-                      </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        opt.viable
-                          ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300"
-                          : "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
-                      }`}>
-                        {opt.viable ? "✓ Kein Aufstehen" : `⚠ ${opt.nightActionWarnings.length} Aktionen`}
-                      </span>
-                    </div>
-
-                    {/* Nachtfenster dieser Phase */}
-                    <div className="flex items-center gap-1.5 mb-3">
-                      <Moon size={11} className="text-[#8B7355] dark:text-[#A0845C]" />
-                      <span className="text-[12px] font-semibold text-[#8B7355] dark:text-[#A0845C]">
-                        {opt.nightStart} – {opt.nightEnd}
-                      </span>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                        ({Math.round(opt.candidateDuration / 60 * 10) / 10}h)
-                      </span>
-                    </div>
-
-                    {/* Start / Fertig */}
+            {/* Ergebnis: nicht viable */}
+            {nightResult && !nightResult.viable && (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                  <span className="text-[12px] text-amber-700 dark:text-amber-300 leading-snug">
+                    Dieses Rezept lässt sich nicht ohne nächtliche Aktionen planen.
+                  </span>
+                </div>
+                {nightResult.fallbackStartTime && (
+                  <div className="bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
+                      Wenn du um {nightStart} Uhr fertig sein willst, musst du starten um:
+                    </p>
                     <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-0.5">Start</div>
-                        <div className="text-[13px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
-                          {formatRelative(new Date(opt.startTime))}
+                      <div className="text-center flex-1">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start</div>
+                        <div className="text-[16px] font-extrabold text-[#8B7355] dark:text-[#A0845C]">
+                          {formatRelative(new Date(nightResult.fallbackStartTime))}
                         </div>
                       </div>
-                      <div className="flex flex-col items-center px-2">
-                        <div className="w-8 h-0.5 bg-[#D4C9B8] dark:bg-gray-600 rounded-full" />
+                      <div className="flex flex-col items-center gap-1 px-3">
+                        <div className="w-12 h-0.5 bg-[#D4C9B8] dark:bg-gray-600 rounded-full" />
+                        <span className="text-[10px] font-bold text-gray-300">{totalHours}h {totalMins}m</span>
                       </div>
-                      <div className="text-right">
-                        <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-0.5">Fertig</div>
-                        <div className="text-[13px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
-                          {formatRelative(new Date(opt.plannedAt))}
+                      <div className="text-center flex-1">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fertig um</div>
+                        <div className="text-[16px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
+                          {nightStart}
                         </div>
                       </div>
                     </div>
-
-                    {/* Warnungen bei nicht viable */}
-                    {!opt.viable && selectedOption === i && opt.nightActionWarnings.length > 0 && (
-                      <div className="mt-3 space-y-1">
-                        {opt.nightActionWarnings.map((w, wi) => (
-                          <div key={wi} className="flex items-start gap-1.5">
-                            <AlertTriangle size={10} className="text-amber-500 shrink-0 mt-0.5" />
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400 leading-snug">{w}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                ))}
-
-                {/* Kein viable Plan */}
-                {nightResult.options.length > 0 && !nightResult.hasViable && (
-                  <div className="flex items-start gap-2 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600">
-                    <AlertTriangle size={13} className="text-gray-400 shrink-0 mt-0.5" />
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
-                      Für dieses Rezept ist kein Plan ohne nächtliche Aktionen möglich. Du kannst trotzdem eine Option wählen und den Plan starten.
-                    </span>
                   </div>
                 )}
               </div>

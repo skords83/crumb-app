@@ -509,25 +509,21 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
 /**
  * POST /api/recipes/:id/plan-night
  *
- * Berechnet einen Backplan so, dass lange Warteschritte ins Nachtfenster fallen.
- * Speichert noch nichts – nur Vorschau.
+ * Body: { nightWindow: { start: "22:00", end: "06:30" } }
  *
- * Body: {
- *   nightWindow: { start: "22:00", end: "06:30" },
- *   targetTime:  "10:00",
- *   targetDate:  "2024-03-15"   // optional, default: heute
- * }
+ * Response (viable):
+ * { viable: true, startTime, endTime, nightPhase, nightStart, nightEnd, plan }
+ *
+ * Response (nicht viable):
+ * { viable: false, fallbackStartTime, fallbackEndTime }
  */
 app.post('/api/recipes/:id/plan-night', async (req, res) => {
   try {
     const { id } = req.params;
-    const { nightWindow, targetTime, targetDate } = req.body;
+    const { nightWindow } = req.body;
 
     if (!nightWindow?.start || !nightWindow?.end) {
       return res.status(400).json({ error: 'nightWindow mit start und end erforderlich' });
-    }
-    if (!targetTime || !/^\d{2}:\d{2}$/.test(targetTime)) {
-      return res.status(400).json({ error: 'targetTime im Format HH:MM erforderlich' });
     }
 
     const result = await pool.query(
@@ -543,14 +539,8 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
       return res.status(400).json({ error: 'Rezept hat keine Phasen (dough_sections)' });
     }
 
-    const baseDate = targetDate ? new Date(targetDate) : new Date();
-    const planResult = planWithNightWindow(sections, nightWindow, targetTime, baseDate);
-
-    res.json({
-      options:      planResult.options,
-      hasViable:    planResult.hasViable,
-      noNightSteps: planResult.noNightSteps ?? false,
-    });
+    const planResult = planWithNightWindow(sections, nightWindow, new Date());
+    res.json(planResult);
   } catch (err) {
     console.error('❌ plan-night Fehler:', err.message);
     res.status(500).json({ error: 'Planungsfehler', details: err.message });

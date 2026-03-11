@@ -2,25 +2,17 @@
  * nightWindowPlanner.js
  * Crumb – Nachtfenster-Planungsalgorithmus
  *
- * Für jeden langen Warteschritt im Rezept wird berechnet:
- * "Wenn diese Phase um nightStart beginnt – wann muss ich starten,
- *  und fallen dabei Aktionsschritte in die Nacht?"
- *
- * Kompatibel mit calculateTimeline() in index.js.
+ * Logik:
+ * - Suche eine lange Wartephase die komplett ins Nachtfenster passt
+ * - Kein Aktionsschritt darf zwischen nightStart und nightEnd fallen
+ *   (weder in der Nachtphase selbst noch in parallel laufenden Phasen)
+ * - Keine Endzeit-Eingabe – das Brot ist fertig wann es fertig ist
+ * - Wenn nicht möglich: Rückwärtsberechnung von nightStart als Zielzeit
  */
-
-// ---------------------------------------------------------------------------
-// Hilfsfunktionen
-// ---------------------------------------------------------------------------
 
 function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
-}
-
-function minutesToTime(min) {
-  const m = ((min % 1440) + 1440) % 1440;
-  return `${Math.floor(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}`;
 }
 
 function minOfDay(date) {
@@ -104,95 +96,14 @@ function buildSteps(sections, plannedAt, startOffsets) {
 }
 
 // ---------------------------------------------------------------------------
-// Kern: einen Kandidaten evaluieren
+// Prüfe ob ein Plan komplett nachtfenster-kompatibel ist
 // ---------------------------------------------------------------------------
 
-/**
- * Berechnet einen Plan bei dem `candidate` um nightStart beginnt.
- * Gibt zurück ob Aktionsschritte in die Nacht fallen.
- */
-function evalCandidate(candidate, sections, startOffsets, plannedAt, nightStartMin, nightEndMin) {
-  // Wir wollen: candidate.startTime = nightStart
-  // Dazu verschieben wir plannedAt so, dass das stimmt.
-  // candidate.startTime hängt von plannedAt ab via buildSteps/startOffsets.
-  // candidate.startTime = plannedAt - startOffsets[section] - (duration of steps before candidate in section)
-  // Einfacher: aktuelle candidate.startTime im Basis-Plan, Verschiebung berechnen.
-
-  const baseSteps = buildSteps(sections, plannedAt, startOffsets);
-  const baseCandidate = baseSteps.find(
-    s => s.section === candidate.section && s.step.instruction === candidate.step.instruction
-  );
-  if (!baseCandidate) return null;
-
-  const currentStartMod = minOfDay(baseCandidate.startTime);
-  let shift = nightStartMin - currentStartMod;
-
-  // Besten dayOffset finden: Startzeit human-friendly (06:00–23:00)
-  let bestPlannedAt = null;
-  for (let dayOffset = -1; dayOffset <= 3; dayOffset++) {
-    const trialShift = shift + dayOffset * 1440;
-    const trialPlannedAt = new Date(plannedAt.getTime() + trialShift * 60000);
-    const trialSteps = buildSteps(sections, trialPlannedAt, startOffsets);
-    const startMod = minOfDay(trialSteps[0]?.startTime ?? trialPlannedAt);
-    if (startMod >= 360 && startMod <= 1380) {
-      bestPlannedAt = trialPlannedAt;
-      break;
-    }
-  }
-  if (!bestPlannedAt) {
-    // Fallback ohne human-friendly check
-    bestPlannedAt = new Date(plannedAt.getTime() + shift * 60000);
-  }
-
-  const finalSteps = buildSteps(sections, bestPlannedAt, startOffsets);
-
-  // Nacht-Kandidat im finalen Plan
-  const nightStep = finalSteps.find(
-    s => s.section === candidate.section && s.step.instruction === candidate.step.instruction
-  );
-
-  // Aktionsschritte die in die Nacht fallen (außer dem Kandidaten selbst)
-  const nightActions = finalSteps.filter(s =>
-    s !== nightStep &&
+function hasNightActions(steps, nightStartMin, nightEndMin) {
+  return steps.some(s =>
     !isPassive(s.step) &&
     isInNightWindow(minOfDay(s.startTime), nightStartMin, nightEndMin)
   );
-
-  const plan = finalSteps.map(item => {
-    const startMod = minOfDay(item.startTime);
-    const endMod = minOfDay(item.endTime);
-    const isNightStep = item.step.duration > 0 &&
-      isInNightWindow(startMod, nightStartMin, nightEndMin) &&
-      isInNightWindow(endMod, nightStartMin, nightEndMin);
-    const needsAttention = !isPassive(item.step) &&
-      isInNightWindow(startMod, nightStartMin, nightEndMin);
-
-    return {
-      section: item.section,
-      instruction: item.step.instruction,
-      type: item.step.type,
-      duration: item.step.duration,
-      startTime: item.startTime,
-      endTime: item.endTime,
-      isNightStep,
-      needsAttention,
-    };
-  });
-
-  return {
-    candidateSection: candidate.section,
-    candidateInstruction: candidate.step.instruction,
-    candidateDuration: candidate.step.duration,
-    nightStart: nightStep ? formatTime(nightStep.startTime) : minutesToTime(nightStartMin),
-    nightEnd: nightStep ? formatTime(nightStep.endTime) : '?',
-    plannedAt: bestPlannedAt,
-    startTime: finalSteps[0]?.startTime ?? bestPlannedAt,
-    plan,
-    viable: nightActions.length === 0,
-    nightActionWarnings: nightActions.map(s =>
-      `⚠️ ${s.section}: "${s.step.instruction.slice(0, 50)}…" um ${formatTime(s.startTime)}`
-    ),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,69 +111,117 @@ function evalCandidate(candidate, sections, startOffsets, plannedAt, nightStartM
 // ---------------------------------------------------------------------------
 
 /**
- * Evaluiert alle langen Warteschritte als Nacht-Kandidaten.
- *
  * @param {Object[]} sections
  * @param {Object}   nightWindow  - { start: "22:00", end: "06:30" }
- * @param {string}   targetTime   - Fertigzeit "HH:MM"
- * @param {Date}     [baseDate]
+ * @param {Date}     [baseDate]   - Referenzdatum (default: heute)
  *
  * @returns {{
- *   options: Array<{
- *     candidateSection: string,
- *     candidateInstruction: string,
- *     candidateDuration: number,
- *     nightStart: string,
- *     nightEnd: string,
- *     plannedAt: Date,
- *     startTime: Date,
- *     plan: Object[],
- *     viable: boolean,
- *     nightActionWarnings: string[],
- *   }>,
- *   hasViable: boolean,
+ *   viable: boolean,
+ *   startTime: Date,       // wann der Bäcker anfangen muss
+ *   endTime: Date,         // wann das Brot fertig ist
+ *   nightPhase: string,    // welche Phase nachts läuft (nur wenn viable)
+ *   nightStart: string,    // "HH:MM" wann die Nachtphase beginnt
+ *   nightEnd: string,      // "HH:MM" wann die Nachtphase endet
+ *   plan: Object[],        // annotierte Schritt-Liste
+ *   fallbackStartTime: Date|null,  // wenn nicht viable: Start damit fertig um nightStart
+ *   fallbackEndTime: Date|null,
  * }}
  */
-function planWithNightWindow(sections, nightWindow, targetTime, baseDate = new Date()) {
+function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
   const nightStartMin = timeToMinutes(nightWindow.start);
   const nightEndMin   = timeToMinutes(nightWindow.end);
 
-  const [th, tm] = targetTime.split(':').map(Number);
-  const basePlannedAt = new Date(baseDate);
-  basePlannedAt.setHours(th, tm, 0, 0);
-
   const { startOffsets } = calcOffsets(sections);
-  const baseSteps = buildSteps(sections, basePlannedAt, startOffsets);
 
-  // Alle langen Warteschritte als Kandidaten
+  // Wir brauchen einen Referenz-plannedAt um Schritte zu bauen.
+  // Wir nutzen baseDate + nightStart als ersten Ankerpunkt.
+  const anchorDate = new Date(baseDate);
+  anchorDate.setHours(Math.floor(nightStartMin / 60), nightStartMin % 60, 0, 0);
+
+  const baseSteps = buildSteps(sections, anchorDate, startOffsets);
+
+  // Alle langen Warteschritte als Kandidaten (≥ 3h)
   const candidates = baseSteps.filter(s => isPassive(s.step) && s.step.duration >= 180);
 
-  if (candidates.length === 0) {
-    return { options: [], hasViable: false, noNightSteps: true };
+  // Jeden Kandidaten testen: Kandidat startet genau um nightStart
+  for (const candidate of candidates) {
+    // Verschiebung berechnen damit candidate.startTime = nightStart
+    const currentStartMod = minOfDay(candidate.startTime);
+    let shift = nightStartMin - currentStartMod;
+
+    // Versuche mit dayOffset 0 und +1
+    for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
+      const totalShift = shift + dayOffset * 1440;
+      const trialPlannedAt = new Date(anchorDate.getTime() + totalShift * 60000);
+      const trialSteps = buildSteps(sections, trialPlannedAt, startOffsets);
+
+      // Prüfe: kein Aktionsschritt im Nachtfenster
+      if (!hasNightActions(trialSteps, nightStartMin, nightEndMin)) {
+        // Startzeit human-friendly? (06:00–23:00)
+        const startMod = minOfDay(trialSteps[0].startTime);
+        if (startMod < 360 || startMod > 1380) continue;
+
+        // Nachtphase im Plan finden
+        const nightStep = trialSteps.find(
+          s => s.section === candidate.section &&
+               s.step.instruction === candidate.step.instruction
+        );
+
+        const plan = trialSteps.map(item => ({
+          section:     item.section,
+          instruction: item.step.instruction,
+          type:        item.step.type,
+          duration:    item.step.duration,
+          startTime:   item.startTime,
+          endTime:     item.endTime,
+          isNightStep: item.step.duration > 0 &&
+            isInNightWindow(minOfDay(item.startTime), nightStartMin, nightEndMin) &&
+            isInNightWindow(minOfDay(item.endTime), nightStartMin, nightEndMin),
+        }));
+
+        return {
+          viable:      true,
+          startTime:   trialSteps[0].startTime,
+          endTime:     trialSteps[trialSteps.length - 1].endTime,
+          nightPhase:  candidate.section,
+          nightStart:  nightStep ? formatTime(nightStep.startTime) : nightWindow.start,
+          nightEnd:    nightStep ? formatTime(nightStep.endTime) : '?',
+          plan,
+          fallbackStartTime: null,
+          fallbackEndTime:   null,
+        };
+      }
+    }
   }
 
-  const options = candidates.map(c =>
-    evalCandidate(c, sections, startOffsets, basePlannedAt, nightStartMin, nightEndMin)
-  ).filter(Boolean);
+  // Kein vibler Plan gefunden → Fallback: fertig um nightStart
+  // "Wenn du um 22:00 fertig sein willst, musst du um X Uhr anfangen"
+  const fallbackPlannedAt = new Date(anchorDate);
+  // plannedAt = nightStart → startTime = nightStart - totalDuration
+  const fallbackSteps = buildSteps(sections, fallbackPlannedAt, startOffsets);
+  const fallbackStart = fallbackSteps[0]?.startTime ?? fallbackPlannedAt;
 
-  // Duplikate entfernen (gleicher Startpunkt)
-  const seen = new Set();
-  const unique = options.filter(o => {
-    const key = o.plannedAt.toISOString();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  // Sortierung: viable zuerst, dann nach startTime
-  unique.sort((a, b) => {
-    if (a.viable !== b.viable) return a.viable ? -1 : 1;
-    return a.startTime - b.startTime;
-  });
+  // Sicherstellen dass fallback startTime am selben oder vorherigen Tag liegt
+  const fallbackPlan = fallbackSteps.map(item => ({
+    section:     item.section,
+    instruction: item.step.instruction,
+    type:        item.step.type,
+    duration:    item.step.duration,
+    startTime:   item.startTime,
+    endTime:     item.endTime,
+    isNightStep: false,
+  }));
 
   return {
-    options: unique,
-    hasViable: unique.some(o => o.viable),
+    viable:            false,
+    startTime:         null,
+    endTime:           null,
+    nightPhase:        null,
+    nightStart:        null,
+    nightEnd:          null,
+    plan:              [],
+    fallbackStartTime: fallbackStart,
+    fallbackEndTime:   fallbackPlannedAt,
   };
 }
 
@@ -272,7 +231,7 @@ module.exports = { planWithNightWindow };
 // CLI-Test
 // ---------------------------------------------------------------------------
 if (require.main === module) {
-  const sections = [
+  const roggenmisch = [
     { name: '1. Stufe Anfrischsauer', ingredients: [],
       steps: [
         { instruction: 'Anstellgut im Wasser auflösen.', duration: 5, type: 'Kneten' },
@@ -289,29 +248,57 @@ if (require.main === module) {
         { instruction: 'Reifezeit 3 Stunden.', duration: 180, type: 'Warten' },
       ]},
     { name: 'Brotaroma', ingredients: [],
-      steps: [
-        { instruction: 'Weiches Restbrot pürieren.', duration: 5, type: 'Kneten' },
-      ]},
+      steps: [{ instruction: 'Restbrot pürieren.', duration: 5, type: 'Kneten' }]},
     { name: 'Hauptteig', ingredients: [{ name: 'reifer Vollsauer' }, { name: 'eingeweichtes Brotaroma' }],
       steps: [
-        { instruction: 'Zutaten 6 Min mischen.', duration: 6, type: 'Kneten' },
-        { instruction: 'Teig 15-20 Min reifen lassen.', duration: 18, type: 'Warten' },
-        { instruction: 'Teig formen.', duration: 5, type: 'Kneten' },
+        { instruction: 'Zutaten mischen.', duration: 6, type: 'Kneten' },
+        { instruction: 'Teig reifen lassen.', duration: 18, type: 'Warten' },
+        { instruction: 'Formen.', duration: 5, type: 'Kneten' },
         { instruction: 'In Gärkörbchen legen.', duration: 5, type: 'Kneten' },
-        { instruction: 'Endgare 50-60 Min.', duration: 55, type: 'Warten' },
-        { instruction: 'Bei 250°C einschießen.', duration: 7, type: 'Backen' },
+        { instruction: 'Endgare.', duration: 55, type: 'Warten' },
+        { instruction: 'Backen 250°C.', duration: 7, type: 'Backen' },
         { instruction: 'Ofentüre öffnen.', duration: 3, type: 'Kneten' },
-        { instruction: 'Auf 195°C reduzieren, 55 Min backen.', duration: 55, type: 'Backen' },
+        { instruction: 'Auf 195°C, 55 Min backen.', duration: 55, type: 'Backen' },
       ]},
   ];
 
-  const result = planWithNightWindow(sections, { start: '22:00', end: '06:30' }, '10:00', new Date('2026-03-11'));
-  console.log(`hasViable: ${result.hasViable}, Optionen: ${result.options.length}\n`);
+  const haferflockenbrot = [
+    { name: 'Hafersauerteig', ingredients: [],
+      steps: [
+        { instruction: 'Vermischen.', duration: 5, type: 'Kneten' },
+        { instruction: '12 Stunden reifen lassen.', duration: 720, type: 'Warten' },
+      ]},
+    { name: 'Brühstück', ingredients: [],
+      steps: [
+        { instruction: 'Übergießen und vermischen.', duration: 5, type: 'Kneten' },
+        { instruction: '12 Stunden quellen lassen.', duration: 720, type: 'Warten' },
+      ]},
+    { name: 'Hauptteig', ingredients: [{ name: 'gesamter Hafersauerteig' }, { name: 'gesamtes Brühstück' }],
+      steps: [
+        { instruction: 'Teig mischen.', duration: 15, type: 'Kneten' },
+        { instruction: 'Stückgare 1h.', duration: 60, type: 'Warten' },
+        { instruction: 'Backen 75 min.', duration: 75, type: 'Backen' },
+      ]},
+  ];
 
-  result.options.forEach((o, i) => {
-    console.log(`--- Option ${i + 1}: [${o.candidateSection}] "${o.candidateInstruction.slice(0, 40)}" (${o.candidateDuration} min)`);
-    console.log(`    Start: ${o.startTime.toTimeString().slice(0,5)}  Nacht: ${o.nightStart}–${o.nightEnd}  viable: ${o.viable}`);
-    if (o.nightActionWarnings.length) o.nightActionWarnings.forEach(w => console.log('   ', w));
-    console.log();
-  });
+  console.log('=== ROGGENMISCHBROT ===');
+  const r1 = planWithNightWindow(roggenmisch, { start: '22:00', end: '06:30' });
+  console.log('viable:', r1.viable);
+  if (r1.viable) {
+    console.log('Start:', r1.startTime.toTimeString().slice(0,5));
+    console.log('Fertig:', r1.endTime.toTimeString().slice(0,5));
+    console.log('Nachtphase:', r1.nightPhase, r1.nightStart, '–', r1.nightEnd);
+  } else {
+    console.log('Fallback Start:', r1.fallbackStartTime.toTimeString().slice(0,5));
+    console.log('Fallback Fertig (= 22:00):', r1.fallbackEndTime.toTimeString().slice(0,5));
+  }
+
+  console.log('\n=== HAFERFLOCKENBROT ===');
+  const r2 = planWithNightWindow(haferflockenbrot, { start: '22:00', end: '06:30' });
+  console.log('viable:', r2.viable);
+  if (r2.viable) {
+    console.log('Start:', r2.startTime.toTimeString().slice(0,5));
+    console.log('Fertig:', r2.endTime.toTimeString().slice(0,5));
+    console.log('Nachtphase:', r2.nightPhase, r2.nightStart, '–', r2.nightEnd);
+  }
 }
