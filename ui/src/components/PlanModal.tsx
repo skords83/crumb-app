@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { X, Play, Clock, Target, Sun, Utensils, Moon, Plus, Minus, AlarmClock, AlertTriangle, CheckCircle } from "lucide-react";
+import { X, Play, Clock, Target, Sun, Utensils, Moon, Plus, Minus, AlertTriangle, CheckCircle } from "lucide-react";
 import { calculateBackplan, formatTimeManual, calcTotalDuration } from "@/lib/backplan-utils";
 
 interface PlanModalProps {
@@ -16,7 +16,12 @@ interface PlanModalProps {
 }
 
 export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanModalProps) {
-  const [mode, setMode] = useState<"now" | "start" | "end" | "night">("end");
+  const hasNightCandidate = useMemo(() =>
+    recipe.dough_sections?.some(section =>
+      section.steps?.some((step: any) => step.type === "Warten" && step.duration >= 180)
+    ), [recipe.dough_sections]);
+
+  const [mode, setMode] = useState<"now" | "end" | "night">("end");
   const [selectedTime, setSelectedTime] = useState("");
   const [multiplier, setMultiplier] = useState(1);
   const [activePreset, setActivePreset] = useState<number | null>(null);
@@ -144,10 +149,6 @@ const toLocalISOString = (d: Date): string => {
     if (mode === "now") {
       return toLocalISOString(new Date(now.getTime() + totalMinutes * 60000));
     }
-    if (mode === "start" && selectedTime) {
-      const start = parseTimeInput(selectedTime);
-      return toLocalISOString(new Date(start.getTime() + totalMinutes * 60000));
-    }
     if (mode === "end" && selectedTime) {
       return toLocalISOString(parseTimeInput(selectedTime));
     }
@@ -161,11 +162,6 @@ const toLocalISOString = (d: Date): string => {
     if (mode === "now") {
       const end = new Date(now.getTime() + totalMinutes * 60000);
       return { start: now, end, startLabel: "Jetzt", endLabel: formatRelative(end) };
-    }
-    if (mode === "start" && selectedTime) {
-      const start = parseTimeInput(selectedTime);
-      const end = new Date(start.getTime() + totalMinutes * 60000);
-      return { start, end, startLabel: formatRelative(start), endLabel: formatRelative(end) };
     }
     if (mode === "end" && selectedTime) {
       const end = parseTimeInput(selectedTime);
@@ -348,9 +344,8 @@ const toLocalISOString = (d: Date): string => {
         <div className="flex gap-1 mx-7 mt-5 bg-[#F5F0E8] dark:bg-gray-700 rounded-2xl p-1">
           {([
             { id: "now" as const, label: "Jetzt", icon: <Play size={13} /> },
-            { id: "start" as const, label: "Startzeit", icon: <Clock size={13} /> },
             { id: "end" as const, label: "Fertig um", icon: <Target size={13} /> },
-            { id: "night" as const, label: "Nacht", icon: <Moon size={13} /> },
+            ...(hasNightCandidate ? [{ id: "night" as const, label: "Nacht", icon: <Moon size={13} /> }] : []),
           ]).map((m) => (
             <button
               key={m.id}
@@ -521,7 +516,7 @@ const toLocalISOString = (d: Date): string => {
         {mode !== "now" && mode !== "night" && (
           <div className="mx-7 mt-4">
             <label className="block text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest mb-2">
-              {mode === "start" ? "Wann willst du starten?" : "Wann soll das Brot fertig sein?"}
+              Wann soll das Brot fertig sein?
             </label>
             <input
               type="datetime-local"
@@ -557,7 +552,7 @@ const toLocalISOString = (d: Date): string => {
                 </div>
                 <div
                   className={`text-[14px] font-extrabold ${
-                    mode === "start" || mode === "now" ? "text-[#8B7355] dark:text-[#A0845C]" : "text-[#2D2D2D] dark:text-gray-100"
+                    mode === "now" ? "text-[#8B7355] dark:text-[#A0845C]" : "text-[#2D2D2D] dark:text-gray-100"
                   }`}
                 >
                   {calculated?.startLabel || "—"}
