@@ -229,8 +229,8 @@ export default function BackplanPage() {
 
   // Phasen nach Startzeit sortieren — was zuerst beginnt steht oben
   const sortedSections = [...sections].sort((a, b) => {
-    const aStart = timeline.find(t => t.phase === a.name)?.start.getTime() ?? Infinity;
-    const bStart = timeline.find(t => t.phase === b.name)?.start.getTime() ?? Infinity;
+    const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
+    const bStart = timeline.find((t: any) => t.phase === b.name)?.start.getTime() ?? Infinity;
     return aStart - bStart;
   });
 
