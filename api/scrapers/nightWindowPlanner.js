@@ -225,7 +225,7 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
     nightStart:        null,
     nightEnd:          null,
     plan:              [],
-    fallbackStartTime: fallbackStart,
+    fallbackStartTime: fallbackSteps[0]?.startTime ?? fallbackPlannedAt,
     fallbackEndTime:   fallbackPlannedAt,
   };
 }
