@@ -195,27 +195,20 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
     }
   }
 
-  // Kein vibler Plan → Fallback: fertig um nightStart, startTime in der Zukunft
-  // Versuche heute und morgen
-  let fallbackPlannedAt = new Date(anchorDate);
-  let fallbackSteps = buildSteps(sections, fallbackPlannedAt, startOffsets);
+  // Kein vibler Plan → Fallback: fertig um nightStart
+  // Gesamtdauer = alle Schritte über alle Sektionen summiert (sequenziell)
+  const totalDuration = sections.reduce((sum, s) =>
+    sum + (s.steps || []).reduce((s2, step) => s2 + (parseInt(step.duration) || 0), 0), 0
+  );
 
-  // Wenn fallbackStart in der Vergangenheit liegt, einen Tag vor
-  if (fallbackSteps[0]?.startTime <= now) {
-    fallbackPlannedAt = new Date(anchorDate.getTime() + 1440 * 60000);
-    fallbackSteps = buildSteps(sections, fallbackPlannedAt, startOffsets);
+  // Zieldatum: heute nightStart, wenn Start dadurch in der Zukunft liegt – sonst morgen
+  let fallbackEndAt = new Date(anchorDate); // anchorDate = baseDate @ nightStart
+  let fallbackStartAt = new Date(fallbackEndAt.getTime() - totalDuration * 60000);
+
+  if (fallbackStartAt <= now) {
+    fallbackEndAt = new Date(anchorDate.getTime() + 1440 * 60000);
+    fallbackStartAt = new Date(fallbackEndAt.getTime() - totalDuration * 60000);
   }
-
-  // Sicherstellen dass fallback startTime am selben oder vorherigen Tag liegt
-  const fallbackPlan = fallbackSteps.map(item => ({
-    section:     item.section,
-    instruction: item.step.instruction,
-    type:        item.step.type,
-    duration:    item.step.duration,
-    startTime:   item.startTime,
-    endTime:     item.endTime,
-    isNightStep: false,
-  }));
 
   return {
     viable:            false,
@@ -225,8 +218,8 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
     nightStart:        null,
     nightEnd:          null,
     plan:              [],
-    fallbackStartTime: fallbackSteps[0]?.startTime ?? fallbackPlannedAt,
-    fallbackEndTime:   fallbackPlannedAt,
+    fallbackStartTime: fallbackStartAt,
+    fallbackEndTime:   fallbackEndAt,
   };
 }
 
