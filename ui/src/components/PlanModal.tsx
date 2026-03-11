@@ -36,9 +36,8 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     viable: boolean;
     startTime?: string;
     endTime?: string;
-    nightPhase?: string;
-    nightStart?: string;
-    nightEnd?: string;
+    lastActionBefore?: string;
+    firstActionAfter?: string;
     plan?: any[];
     fallbackStartTime?: string;
     fallbackEndTime?: string;
@@ -245,8 +244,9 @@ const toLocalISOString = (d: Date): string => {
   const handleConfirm = () => {
     if (mode === "night") {
       if (!nightResult?.viable || !nightResult.endTime) return;
-      const timeline = calculateBackplan(nightResult.endTime, recipe.dough_sections);
-      onConfirm(nightResult.endTime, multiplier, timeline);
+      // Nutze den plan direkt vom Backend – nicht nochmal calculateBackplan aufrufen
+      // da der Nacht-Algorithmus Parallelität korrekt berechnet
+      onConfirm(nightResult.endTime, multiplier, nightResult.plan ?? []);
       return;
     }
     const target = getTargetTimeString();
@@ -267,7 +267,7 @@ const toLocalISOString = (d: Date): string => {
     ? `${((baseWeight * multiplier) / 1000).toFixed(2).replace(".", ",")} kg`
     : null;
 
-  if (!isOpen) return null;
+  if (!isOpen || !recipe) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
