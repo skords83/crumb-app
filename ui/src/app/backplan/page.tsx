@@ -218,10 +218,10 @@ const toLocalISOString = (d: Date): string => {
   };
 
   const handleNightFetch = async () => {
+    if (!recipe) return;
     setNightLoading(true);
     setNightResult(null);
     try {
-      if (!recipe) return;
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipe.id}/plan-night`, {
         method: "POST",
         headers: {
