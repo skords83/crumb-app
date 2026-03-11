@@ -414,7 +414,7 @@ export default function BackplanPage() {
             if (sectionSteps.length === 0) return null;
             const sectionStart = sectionSteps[0].start;
             const sectionEnd = sectionSteps[sectionSteps.length - 1].end;
-            const hasActive = sectionSteps.some(s => s.globalIdx === activeIndex);
+            const hasActive = sectionSteps.some((s: any) => s.globalIdx === activeIndex);
 
             return (
               <div key={sIdx} className="mb-7">
