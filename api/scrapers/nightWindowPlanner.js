@@ -144,23 +144,24 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
   const candidates = baseSteps.filter(s => isPassive(s.step) && s.step.duration >= 180);
 
   // Jeden Kandidaten testen: Kandidat startet genau um nightStart
+  const now = baseDate;
+
   for (const candidate of candidates) {
-    // Verschiebung berechnen damit candidate.startTime = nightStart
     const currentStartMod = minOfDay(candidate.startTime);
     let shift = nightStartMin - currentStartMod;
 
-    // Versuche mit dayOffset 0 und +1
-    for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
+    // Versuche dayOffset 0, +1, +2 – wähle den ersten bei dem startTime in der Zukunft liegt
+    for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
       const totalShift = shift + dayOffset * 1440;
       const trialPlannedAt = new Date(anchorDate.getTime() + totalShift * 60000);
       const trialSteps = buildSteps(sections, trialPlannedAt, startOffsets);
+      const trialStart = trialSteps[0]?.startTime;
+
+      // Startzeit muss in der Zukunft liegen
+      if (!trialStart || trialStart <= now) continue;
 
       // Prüfe: kein Aktionsschritt im Nachtfenster
       if (!hasNightActions(trialSteps, nightStartMin, nightEndMin)) {
-        // Startzeit human-friendly? (06:00–23:00)
-        const startMod = minOfDay(trialSteps[0].startTime);
-        if (startMod < 360 || startMod > 1380) continue;
-
         // Nachtphase im Plan finden
         const nightStep = trialSteps.find(
           s => s.section === candidate.section &&
@@ -194,12 +195,16 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
     }
   }
 
-  // Kein vibler Plan gefunden → Fallback: fertig um nightStart
-  // "Wenn du um 22:00 fertig sein willst, musst du um X Uhr anfangen"
-  const fallbackPlannedAt = new Date(anchorDate);
-  // plannedAt = nightStart → startTime = nightStart - totalDuration
-  const fallbackSteps = buildSteps(sections, fallbackPlannedAt, startOffsets);
-  const fallbackStart = fallbackSteps[0]?.startTime ?? fallbackPlannedAt;
+  // Kein vibler Plan → Fallback: fertig um nightStart, startTime in der Zukunft
+  // Versuche heute und morgen
+  let fallbackPlannedAt = new Date(anchorDate);
+  let fallbackSteps = buildSteps(sections, fallbackPlannedAt, startOffsets);
+
+  // Wenn fallbackStart in der Vergangenheit liegt, einen Tag vor
+  if (fallbackSteps[0]?.startTime <= now) {
+    fallbackPlannedAt = new Date(anchorDate.getTime() + 1440 * 60000);
+    fallbackSteps = buildSteps(sections, fallbackPlannedAt, startOffsets);
+  }
 
   // Sicherstellen dass fallback startTime am selben oder vorherigen Tag liegt
   const fallbackPlan = fallbackSteps.map(item => ({
