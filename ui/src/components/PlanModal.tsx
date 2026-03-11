@@ -18,9 +18,9 @@ interface PlanModalProps {
 export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanModalProps) {
   // Nacht-Tab zeigen wenn es zwischen zwei Aktionen eine Lücke von mind. 7h gibt
   const hasNightCandidate = useMemo(() =>
-    recipe.dough_sections?.some((section: any) =>
+    recipe?.dough_sections?.some((section: any) =>
       section.steps?.some((step: any) => step.type === 'Warten' && step.duration >= 420)
-    ), [recipe.dough_sections]);
+    ) ?? false, [recipe?.dough_sections]);
 
   const [mode, setMode] = useState<"now" | "end" | "night">("end");
   const [selectedTime, setSelectedTime] = useState("");
@@ -68,7 +68,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   // FIX: Gesamtzeit korrekt berechnen – parallele Phasen (Vorteige) laufen gleichzeitig,
   // nur die längste zählt. Sequentielle Phasen (Hauptteig etc.) werden addiert.
   const totalMinutes = useMemo(() => {
-    return calcTotalDuration(recipe?.dough_sections || []);
+    return calcTotalDuration(recipe?.dough_sections ?? []);
   }, [recipe]);
 
   const totalHours = Math.floor(totalMinutes / 60);
@@ -78,7 +78,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const baseWeight = useMemo(() => {
     if (!recipe?.dough_sections) return 0;
     let weight = 0;
-    recipe.dough_sections.forEach((section: any) => {
+    recipe?.dough_sections?.forEach((section: any) => {
       (section.ingredients || []).forEach((ing: any) => {
         const amount = parseFloat(ing.amount) || 0;
         const unit = (ing.unit || "").toLowerCase();
