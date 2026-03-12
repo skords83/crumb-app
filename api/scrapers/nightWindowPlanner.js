@@ -29,6 +29,7 @@ function normalizePhaseName(name) {
   return (name || '').toLowerCase()
     .replace(/^\d+\.\s*stufe\s*/i, '')
     .replace(/^stufe\s*/i, '')
+    .replace(/reifer?\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
