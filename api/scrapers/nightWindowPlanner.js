@@ -200,7 +200,7 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
   };
 }
 
-module.exports = { planWithNightWindow };
+module.exports = { planWithNightWindow, calcOffsets, normalizePhaseName };
 
 // CLI-Test
 if (require.main === module) {
