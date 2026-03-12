@@ -640,4 +640,4 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
       </div>
     </div>
   );
-}
+}// Do 12. Mär 19:42:46 CET 2026
