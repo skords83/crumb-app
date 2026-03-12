@@ -423,7 +423,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               <div className="space-y-3">
                 {calculatedTimeline.map((item, i) => (
                   <div key={i} className="flex justify-between items-center text-xs border-b border-orange-100/50 dark:border-orange-800/50 pb-2">
-                    <span className="font-black text-orange-900 dark:text-orange-100 w-16">{formatTimeManual(item.start)}</span>
+                    <span className="font-black text-orange-900 dark:text-orange-100 w-16">{formatTimeManual(new Date(item.start))}</span>
                     <span className="flex-1 px-4 text-orange-800 dark:text-orange-200 font-medium">{item.instruction}</span>
                     <span className="text-orange-400 dark:text-orange-400 text-[9px] uppercase font-bold bg-white dark:bg-gray-800 px-2 py-0.5 rounded shadow-sm">{item.phase}</span>
                   </div>
