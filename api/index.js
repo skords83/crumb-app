@@ -435,21 +435,29 @@ app.patch('/api/recipes/:id', async (req, res) => {
   try {
     let result;
     if (planned_at !== undefined) {
-      if (planned_timeline !== undefined) {
-        result = await pool.query(
-          "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
-          [planned_at, JSON.stringify(planned_timeline), id, req.user.userId]
-        );
-      } else {
-        result = await pool.query(
-          "UPDATE recipes SET planned_at=$1, planned_timeline=NULL WHERE id=$2 AND user_id=$3 RETURNING *",
-          [planned_at, id, req.user.userId]
-        );
+      // Rezept holen um dough_sections zu bekommen
+      const recipeResult = await pool.query(
+        'SELECT dough_sections FROM recipes WHERE id=$1 AND user_id=$2',
+        [id, req.user.userId]
+      );
+      if (recipeResult.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
+
+      let timelineToSave = planned_timeline ?? null;
+      // Wenn keine Timeline mitkommt, sequenziell berechnen als Fallback
+      if (!timelineToSave && planned_at && recipeResult.rows[0].dough_sections) {
+        try {
+          timelineToSave = calculateTimeline(new Date(planned_at), recipeResult.rows[0].dough_sections);
+        } catch {}
       }
+
+      result = await pool.query(
+        "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
+        [planned_at, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
+      );
     } else if (is_favorite !== undefined) {
       result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
     }
-    if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
+    if (!result || result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Patch-Fehler" }); }
 });
@@ -553,6 +561,19 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
     }
 
     const planResult = planWithNightWindow(sections, nightWindow, new Date());
+
+    // Bei viablem Plan: planned_at und planned_timeline direkt in DB speichern
+    if (planResult.viable && planResult.endTime && planResult.plan?.length > 0) {
+      try {
+        await pool.query(
+          'UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4',
+          [new Date(planResult.endTime), JSON.stringify(planResult.plan), id, req.user.userId]
+        );
+      } catch (saveErr) {
+        console.error('plan-night: Timeline speichern fehlgeschlagen:', saveErr.message);
+      }
+    }
+
     res.json(planResult);
   } catch (err) {
     console.error('❌ plan-night Fehler:', err.message);
