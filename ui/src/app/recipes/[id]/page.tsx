@@ -552,13 +552,27 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         recipe={recipe}
 onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
   try {
+    let timelineToSave = plannedTimeline ?? null;
+    if (!timelineToSave) {
+      try {
+        const nightRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}/plan-night`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+          body: JSON.stringify({ nightWindow: { start: '22:00', end: '06:30' }, targetEndTime: plannedAt }),
+        });
+        if (nightRes.ok) {
+          const nightData = await nightRes.json();
+          if (nightData.viable && nightData.plan?.length > 0) timelineToSave = nightData.plan;
+        }
+      } catch {}
+    }
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
       },
-      body: JSON.stringify({ planned_at: plannedAt, planned_timeline: plannedTimeline }),
+      body: JSON.stringify({ planned_at: plannedAt, planned_timeline: timelineToSave }),
     });
             if (res.ok) {
               setCalculatedTimeline(timeline);
