@@ -143,6 +143,10 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
       const actionsAfter = trialActions.filter(s => s.startTime >= targetNightStart);
       if (actionsAfter.length > 0 && actionsAfter[0].startTime < targetNightEnd) continue;
 
+      // Prüfe: Planende darf nicht in der Nachtphase liegen (z.B. Backen um 01:00)
+      const planEnd = trialSteps[trialSteps.length - 1]?.endTime;
+      if (planEnd && planEnd > targetNightStart && planEnd < targetNightEnd) continue;
+
       // Erfolg!
       const actionsBefore = trialActions.filter(s => s.endTime <= targetNightStart);
       const lastBefore = actionsBefore[actionsBefore.length - 1];
