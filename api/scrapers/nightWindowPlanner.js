@@ -25,6 +25,14 @@ function isActive(step) {
 // ---------------------------------------------------------------------------
 // Offsets (analog calculateTimeline in index.js)
 // ---------------------------------------------------------------------------
+function normalizePhaseName(name) {
+  return (name || '').toLowerCase()
+    .replace(/^\d+\.\s*stufe\s*/i, '')
+    .replace(/^stufe\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function calcOffsets(sections) {
   const phaseNames = sections.map(s => s.name);
   const deps = {};
@@ -32,9 +40,15 @@ function calcOffsets(sections) {
     deps[section.name] = [];
     (section.ingredients || []).forEach(ing => {
       const ingName = (ing.name || '').toLowerCase();
+      const ingNameNorm = normalizePhaseName(ing.name || '');
       phaseNames.forEach(otherName => {
-        if (otherName !== section.name && ingName.includes(otherName.toLowerCase())) {
-          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        if (otherName !== section.name) {
+          const otherNorm = normalizePhaseName(otherName);
+          if (ingName.includes(otherName.toLowerCase()) || 
+              (otherNorm.length > 3 && ingName.includes(otherNorm)) ||
+              (otherNorm.length > 3 && ingNameNorm.includes(otherNorm))) {
+            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+          }
         }
       });
     });
