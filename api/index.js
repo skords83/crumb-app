@@ -443,11 +443,20 @@ app.patch('/api/recipes/:id', async (req, res) => {
       if (recipeResult.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
 
       let timelineToSave = planned_timeline ?? null;
-      // Wenn keine Timeline mitkommt, sequenziell berechnen als Fallback
+      // Wenn keine Timeline mitkommt, mit planWithNightWindow berechnen (kennt Abhängigkeiten)
       if (!timelineToSave && planned_at && recipeResult.rows[0].dough_sections) {
         try {
-          timelineToSave = calculateTimeline(new Date(planned_at), recipeResult.rows[0].dough_sections);
-        } catch {}
+          const nightResult = planWithNightWindow(
+            recipeResult.rows[0].dough_sections,
+            { start: '22:00', end: '06:30' },
+            new Date(planned_at)
+          );
+          timelineToSave = nightResult.plan?.length > 0
+            ? nightResult.plan
+            : calculateTimeline(new Date(planned_at), recipeResult.rows[0].dough_sections);
+        } catch {
+          try { timelineToSave = calculateTimeline(new Date(planned_at), recipeResult.rows[0].dough_sections); } catch {}
+        }
       }
 
       result = await pool.query(
