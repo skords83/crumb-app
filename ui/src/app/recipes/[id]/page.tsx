@@ -578,6 +578,10 @@ onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
               setCalculatedTimeline(timeline);
               setTargetTime(plannedAt);
               setShowPlanModal(false);
+              // Recipe neu laden damit planned_at im Header aktuell ist
+              fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
+              }).then(r => r.json()).then(data => { setRecipe(data); });
               router.refresh();
             }
           } catch (err) { console.error(err); }
