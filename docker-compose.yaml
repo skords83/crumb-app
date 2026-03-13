@@ -21,13 +21,11 @@ services:
       - "9084:5000"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-crumb_db}
-      TZ: Europe/Berlin
       NTFY_URL: ${NTFY_URL}
       NTFY_TOPIC: ${NTFY_TOPIC}
       NTFY_TOKEN: ${NTFY_TOKEN}
       NTFY_VORLAUF: ${NTFY_VORLAUF:-5}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
-      TZ: Europe/Berlin
     volumes:
       - api_uploads:/usr/src/app/uploads
     depends_on:
@@ -41,7 +39,6 @@ services:
       - "9083:3000"
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      TZ: Europe/Berlin
     depends_on:
       - api
 
