@@ -54,6 +54,7 @@ const upload = multer({ storage });
 // DATENBANK POOL & INIT
 // ============================================================
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+pool.on('connect', client => { client.query("SET timezone = 'UTC'"); });
 
 const initDB = async () => {
   const createUsersTable = `
