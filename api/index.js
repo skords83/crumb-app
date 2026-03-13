@@ -569,7 +569,9 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
       return res.status(400).json({ error: 'Rezept hat keine Phasen (dough_sections)' });
     }
 
-    const planResult = planWithNightWindow(sections, nightWindow, new Date());
+    const tzOffsetMin = req.body.tzOffset || 0;
+    const baseDate = new Date(Date.now() - tzOffsetMin * 60 * 1000);
+    const planResult = planWithNightWindow(sections, nightWindow, baseDate);
 
     // Bei viablem Plan: planned_at und planned_timeline direkt in DB speichern
     if (planResult.viable && planResult.endTime && planResult.plan?.length > 0) {
