@@ -110,8 +110,10 @@ function planWithNightWindow(sections, nightWindow, baseDate = new Date()) {
   anchorDate.setHours(Math.floor(nightStartMin / 60), nightStartMin % 60, 0, 0);
 
   for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
-    // targetNightStart = der nightStart dieses Tages
-    const targetNightStart = new Date(anchorDate.getTime() + dayOffset * 1440 * 60000);
+    // targetNightStart = der nightStart dieses Tages (DST-safe, uses calendar date arithmetic)
+    const targetNightStart = new Date(anchorDate);
+    targetNightStart.setDate(anchorDate.getDate() + dayOffset);
+    targetNightStart.setHours(Math.floor(nightStartMin / 60), nightStartMin % 60, 0, 0);
     const targetNightEnd   = new Date(targetNightStart.getTime() + nightDuration * 60000);
 
     // Baue Zeitstrahl mit plannedAt = targetNightStart
