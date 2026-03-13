@@ -230,6 +230,7 @@ const toLocalISOString = (d: Date): string => {
         },
         body: JSON.stringify({
           nightWindow: { start: nightStart, end: nightEnd },
+          tzOffset: -new Date().getTimezoneOffset(),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
