@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { X, Play, Clock, Target, Sun, Utensils, Moon, Plus, Minus, AlertTriangle, CheckCircle } from "lucide-react";
+import { X, Play, Clock, Target, Sun, Utensils, Moon, Plus, Minus, CheckCircle } from "lucide-react";
 import { calculateBackplan, formatTimeManual, calcTotalDuration } from "@/lib/backplan-utils";
 
 interface PlanModalProps {
@@ -476,42 +476,6 @@ const toLocalISOString = (d: Date): string => {
               </div>
             )}
 
-            {/* Ergebnis: nicht viable */}
-            {nightResult && !nightResult.viable && (
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                  <span className="text-[12px] text-amber-700 dark:text-amber-300 leading-snug">
-                    Dieses Rezept lässt sich nicht ohne nächtliche Aktionen planen.
-                  </span>
-                </div>
-                {nightResult.fallbackStartTime && (
-                  <div className="bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
-                      Wenn du um {nightStart} Uhr fertig sein willst, musst du starten um:
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div className="text-center flex-1">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start</div>
-                        <div className="text-[16px] font-extrabold text-[#8B7355] dark:text-[#A0845C]">
-                          {formatRelative(new Date(nightResult.fallbackStartTime))}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-center gap-1 px-3">
-                        <div className="w-12 h-0.5 bg-[#D4C9B8] dark:bg-gray-600 rounded-full" />
-                        <span className="text-[10px] font-bold text-gray-300">{totalHours}h {totalMins}m</span>
-                      </div>
-                      <div className="text-center flex-1">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fertig um</div>
-                        <div className="text-[16px] font-extrabold text-[#2D2D2D] dark:text-gray-100">
-                          {nightStart}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
         {mode !== "now" && mode !== "night" && (
