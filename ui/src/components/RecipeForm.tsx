@@ -256,17 +256,6 @@ export default function RecipeForm({
                         setDoughSections(newS);
                       }}
                     />
-                    <label className="flex items-center gap-2 cursor-pointer w-fit">
-                      <input type="checkbox" className="sr-only peer" checked={section.is_parallel} onChange={(e) => {
-                        const newS = [...doughSections];
-                        newS[sIdx].is_parallel = e.target.checked;
-                        setDoughSections(newS);
-                      }} />
-                      <div className={`w-7 h-3.5 rounded-full transition-colors relative ${section.is_parallel ? "bg-[#8B7355]" : "bg-gray-200 dark:bg-gray-600"}`}>
-                        <div className={`absolute left-0.5 top-0.5 w-2.5 h-2.5 bg-white rounded-full transition-transform ${section.is_parallel ? "translate-x-3.5" : ""}`} />
-                      </div>
-                      <span className="text-[9px] font-black uppercase text-gray-400">Parallel ablaufend</span>
-                    </label>
                   </div>
                   <button type="button" onClick={() => removeSection(sIdx)} className="text-gray-300 dark:text-gray-600 hover:text-red-500 self-start pt-2"><Trash2 size={20} /></button>
                 </div>
