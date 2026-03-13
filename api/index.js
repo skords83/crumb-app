@@ -449,7 +449,8 @@ app.patch('/api/recipes/:id', async (req, res) => {
           const nightResult = planWithNightWindow(
             recipeResult.rows[0].dough_sections,
             { start: '22:00', end: '06:30' },
-            new Date(planned_at)
+            new Date(planned_at),
+            0
           );
           timelineToSave = nightResult.plan?.length > 0
             ? nightResult.plan
@@ -570,8 +571,7 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
     }
 
     const tzOffsetMin = req.body.tzOffset || 0;
-    const baseDate = new Date(Date.now() - tzOffsetMin * 60 * 1000);
-    const planResult = planWithNightWindow(sections, nightWindow, baseDate);
+    const planResult = planWithNightWindow(sections, nightWindow, new Date(), tzOffsetMin);
 
     // Bei viablem Plan: planned_at und planned_timeline direkt in DB speichern
     if (planResult.viable && planResult.endTime && planResult.plan?.length > 0) {
