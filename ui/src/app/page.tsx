@@ -17,86 +17,31 @@ const SORT_OPTIONS = [
   { value: 'za', label: 'Z → A' },
 ];
 
+// "Heute fertig" bleibt clientseitig (Laufzeitberechnung)
 const FILTERS = ["Alle", "Sauerteig", "Hefeteig", "Vollkorn", "Heute fertig", "Favoriten"];
-
-// ─── Hilfsfunktionen ──────────────────────────────────────────
-
-const getRecipeDuration = (recipe: any) => {
-  let total = 0;
-  recipe.dough_sections?.forEach((s: any) => {
-    s.steps?.forEach((st: any) => {
-      const d = parseInt(String(st.duration));
-      if (!isNaN(d)) total += d;
-    });
-  });
-  return total;
-};
-
-const matchesFilter = (recipe: any, filter: string, minutesLeft: number): boolean => {
-  const title = (recipe.title ?? '').toLowerCase();
-  const desc  = (recipe.description ?? '').toLowerCase();
-  const ings  = recipe.dough_sections?.flatMap((s: any) =>
-    s.ingredients?.map((i: any) => i.name?.toLowerCase() ?? '') ?? []
-  ).join(' ') ?? '';
-  const combined = `${title} ${desc} ${ings}`;
-
-  switch (filter) {
-    case 'Alle':        return true;
-    case 'Favoriten':   return !!recipe.is_favorite;
-    case 'Sauerteig':   return combined.includes('sauerteig') || combined.includes('anstellgut');
-    case 'Hefeteig':    return combined.includes('hefe') && !combined.includes('sauerteig');
-    case 'Vollkorn':    return combined.includes('vollkorn');
-    case 'Heute fertig': { const d = getRecipeDuration(recipe); return d > 0 && d <= minutesLeft; }
-    default:            return true;
-  }
-};
-
-const matchesSearch = (recipe: any, q: string): boolean => {
-  if (!q) return true;
-  const term = q.toLowerCase();
-  const title = (recipe.title ?? '').toLowerCase();
-  const desc  = (recipe.description ?? '').toLowerCase();
-  const ings  = recipe.dough_sections?.flatMap((s: any) =>
-    s.ingredients?.map((i: any) => i.name?.toLowerCase() ?? '') ?? []
-  ).join(' ') ?? '';
-  return title.includes(term) || desc.includes(term) || ings.includes(term);
-};
-
-const sortRecipes = (recipes: any[], sort: string): any[] => {
-  const copy = [...recipes];
-  switch (sort) {
-    case 'oldest': return copy.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    case 'az':     return copy.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '', 'de'));
-    case 'za':     return copy.sort((a, b) => (b.title ?? '').localeCompare(a.title ?? '', 'de'));
-    default:       return copy.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }
-};
-
-// ─── Komponente ───────────────────────────────────────────────
 
 function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [allRecipes, setAllRecipes]   = useState<any[]>([]);
-  const [isLoading, setIsLoading]     = useState(true);
+  const [recipes, setRecipes] = useState<any[]>([]);
+  const [allRecipes, setAllRecipes] = useState<any[]>([]); // ungefiltert, nur für "Heute fertig" + Counts
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [showPlanModal, setShowPlanModal]   = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showPlanModal, setShowPlanModal] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
-  const [showSortMenu, setShowSortMenu]     = useState(false);
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
+  // Interner Input-State für Debounce (Eingabe sofort, URL nach 250ms)
   const [inputValue, setInputValue] = useState(searchParams.get('q') ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const searchQuery  = searchParams.get('q')      ?? '';
+  // URL-Parameter als Source of Truth
+  const searchQuery = searchParams.get('q') ?? '';
   const activeFilter = searchParams.get('filter') ?? 'Alle';
-  const activeSort   = searchParams.get('sort')   ?? 'newest';
+  const activeSort = searchParams.get('sort') ?? 'newest';
 
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
-
-  const token = typeof window !== 'undefined'
-    ? localStorage.getItem('crumb_token') ?? ''
-    : '';
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -126,78 +71,133 @@ function HomePageContent() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Einmaliger Fetch beim Mount – alle Rezepte ungefiltert
+  // Alle Rezepte einmalig laden (ungefiltert, für Counts + "Heute fertig")
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
+    })
+      .then(res => res.json())
+      .then(data => setAllRecipes(Array.isArray(data) ? data : []))
+      .catch(err => console.error("Ladefehler (alle):", err));
+  }, []);
+
+  // Gefilterte Rezepte vom Backend laden wenn URL-Parameter sich ändern
   useEffect(() => {
     setIsLoading(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('q', searchQuery);
+    // "Heute fertig" wird clientseitig behandelt – alle laden, dann filtern
+    if (activeFilter && activeFilter !== 'Alle' && activeFilter !== 'Heute fertig') {
+      params.set('filter', activeFilter);
+    }
+    if (activeSort && activeSort !== 'newest') params.set('sort', activeSort);
+
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/recipes${params.toString() ? '?' + params.toString() : ''}`;
+
+    fetch(url, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
     })
       .then(res => res.json())
       .then(data => {
-        setAllRecipes(Array.isArray(data) ? data : []);
+        setRecipes(Array.isArray(data) ? data : []);
         setIsLoading(false);
       })
       .catch(err => {
-        console.error('Ladefehler:', err);
+        console.error("Ladefehler:", err);
         setIsLoading(false);
       });
-  }, []);  // leeres Array → nur einmal beim Mount
+  }, [searchQuery, activeFilter, activeSort]);
 
   // Optimistisches Favoriten-Toggle mit Rollback
   const toggleFavorite = async (id: number, status: boolean) => {
+    setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
     setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ is_favorite: status }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
+        body: JSON.stringify({ is_favorite: status })
       });
       if (!res.ok) {
+        setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
         setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
       }
-    } catch {
+    } catch (err) {
+      setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
       setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r));
+      console.error("Favorit-Fehler:", err);
     }
   };
 
-  // Gefilterte + gesuchte + sortierte Rezepte – alles clientseitig
-  const filteredRecipes = useMemo(() => {
-    const now = new Date();
-    const minutesLeft = 24 * 60 - (now.getHours() * 60 + now.getMinutes());
-    const filtered = allRecipes.filter(r =>
-      matchesSearch(r, searchQuery) && matchesFilter(r, activeFilter, minutesLeft)
-    );
-    return sortRecipes(filtered, activeSort);
-  }, [allRecipes, searchQuery, activeFilter, activeSort]);
+  const getRecipeDuration = (recipe: any) => {
+    let totalMinutes = 0;
+    recipe.dough_sections?.forEach((s: any) => {
+      s.steps?.forEach((st: any) => {
+        const d = parseInt(String(st.duration));
+        if (!isNaN(d)) totalMinutes += d;
+      });
+    });
+    return totalMinutes;
+  };
 
-  // Filter-Counts
-  const filterCounts = useMemo(() => {
+  // "Heute fertig" clientseitig filtern (braucht aktuelle Uhrzeit)
+  const filteredRecipes = useMemo(() => {
+    if (activeFilter !== 'Heute fertig') return recipes;
     const now = new Date();
-    const minutesLeft = 24 * 60 - (now.getHours() * 60 + now.getMinutes());
-    return Object.fromEntries(
-      FILTERS.map(f => [f, allRecipes.filter(r => matchesFilter(r, f, minutesLeft)).length])
-    );
-  }, [allRecipes]);
+    const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
+    return recipes.filter(r => {
+      const d = getRecipeDuration(r);
+      return d > 0 && d <= minutesLeft;
+    });
+  }, [recipes, activeFilter]);
 
   // visibleCount zurücksetzen bei Filter/Suche/Sort-Wechsel
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [searchQuery, activeFilter, activeSort]);
 
-  // IntersectionObserver für Infinite Scroll
+  // Filter-Counts aus allRecipes berechnen (clientseitig, kein Extra-Request)
+  const filterCounts = useMemo(() => {
+    const now = new Date();
+    const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
+
+    const check = (r: any, f: string): boolean => {
+      const title = (r.title ?? '').toLowerCase();
+      const desc = (r.description ?? '').toLowerCase();
+      const ings = r.dough_sections?.flatMap((s: any) =>
+        s.ingredients?.map((i: any) => i.name?.toLowerCase() ?? '') ?? []
+      ).join(' ') ?? '';
+      const combined = `${title} ${desc} ${ings}`;
+      switch (f) {
+        case 'Alle': return true;
+        case 'Favoriten': return r.is_favorite;
+        case 'Sauerteig': return combined.includes('sauerteig') || combined.includes('anstellgut');
+        case 'Hefeteig': return combined.includes('hefe') && !combined.includes('sauerteig');
+        case 'Vollkorn': return combined.includes('vollkorn');
+        case 'Heute fertig': { const d = getRecipeDuration(r); return d > 0 && d <= minutesLeft; }
+        default: return true;
+      }
+    };
+    return Object.fromEntries(FILTERS.map(f => [f, allRecipes.filter(r => check(r, f)).length]));
+  }, [allRecipes]);
+
+  // IntersectionObserver für Infinite Scroll – callback ref
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
     if (observerRef.current) observerRef.current.disconnect();
     if (!node) return;
     observerRef.current = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting) setVisibleCount(prev => prev + PAGE_SIZE); },
+      (entries) => { if (entries[0].isIntersecting) setVisibleCount(prev => prev + PAGE_SIZE); },
       { root: null, rootMargin: '200px', threshold: 0 }
     );
     observerRef.current.observe(node);
   }, []);
 
-  const visibleRecipes  = useMemo(() => filteredRecipes.slice(0, visibleCount), [filteredRecipes, visibleCount]);
-  const hasMore         = visibleCount < filteredRecipes.length;
+  const visibleRecipes = filteredRecipes.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredRecipes.length;
   const activeSortLabel = SORT_OPTIONS.find(o => o.value === activeSort)?.label ?? 'Sortierung';
 
   return (
@@ -206,6 +206,8 @@ function HomePageContent() {
 
         {/* Header: Suche, Sort & Filter */}
         <div className="space-y-4 mb-10">
+
+          {/* Suche + Sort */}
           <div className="flex gap-3 items-center">
             <div className="relative group flex-1">
               <Search className="absolute inset-y-0 left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#8B7355] dark:group-focus-within:text-[#C4A484] transition-colors" size={20} />
@@ -213,11 +215,12 @@ function HomePageContent() {
                 type="text"
                 placeholder="Brot, Mehl oder Zutat suchen..."
                 value={inputValue}
-                onChange={e => handleSearchInput(e.target.value)}
+                onChange={(e) => handleSearchInput(e.target.value)}
                 className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 dark:focus:border-[#8B7355]/60 transition-all text-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
               />
             </div>
 
+            {/* Sort-Dropdown */}
             <div className="relative" ref={sortMenuRef}>
               <button
                 onClick={() => setShowSortMenu(v => !v)}
@@ -246,12 +249,13 @@ function HomePageContent() {
             </div>
           </div>
 
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
-            {FILTERS.map(filter => (
+          {/* Filter-Chips mit Anzahl */}
+          <div className="flex flex-wrap gap-2">
+            {FILTERS.map((filter) => (
               <button
                 key={filter}
                 onClick={() => updateParams({ filter: filter === 'Alle' ? null : filter })}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm border-2 transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all whitespace-nowrap ${
                   activeFilter === filter
                     ? 'bg-[#8B7355] text-white border-[#8B7355] shadow-md scale-105'
                     : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm hover:shadow-md'
@@ -284,16 +288,17 @@ function HomePageContent() {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {visibleRecipes.map(recipe => (
+              {visibleRecipes.map((recipe) => (
                 <RecipeCard
                   key={recipe.id}
                   recipe={recipe}
                   onToggleFavorite={toggleFavorite}
-                  onPlan={r => { setSelectedRecipe(r); setShowPlanModal(true); }}
+                  onPlan={(r) => { setSelectedRecipe(r); setShowPlanModal(true); }}
                 />
               ))}
             </div>
 
+            {/* Sentinel + Lade-Indikator */}
             <div ref={sentinelRef} className="py-8 flex justify-center">
               {hasMore && (
                 <div className="flex gap-2">
@@ -307,29 +312,34 @@ function HomePageContent() {
         )}
       </div>
 
+      {/* Floating Action Button */}
       <Link href="/new" className="fixed bottom-24 right-6 md:bottom-10 md:right-10 z-50 bg-[#8B7355] text-white p-5 rounded-2xl shadow-2xl hover:scale-110 active:scale-95 transition-all">
         <Plus size={24} strokeWidth={3} />
       </Link>
 
+      {/* Planungs-Modal */}
       <PlanModal
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={selectedRecipe}
-        onConfirm={async plannedAt => {
+        onConfirm={async (plannedAt) => {
           if (!selectedRecipe) return;
           try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${selectedRecipe.id}`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+              },
               body: JSON.stringify({ planned_at: plannedAt }),
             });
             if (res.ok) {
-              setAllRecipes(prev => prev.map(r =>
+              setRecipes(prev => prev.map(r =>
                 r.id === selectedRecipe.id ? { ...r, planned_at: plannedAt } : r
               ));
               setShowPlanModal(false);
             }
-          } catch (err) { console.error('Planungs-Fehler:', err); }
+          } catch (err) { console.error("Planungs-Fehler:", err); }
         }}
       />
     </div>
