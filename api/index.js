@@ -463,7 +463,7 @@ app.patch('/api/recipes/:id', async (req, res) => {
 
       result = await pool.query(
         "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
-        [new Date(planned_at).toISOString(), timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
+        [planned_at ? new Date(planned_at).toISOString() : null, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
       );
     } else if (is_favorite !== undefined) {
       result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
