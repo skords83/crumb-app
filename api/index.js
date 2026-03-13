@@ -83,7 +83,7 @@ const initDB = async () => {
       dough_sections JSONB,
       steps JSONB,
       is_favorite BOOLEAN DEFAULT false,
-      planned_at TIMESTAMP WITHOUT TIME ZONE,
+      planned_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );`;
 
