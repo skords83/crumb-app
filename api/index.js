@@ -462,7 +462,7 @@ app.patch('/api/recipes/:id', async (req, res) => {
 
       result = await pool.query(
         "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
-        [planned_at, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
+        [new Date(planned_at).toISOString(), timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
       );
     } else if (is_favorite !== undefined) {
       result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
@@ -486,7 +486,7 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
   try {
     const result = await pool.query(
       'UPDATE recipes SET planned_at=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
-      [new Date(newPlannedAt), id, req.user.userId]
+      [new Date(newPlannedAt).toISOString(), id, req.user.userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Nicht gefunden' });
 
@@ -578,7 +578,7 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
       try {
         await pool.query(
           'UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4',
-          [new Date(planResult.endTime), JSON.stringify(planResult.plan), id, req.user.userId]
+          [new Date(planResult.endTime).toISOString(), JSON.stringify(planResult.plan), id, req.user.userId]
         );
       } catch (saveErr) {
         console.error('plan-night: Timeline speichern fehlgeschlagen:', saveErr.message);
@@ -610,7 +610,7 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
 
     const result = await pool.query(
       'UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      [new Date(plannedAt), id, req.user.userId]
+      [new Date(plannedAt).toISOString(), id, req.user.userId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Rezept nicht gefunden' });

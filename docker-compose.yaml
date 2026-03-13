@@ -1,47 +1,75 @@
 services:
   db:
     image: postgres:15-alpine
+    container_name: crumb-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      TZ: Europe/Berlin
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-crumb_db}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - crumb_db:/var/lib/postgresql/data
+    networks:
+      - crumb-internal
 
   api:
     image: ghcr.io/skords83/crumb-app/api:latest
+    container_name: crumb-api
     restart: unless-stopped
-    ports:
-      - "9084:5000"
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-crumb_db}
+      TZ: Europe/Berlin
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       NTFY_URL: ${NTFY_URL}
       NTFY_TOPIC: ${NTFY_TOPIC}
       NTFY_TOKEN: ${NTFY_TOKEN}
-      NTFY_VORLAUF: ${NTFY_VORLAUF:-5}
+      NTFY_VORLAUF: ${NTFY_VORLAUF}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
-    volumes:
-      - api_uploads:/usr/src/app/uploads
     depends_on:
-      db:
-        condition: service_healthy
+      - db
+    volumes:
+      - crumb_uploads:/usr/src/app/uploads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.crumb-api.rule=Host(`crumb.skords.de`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.crumb-api.entrypoints=websecure"
+      - "traefik.http.routers.crumb-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.crumb-api.priority=10"
+      - "traefik.http.services.crumb-api.loadbalancer.server.port=5000"
+      - "traefik.http.routers.crumb-uploads.rule=Host(`crumb.skords.de`) && PathPrefix(`/uploads`)"
+      - "traefik.http.routers.crumb-uploads.entrypoints=websecure"
+      - "traefik.http.routers.crumb-uploads.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.crumb-uploads.priority=10"
+      - "traefik.http.routers.crumb-uploads.service=crumb-api"
+    networks:
+      - proxy
+      - crumb-internal
 
   ui:
     image: ghcr.io/skords83/crumb-app/ui:latest
+    container_name: crumb-ui
     restart: unless-stopped
-    ports:
-      - "9083:3000"
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     depends_on:
       - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.crumb-ui.rule=Host(`crumb.skords.de`)"
+      - "traefik.http.routers.crumb-ui.entrypoints=websecure"
+      - "traefik.http.routers.crumb-ui.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.crumb-ui.priority=1"
+      - "traefik.http.services.crumb-ui.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+      - crumb-internal
 
 volumes:
-  postgres_data:
-  api_uploads:
+  crumb_db:
+  crumb_uploads:
+
+networks:
+  proxy:
+    external: true
+  crumb-internal:
+    internal: true
