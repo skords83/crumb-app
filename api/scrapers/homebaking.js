@@ -324,6 +324,7 @@ const scrapeHomebaking = async (url) => {
                 const text = $(li).text().trim();
                 if (/\.(jpg|jpeg|png|webp|gif)\b/i.test(text) && text.includes('http')) return;
                 if (text.length < 15 || SKIP_TEXT.test(text)) return;
+                if (/^backzeit\s*:/i.test(text)) return;  // Info-Zeile, kein echter Schritt
                 validLis.push(text);
               });
               // Backen-LIs: ab dem ersten Backen-LI jeden als eigenen Schritt belassen.

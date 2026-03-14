@@ -142,7 +142,10 @@ function _tokenize(text) {
 
   const segments = [];
   for (const sentence of sentences) {
-    const s = sentence.replace(TRANSITION_RE, '').trim();
+    // Transition-Wort nur entfernen wenn der Satz *selbst* damit beginnt –
+    // nicht wenn es ein Satzrest nach einem internen Split ist (z.B. "Danach lässt man...")
+    const startsWithTransition = TRANSITION_RE.test(sentence.trimStart());
+    const s = startsWithTransition ? sentence.replace(TRANSITION_RE, '').trim() : sentence.trim();
 
     // Reifezeit-Appendix: "Aktion. Reifezeit 3 Stunden." oder "Aktion / Reifezeit 3 Std."
     // Auch mit Teigtemperatur-Prefix: "Aktion. Gewünschte Teigtemperatur 28°C / Reifezeit 3 Std."
@@ -167,7 +170,9 @@ function _tokenize(text) {
     const undParts = s.split(/\s+und\s+/);
     if (undParts.length >= 2 && _isWait(undParts[undParts.length - 1])) {
       const action = undParts.slice(0, -1).join(' und ').trim();
-      const wait   = undParts[undParts.length - 1].trim();
+      // Pronomen-Reste am Anfang des Warte-Teils entfernen ("diesen", "ihn", "es", "sie")
+      const wait = undParts[undParts.length - 1].trim()
+        .replace(/^(?:diesen?|ihn|es|sie|den\s+teig)\s+/i, '');
       if (action.length >= 5) segments.push({ text: action, type: _classify(action) });
       _splitWaitChain(wait, segments);
       continue;
