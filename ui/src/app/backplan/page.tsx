@@ -268,16 +268,13 @@ export default function BackplanPage() {
               </div>
               {/* Content */}
               <div className="p-5">
-                <div className="w-14 h-14 rounded-2xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3 text-3xl">
-                  🍞
-                </div>
-                <h3 className="text-center text-[17px] font-extrabold text-gray-800 dark:text-gray-100 mb-1">Brot fertig?</h3>
+                <h3 className="text-center text-[17px] font-extrabold text-gray-800 dark:text-gray-100 mb-1 mt-1">Brot fertig?</h3>
                 <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mb-5">Der Backplan wird abgeschlossen und aus deiner Liste entfernt.</p>
                 <button
                   onClick={() => finishBaking(finishModalRecipeId)}
-                  className="w-full py-3.5 rounded-2xl bg-green-500 hover:bg-green-600 active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-green-200 dark:shadow-green-900/30 mb-2"
+                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-2"
                 >
-                  Ja, Brot ist fertig 🎉
+                  Ja, fertig gebacken
                 </button>
                 <button
                   onClick={() => setFinishModalRecipeId(null)}
@@ -506,9 +503,9 @@ export default function BackplanPage() {
           })}
 
           <div className="pl-10 mb-6">
-            <div className="rounded-2xl border-2 border-green-100 dark:border-green-800 bg-green-50 dark:bg-green-900/30 p-4 flex items-center justify-between mb-4">
-              <span className="text-green-700 dark:text-green-300 font-bold text-[14px]">{recipe.title} fertig!</span>
-              <span className="text-green-600 dark:text-green-400 font-extrabold text-[14px]">{extractTimeFromString(recipe.planned_at)} Uhr</span>
+            <div className="rounded-2xl border border-[#E8E0D5] dark:border-gray-700 bg-[#F9F6F2] dark:bg-gray-900/40 p-4 flex items-center justify-between mb-4">
+              <span className="text-[#8B7355] dark:text-[#C4A484] font-bold text-[14px]">{recipe.title} – fertig</span>
+              <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">{extractTimeFromString(recipe.planned_at)} Uhr</span>
             </div>
             <Link href={`/recipes/${recipe.id}`}
               className="block w-full text-center py-4 rounded-2xl bg-[#8B7355] text-white font-extrabold text-[13px] uppercase tracking-widest shadow-lg shadow-[#8B7355]/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
