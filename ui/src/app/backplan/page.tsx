@@ -423,11 +423,7 @@ export default function BackplanPage() {
 
             const drawerKey = `${recipe.id}-${sIdx}`;
             const isDrawerOpen = openDrawers.has(drawerKey);
-            const sectionIngredients = (section.ingredients || []).filter((ing: any) =>
-              // Phasenzutaten ausfiltern (Zutaten die selbst eine Phase referenzieren)
-              !sections.some((s: any) => s.name !== section.name &&
-                s.name.toLowerCase().includes((ing.name || '').toLowerCase().replace(/^(gesamte?r?\s+|reifer?\s+|frischer?\s+)/i, '')))
-            );
+            const sectionIngredients = section.ingredients || [];
 
             return (
               <div key={sIdx} className="mb-7">
