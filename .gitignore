@@ -30,3 +30,6 @@ api/uploads/
 Thumbs.db
 
 docker-compose.override.yaml
+
+/public/sw.js
+/public/workbox-*.js
