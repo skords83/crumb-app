@@ -23,6 +23,7 @@ jobs:
       - name: Build and push UI
         run: |
           docker build \
+            --no-cache \
             --build-arg NEXT_PUBLIC_API_URL=https://crumb.skords.de/api \
             -t ghcr.io/skords83/crumb-app/ui:latest \
             ./ui
