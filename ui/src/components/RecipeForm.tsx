@@ -351,12 +351,58 @@ export default function RecipeForm({
                               </select>
                               <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
                                 <Clock size={11} />
-                                <input
-                                  className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                  type="number"
-                                  value={step.duration}
-                                  onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)}
-                                /> Min.
+                                {step.duration_min !== undefined && step.duration_max !== undefined ? (
+                                  <>
+                                    <input
+                                      className="bg-transparent w-8 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                      type="number"
+                                      value={step.duration_min}
+                                      onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration_min', parseInt(e.target.value) || 0)}
+                                    />
+                                    <span className="text-gray-300 dark:text-gray-500">–</span>
+                                    <input
+                                      className="bg-transparent w-8 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                      type="number"
+                                      value={step.duration_max}
+                                      onChange={(e) => {
+                                        const max = parseInt(e.target.value) || 0;
+                                        updateStepInSection(sIdx, stIdx, 'duration_max', max);
+                                        updateStepInSection(sIdx, stIdx, 'duration', Math.round((step.duration_min + max) / 2));
+                                      }}
+                                    />
+                                    <span className="text-gray-400 dark:text-gray-300">Min.</span>
+                                    <button
+                                      type="button"
+                                      title="Zurück zu fester Dauer"
+                                      onClick={() => {
+                                        const avg = Math.round(((step.duration_min ?? 0) + (step.duration_max ?? 0)) / 2);
+                                        updateStepInSection(sIdx, stIdx, 'duration', avg || step.duration);
+                                        updateStepInSection(sIdx, stIdx, 'duration_min', undefined);
+                                        updateStepInSection(sIdx, stIdx, 'duration_max', undefined);
+                                      }}
+                                      className="ml-1 text-[10px] font-black text-gray-300 hover:text-red-400 transition-colors leading-none"
+                                    >✕</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <input
+                                      className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                      type="number"
+                                      value={step.duration}
+                                      onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)}
+                                    />
+                                    <span className="text-gray-400 dark:text-gray-300">Min.</span>
+                                    <button
+                                      type="button"
+                                      title="Zeitfenster festlegen"
+                                      onClick={() => {
+                                        updateStepInSection(sIdx, stIdx, 'duration_min', step.duration);
+                                        updateStepInSection(sIdx, stIdx, 'duration_max', step.duration);
+                                      }}
+                                      className="ml-1 text-[10px] font-black text-gray-300 hover:text-[#8B7355] transition-colors leading-none"
+                                    >±</button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
