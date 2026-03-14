@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Navigation from "../components/Navigation";
 import MainWrapper from "@/components/MainWrapper";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -59,6 +60,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${outfit.variable} font-sans antialiased transition-colors duration-200`} suppressHydrationWarning={true}>
+        <ServiceWorkerRegistration />
         <AuthProvider>
           <ProtectedRoute>
             <Navigation />
