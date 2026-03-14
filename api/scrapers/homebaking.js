@@ -171,8 +171,16 @@ const scrapeHomebaking = async (url) => {
     const hasTable   = scopeEls.find('table').length > 0;
     const hasFigcap  = scopeEls.find('figcaption').length > 0;
 
-    const layout = hasH4 ? 2 : (hasTable || hasFigcap) ? 3 : 1;
-    console.log(`  → Layout erkannt: ${layout} (hasH4=${hasH4}, hasTable=${hasTable}, hasFigcap=${hasFigcap})`);
+    // Gibt es eine <h3>Herstellung</h3> im Scope? (Layout-2-Merkmal: Schritte als ul>li)
+    const hasHerstellungH3 = scopeEls.filter('h3').toArray().some(h3 =>
+      /^(herstellung|zubereitung)$/i.test($(h3).text().replace(/:$/, '').trim())
+    );
+
+    const layout = (hasH4 || (hasTable && hasHerstellungH3)) ? 2
+                 : hasFigcap ? 3
+                 : hasTable  ? 3
+                 : 1;
+    console.log(`  → Layout erkannt: ${layout} (hasH4=${hasH4}, hasTable=${hasTable}, hasFigcap=${hasFigcap}, hasHerstellungH3=${hasHerstellungH3})`);
 
     // ── LAYOUT 1: <ul><li> Zutaten, <p> Schritte ─────────────────────────────
     if (layout === 1) {
