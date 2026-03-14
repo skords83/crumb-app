@@ -272,11 +272,11 @@ const toLocalISOString = (d: Date): string => {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div
-        className="bg-[#FFFDF9] dark:bg-gray-800 rounded-[2rem] w-full max-w-[420px] shadow-2xl overflow-hidden"
+        className="bg-[#FFFDF9] dark:bg-gray-800 rounded-[2rem] w-full max-w-[420px] shadow-2xl overflow-hidden max-h-[90svh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="px-7 pt-7 pb-0 text-center relative">
+        {/* Header – nicht scrollbar */}
+        <div className="px-7 pt-5 pb-0 text-center relative flex-shrink-0">
           <button
             onClick={onClose}
             className="absolute right-5 top-5 p-2 text-gray-300 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-300 transition-colors rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -284,7 +284,7 @@ const toLocalISOString = (d: Date): string => {
             <X size={18} />
           </button>
 
-          <div className="inline-flex items-center gap-2 bg-[#F5F0E8] dark:bg-gray-700 px-4 py-1.5 rounded-full mb-4">
+          <div className="inline-flex items-center gap-2 bg-[#F5F0E8] dark:bg-gray-700 px-4 py-1.5 rounded-full mb-2">
             <Clock size={14} className="text-[#8B7355] dark:text-[#A0845C]" />
             <span className="text-[13px] font-bold text-[#8B7355] dark:text-[#A0845C]">
               {totalHours}h {totalMins}m Gesamtzeit
@@ -297,8 +297,11 @@ const toLocalISOString = (d: Date): string => {
           <p className="text-[13px] text-gray-400 dark:text-gray-400">{recipe.title}</p>
         </div>
 
+        {/* Scrollbarer Bereich */}
+        <div className="overflow-y-auto flex-1">
+
         {/* Mengen-Slider */}
-        <div className="mx-7 mt-5 bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
+        <div className="mx-7 mt-4 bg-[#FAF7F2] dark:bg-gray-700/50 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-600">
           <div className="flex justify-between items-center mb-3">
             <span className="text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest">
               Menge
@@ -403,7 +406,6 @@ const toLocalISOString = (d: Date): string => {
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
-                  <label className="text-[10px] text-gray-400 font-semibold mb-1 block">Von</label>
                   <input
                     type="time"
                     value={nightStart}
@@ -411,9 +413,8 @@ const toLocalISOString = (d: Date): string => {
                     className="w-full p-2.5 rounded-xl border-2 border-[#F0EBE3] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#2D2D2D] dark:text-gray-100 text-[15px] font-bold outline-none focus:border-[#8B7355] dark:focus:border-[#A0845C]"
                   />
                 </div>
-                <div className="text-gray-300 dark:text-gray-500 font-bold mt-4">–</div>
+                <div className="text-gray-300 dark:text-gray-500 font-bold">–</div>
                 <div className="flex-1">
-                  <label className="text-[10px] text-gray-400 font-semibold mb-1 block">Bis</label>
                   <input
                     type="time"
                     value={nightEnd}
@@ -551,8 +552,10 @@ const toLocalISOString = (d: Date): string => {
           </div>
         )}
 
-        {/* Buttons */}
-        <div className="flex gap-3 px-7 pt-5 pb-7">
+        </div>{/* Ende scrollbarer Bereich */}
+
+        {/* Buttons – immer sichtbar */}
+        <div className="flex gap-3 px-7 pt-4 pb-6 flex-shrink-0 border-t border-[#F0EBE3] dark:border-gray-700">
           <button
             onClick={onClose}
             className="flex-1 py-4 rounded-2xl text-[14px] font-bold text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
