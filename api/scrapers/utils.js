@@ -235,7 +235,8 @@ function splitCompoundStep(text) {
     return [{ instruction: text, ...dr, type }];
   }
 
-  // Aufeinanderfolgende Kneten-Segmente zusammenfassen
+  // Aufeinanderfolgende Kneten-Segmente zusammenfassen –
+  // aber NUR wenn das pending-Segment keine eigene Zeitangabe hat (sonst eigenständiger Schritt)
   const merged = [];
   let pending = null;
   for (const seg of segments) {
@@ -243,9 +244,15 @@ function splitCompoundStep(text) {
       if (pending) { merged.push(pending); pending = null; }
       merged.push(seg);
     } else {
-      pending = pending
-        ? { ...pending, text: pending.text.replace(/\.\s*$/, '') + '. ' + seg.text }
-        : { ...seg };
+      if (pending && extractFirstDuration(pending.text) > 0) {
+        // pending hat eigene Dauer → eigenständig lassen, neues pending starten
+        merged.push(pending);
+        pending = { ...seg };
+      } else {
+        pending = pending
+          ? { ...pending, text: pending.text.replace(/\.\s*$/, '') + '. ' + seg.text }
+          : { ...seg };
+      }
     }
   }
   if (pending) merged.push(pending);

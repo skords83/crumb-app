@@ -324,17 +324,26 @@ const scrapeHomebaking = async (url) => {
                 const text = $(li).text().trim();
                 if (/\.(jpg|jpeg|png|webp|gif)\b/i.test(text) && text.includes('http')) return;
                 if (text.length < 15 || SKIP_TEXT.test(text)) return;
-                if (/^backzeit\s*:/i.test(text)) return;  // Info-Zeile, kein echter Schritt
                 validLis.push(text);
               });
               // Backen-LIs: ab dem ersten Backen-LI jeden als eigenen Schritt belassen.
               // Hintergrund: Jedes Backen-LI kann eine separate User-Aktion sein
               // (Schwaden geben → ablassen → Temperatur reduzieren).
-              // Kein join zu einem String – splitCompoundStep darf jeden LI noch weiter aufteilen.
+              // "Backzeit: X Minuten" ist keine eigene Aktion – an vorheriges Backen-LI anhängen.
               const firstBakenIdx = validLis.findIndex(t => BACKEN_LI_RE.test(t));
               if (firstBakenIdx >= 0) {
                 validLis.slice(0, firstBakenIdx).forEach(t => assignToHauptteig(t));
-                validLis.slice(firstBakenIdx).forEach(t => assignToHauptteig(t));
+                // Backen-LIs: "Backzeit:"-Zeilen an das vorherige LI anhängen
+                const bakenLis = validLis.slice(firstBakenIdx);
+                const mergedBakenLis = [];
+                for (const t of bakenLis) {
+                  if (/^(?:back|gesamtback)zeit\s*:/i.test(t) && mergedBakenLis.length > 0) {
+                    mergedBakenLis[mergedBakenLis.length - 1] += ' ' + t;
+                  } else {
+                    mergedBakenLis.push(t);
+                  }
+                }
+                mergedBakenLis.forEach(t => assignToHauptteig(t));
               } else {
                 validLis.forEach(t => assignToHauptteig(t));
               }
