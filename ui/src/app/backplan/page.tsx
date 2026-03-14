@@ -25,7 +25,16 @@ export default function BackplanPage() {
   const [activeTab, setActiveTab] = useState<'schritte' | 'zeitplan'>('schritte');
   const [activeRecipeIdx, setActiveRecipeIdx] = useState(0);
   const [finishModalRecipeId, setFinishModalRecipeId] = useState<number | null>(null);
+  const [openDrawers, setOpenDrawers] = useState<Set<string>>(new Set());
   const activeCardRef = useRef<HTMLDivElement>(null);
+
+  const toggleDrawer = (key: string) => {
+    setOpenDrawers(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -412,6 +421,14 @@ export default function BackplanPage() {
             const sectionEnd = sectionSteps[sectionSteps.length - 1].end;
             const hasActive = sectionSteps.some((s: any) => s.globalIdx === activeIndex);
 
+            const drawerKey = `${recipe.id}-${sIdx}`;
+            const isDrawerOpen = openDrawers.has(drawerKey);
+            const sectionIngredients = (section.ingredients || []).filter((ing: any) =>
+              // Phasenzutaten ausfiltern (Zutaten die selbst eine Phase referenzieren)
+              !sections.some((s: any) => s.name !== section.name &&
+                s.name.toLowerCase().includes((ing.name || '').toLowerCase().replace(/^(gesamte?r?\s+|reifer?\s+|frischer?\s+)/i, '')))
+            );
+
             return (
               <div key={sIdx} className="mb-7">
                 <div className="flex items-center gap-3 mb-3 px-1">
@@ -420,7 +437,42 @@ export default function BackplanPage() {
                     <span className="text-[13px] font-extrabold text-gray-800 dark:text-gray-100 uppercase tracking-wider">{section.name}</span>
                     <span className="ml-2 text-[11px] text-gray-400 dark:text-gray-500">{formatTime(sectionStart)} – {formatTime(sectionEnd)}</span>
                   </div>
+                  {sectionIngredients.length > 0 && (
+                    <button
+                      onClick={() => toggleDrawer(drawerKey)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all flex-shrink-0 ${
+                        isDrawerOpen
+                          ? 'bg-[#8B7355] text-white border-[#8B7355]'
+                          : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] border-[#E8E0D5] dark:border-gray-600 hover:bg-[#EDE5D8] dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 3h10M3 6h6M5 9h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                      {sectionIngredients.length}
+                    </button>
+                  )}
                 </div>
+
+                {/* Zutaten-Drawer */}
+                {isDrawerOpen && sectionIngredients.length > 0 && (
+                  <div className="ml-10 mb-3 rounded-xl border border-[#EDE5D8] dark:border-gray-700 bg-[#FAF7F3] dark:bg-gray-800/60 overflow-hidden">
+                    <div className="px-4 py-2 border-b border-[#EDE5D8] dark:border-gray-700">
+                      <span className="text-[10px] font-extrabold text-[#8B7355] uppercase tracking-widest">Zutaten – {section.name}</span>
+                    </div>
+                    <div className="px-4 py-1">
+                      {sectionIngredients.map((ing: any, ii: number) => (
+                        <div key={ii} className={`flex justify-between items-baseline py-2 text-[13px] ${ii < sectionIngredients.length - 1 ? 'border-b border-[#EDE5D8] dark:border-gray-700' : ''}`}>
+                          <span className="text-gray-600 dark:text-gray-300">{ing.name}</span>
+                          <span className="font-bold text-[#2D2D2D] dark:text-gray-100 tabular-nums ml-4 flex-shrink-0">
+                            {ing.amount}{ing.unit ? ` ${ing.unit}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2 pl-10">
                   {sectionSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
                     const key = `${recipe.id}-${globalIdx}`;
@@ -480,17 +532,7 @@ export default function BackplanPage() {
                             <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
                               <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
                             </div>
-                            {step.type === 'Aktion' && (step.ingredients?.length ?? 0) > 0 && (
-                              <div className="mt-4 bg-white dark:bg-gray-800 rounded-2xl p-4 border border-[#F0EBE3] dark:border-gray-700">
-                                <div className="text-[10px] font-extrabold text-gray-300 dark:text-gray-500 uppercase tracking-widest mb-3">Zutaten – {step.phase}</div>
-                                {step.ingredients?.map((ing: any, ii: number) => (
-                                  <div key={ii} className={`flex justify-between py-2 text-[13px] ${ii < (step.ingredients?.length ?? 0) - 1 ? 'border-b border-[#F8F6F2] dark:border-gray-700' : ''}`}>
-                                    <span className="text-gray-600 dark:text-gray-300">{ing.name}</span>
-                                    <span className="font-extrabold text-[#2D2D2D] dark:text-gray-100 bg-[#F8F6F2] dark:bg-gray-700 px-2 py-0.5 rounded-lg">{ing.amount} {ing.unit}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {step.type === 'Aktion' && (step.ingredients?.length ?? 0) > 0 && null}
                           </>
                         )}
                       </div>
