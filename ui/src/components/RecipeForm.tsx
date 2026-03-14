@@ -349,61 +349,114 @@ export default function RecipeForm({
                                 <option value="Warten">Warten</option>
                                 <option value="Backen">Backen</option>
                               </select>
-                              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
-                                <Clock size={11} />
-                                {step.duration_min !== undefined && step.duration_max !== undefined ? (
-                                  <>
-                                    <input
-                                      className="bg-transparent w-8 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                      type="number"
-                                      value={step.duration_min}
-                                      onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration_min', parseInt(e.target.value) || 0)}
-                                    />
-                                    <span className="text-gray-300 dark:text-gray-500">–</span>
-                                    <input
-                                      className="bg-transparent w-8 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                      type="number"
-                                      value={step.duration_max}
-                                      onChange={(e) => {
-                                        const max = parseInt(e.target.value) || 0;
-                                        updateStepInSection(sIdx, stIdx, 'duration_max', max);
-                                        updateStepInSection(sIdx, stIdx, 'duration', Math.round((step.duration_min + max) / 2));
-                                      }}
-                                    />
-                                    <span className="text-gray-400 dark:text-gray-300">Min.</span>
-                                    <button
-                                      type="button"
-                                      title="Zurück zu fester Dauer"
-                                      onClick={() => {
-                                        const avg = Math.round(((step.duration_min ?? 0) + (step.duration_max ?? 0)) / 2);
-                                        updateStepInSection(sIdx, stIdx, 'duration', avg || step.duration);
-                                        updateStepInSection(sIdx, stIdx, 'duration_min', undefined);
-                                        updateStepInSection(sIdx, stIdx, 'duration_max', undefined);
-                                      }}
-                                      className="ml-1 text-[10px] font-black text-gray-300 hover:text-red-400 transition-colors leading-none"
-                                    >✕</button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <input
-                                      className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                      type="number"
-                                      value={step.duration}
-                                      onChange={(e) => updateStepInSection(sIdx, stIdx, 'duration', parseInt(e.target.value) || 0)}
-                                    />
-                                    <span className="text-gray-400 dark:text-gray-300">Min.</span>
-                                    <button
-                                      type="button"
-                                      title="Zeitfenster festlegen"
-                                      onClick={() => {
-                                        updateStepInSection(sIdx, stIdx, 'duration_min', step.duration);
-                                        updateStepInSection(sIdx, stIdx, 'duration_max', step.duration);
-                                      }}
-                                      className="ml-1 text-[10px] font-black text-gray-300 hover:text-[#8B7355] transition-colors leading-none"
-                                    >±</button>
-                                  </>
-                                )}
-                              </div>
+                              {(() => {
+                                const THRESHOLD = 120; // unter 120 Min → Minuten, sonst Stunden
+                                const toDisplay = (mins: number) => mins >= THRESHOLD
+                                  ? { value: parseFloat((mins / 60).toFixed(1)), unit: 'Std' as const }
+                                  : { value: mins, unit: 'Min' as const };
+                                const toMins = (val: number, unit: 'Min' | 'Std') =>
+                                  unit === 'Std' ? Math.round(val * 60) : val;
+                                const isRange = step.duration_min !== undefined && step.duration_max !== undefined;
+                                const dispMin = isRange ? toDisplay(step.duration_min) : toDisplay(step.duration);
+                                const dispMax = isRange ? toDisplay(step.duration_max) : null;
+                                // Einheit: wenn eines der beiden Stunden ist → beide Stunden
+                                const unit = (isRange ? dispMin.unit === 'Std' || dispMax!.unit === 'Std' : dispMin.unit === 'Std') ? 'Std' : 'Min';
+                                const toggleUnit = () => {
+                                  const newUnit = unit === 'Min' ? 'Std' : 'Min';
+                                  if (isRange) {
+                                    const newMin = newUnit === 'Std' ? Math.round(step.duration_min / 60 * 10) / 10 : step.duration_min;
+                                    const newMax = newUnit === 'Std' ? Math.round(step.duration_max / 60 * 10) / 10 : step.duration_max;
+                                    // Werte bleiben in Minuten in DB, nur Display ändert sich → kein State nötig
+                                    // Trick: wir speichern immer Minuten, Display rechnet um
+                                  }
+                                  // Unit-Toggle: nur display, kein extra State – threshold erledigt das
+                                  // Wir forcen Std: duration auf 60+ setzen, Min: auf <120 lassen
+                                  if (!isRange) {
+                                    updateStepInSection(sIdx, stIdx, 'duration',
+                                      newUnit === 'Std' ? Math.max(step.duration, 120) : Math.min(step.duration, 119));
+                                  }
+                                };
+
+                                return (
+                                  <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
+                                    <Clock size={11} />
+                                    {isRange ? (
+                                      <>
+                                        <input
+                                          className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                          type="number"
+                                          step={unit === 'Std' ? 0.5 : 5}
+                                          value={unit === 'Std' ? parseFloat((step.duration_min / 60).toFixed(1)) : step.duration_min}
+                                          onChange={(e) => {
+                                            const mins = toMins(parseFloat(e.target.value) || 0, unit);
+                                            updateStepInSection(sIdx, stIdx, 'duration_min', mins);
+                                            updateStepInSection(sIdx, stIdx, 'duration', Math.round((mins + step.duration_max) / 2));
+                                          }}
+                                        />
+                                        <span className="text-gray-300 dark:text-gray-500">–</span>
+                                        <input
+                                          className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                          type="number"
+                                          step={unit === 'Std' ? 0.5 : 5}
+                                          value={unit === 'Std' ? parseFloat((step.duration_max / 60).toFixed(1)) : step.duration_max}
+                                          onChange={(e) => {
+                                            const mins = toMins(parseFloat(e.target.value) || 0, unit);
+                                            updateStepInSection(sIdx, stIdx, 'duration_max', mins);
+                                            updateStepInSection(sIdx, stIdx, 'duration', Math.round((step.duration_min + mins) / 2));
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => updateStepInSection(sIdx, stIdx, 'duration_min',
+                                            unit === 'Std' ? Math.max(step.duration_min, 120) : Math.min(step.duration_min, 119))}
+                                          className="text-[10px] font-black text-gray-400 dark:text-gray-300 hover:text-[#8B7355] transition-colors px-1 rounded"
+                                          title={`Zu ${unit === 'Std' ? 'Minuten' : 'Stunden'} wechseln`}
+                                        >{unit}</button>
+                                        <button
+                                          type="button"
+                                          title="Zurück zu fester Dauer"
+                                          onClick={() => {
+                                            const avg = Math.round(((step.duration_min ?? 0) + (step.duration_max ?? 0)) / 2);
+                                            updateStepInSection(sIdx, stIdx, 'duration', avg || step.duration);
+                                            updateStepInSection(sIdx, stIdx, 'duration_min', undefined);
+                                            updateStepInSection(sIdx, stIdx, 'duration_max', undefined);
+                                          }}
+                                          className="text-[10px] font-black text-gray-300 hover:text-red-400 transition-colors leading-none"
+                                        >✕</button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <input
+                                          className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                                          type="number"
+                                          step={unit === 'Std' ? 0.5 : 5}
+                                          value={unit === 'Std' ? parseFloat((step.duration / 60).toFixed(1)) : step.duration}
+                                          onChange={(e) => {
+                                            const mins = toMins(parseFloat(e.target.value) || 0, unit);
+                                            updateStepInSection(sIdx, stIdx, 'duration', mins);
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => updateStepInSection(sIdx, stIdx, 'duration',
+                                            unit === 'Std' ? Math.max(step.duration, 120) : Math.min(step.duration, 119))}
+                                          className="text-[10px] font-black text-gray-400 dark:text-gray-300 hover:text-[#8B7355] transition-colors px-1 rounded"
+                                          title={`Zu ${unit === 'Std' ? 'Minuten' : 'Stunden'} wechseln`}
+                                        >{unit}</button>
+                                        <button
+                                          type="button"
+                                          title="Zeitfenster festlegen"
+                                          onClick={() => {
+                                            updateStepInSection(sIdx, stIdx, 'duration_min', step.duration);
+                                            updateStepInSection(sIdx, stIdx, 'duration_max', step.duration);
+                                          }}
+                                          className="text-[10px] font-black text-gray-300 hover:text-[#8B7355] transition-colors leading-none"
+                                        >±</button>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                           <button type="button" onClick={() => removeStepFromSection(sIdx, stIdx)} className="text-gray-300 dark:text-gray-500 hover:text-red-400 self-start"><Trash2 size={14} /></button>

@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Icons from 'lucide-react';
-import { calculateBackplan, formatTimeManual, calcTotalDuration } from '@/lib/backplan-utils';
+import { calculateBackplan, formatTimeManual, calcTotalDuration, calcTotalDurationRange } from '@/lib/backplan-utils';
 import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
@@ -62,6 +62,15 @@ function formatDuration(minutes: number): string {
   if (h === 0) return `${m} min`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}min`;
+}
+
+function formatStepDuration(step: any): string {
+  const min = parseInt(step.duration_min);
+  const max = parseInt(step.duration_max);
+  if (!isNaN(min) && !isNaN(max)) {
+    return `${formatDuration(min)} – ${formatDuration(max)}`;
+  }
+  return formatDuration(step.duration);
 }
 
 // ── MENGE SKALIEREN & FORMATIEREN ───────────────────────────
@@ -203,13 +212,14 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   }, [id]);
 
   const stats = useMemo(() => {
-    if (!recipe?.dough_sections) return { steps: 0, duration: 0, hydration: null };
+    if (!recipe?.dough_sections) return { steps: 0, duration: 0, durationMin: 0, durationMax: 0, hydration: null };
     const steps = recipe.dough_sections.reduce(
       (s: number, sec: any) => s + (sec.steps?.length || 0), 0
     );
     const duration = calcTotalDuration(recipe.dough_sections);
+    const { min: durationMin, max: durationMax } = calcTotalDurationRange(recipe.dough_sections);
     const hydration = calcHydration(recipe.dough_sections);
-    return { steps, duration, hydration };
+    return { steps, duration, durationMin, durationMax, hydration };
   }, [recipe]);
 
   const toggleFavorite = async () => {
@@ -389,7 +399,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               <div className="text-[#8B4513] dark:text-[#C4A484]"><Icons.Clock size={22} /></div>
               <div className="text-center">
                 <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Dauer</p>
-                <p className="font-black text-gray-800 dark:text-gray-100 text-sm">{formatDuration(stats.duration)}</p>
+                <p className="font-black text-gray-800 dark:text-gray-100 text-sm">
+                  {stats.durationMin !== stats.durationMax
+                    ? `${formatDuration(stats.durationMin)} – ${formatDuration(stats.durationMax)}`
+                    : formatDuration(stats.duration)}
+                </p>
               </div>
             </div>
             <div className="h-8 w-px bg-gray-100 dark:bg-gray-700" />
@@ -509,7 +523,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                             <div>
                               <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed">{step.instruction}</p>
                               <span className="text-xs font-black uppercase text-[#8B4513]/50 dark:text-[#C4A484]/60 mt-1 block">
-                                {step.type} • {formatDuration(step.duration)}
+                                {step.type} • {formatStepDuration(step)}
                               </span>
                             </div>
                           </div>
