@@ -534,6 +534,18 @@ export default function BackplanPage() {
                                 </svg>
                               </div>
                             </div>
+                            {step.type === 'Warten' && step.duration_min != null && step.duration_max != null && (() => {
+                              const earliestEnd = new Date(step.start.getTime() + step.duration_min * 60000);
+                              const latestEnd = new Date(step.start.getTime() + step.duration_max * 60000);
+                              return (
+                                <div className="mt-2 px-4 py-2.5 rounded-xl bg-[#F5F0E8]/60 dark:bg-gray-700/60 border border-[#E8E0D5] dark:border-gray-600 flex items-center justify-between">
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B7355]">Bereit zwischen</span>
+                                  <span className="text-[13px] font-extrabold text-[#2D2D2D] dark:text-gray-100 tabular-nums">
+                                    {formatTime(earliestEnd)} – {formatTime(latestEnd)} Uhr
+                                  </span>
+                                </div>
+                              );
+                            })()}
                             <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
                               <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
                             </div>
