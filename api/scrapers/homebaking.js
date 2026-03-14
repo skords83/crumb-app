@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { stepDuration, isBakingStep, detectPortionCount, scaleSectionsToOnePortion, splitCompoundStep } = require('./utils');
+const { refineSections } = require('./llm-refine');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function evalFraction(amount) {
@@ -388,6 +389,10 @@ const scrapeHomebaking = async (url) => {
         ...scaleSectionsToOnePortion(dough_sections, portionCount)
       );
     }
+
+    // 2c. LLM-Refinement (optional, nur wenn Qualität unzureichend)
+    const refined = await refineSections(dough_sections, process.env.GEMINI_API_KEY);
+    dough_sections.splice(0, dough_sections.length, ...refined);
 
     // 3. BILD
     let imageUrl = '';

@@ -137,7 +137,7 @@ function _splitWaitChain(text, segments) {
 
 function _tokenize(text) {
   const sentences = text
-    .split(/(?<!(?:ca|min|std|bzw|ca|mind|max|inkl|bspw))\.\s+(?=[A-ZÄÖÜ0-9])|(?<![.])\s+(?=(?:Anschließend|Dann|Danach|Nun|Jetzt|Zuletzt|Abschließend)\b)/i)
+    .split(/(?<!(?:ca|min|std|bzw|ca|mind|max|inkl|bspw))\.\s+(?=[A-ZÄÖÜ0-9])|(?<!(?:ca|min|std|bzw|mind|max|inkl|bspw))\.\s+(?=(?:anschließend|dann|danach|nun|jetzt|zuletzt|abschließend)\b)|(?<![.])\s+(?=(?:Anschließend|Dann|Danach|Nun|Jetzt|Zuletzt|Abschließend)\b)/i)
     .map(s => s.trim()).filter(s => s.length > 3);
 
   const segments = [];
