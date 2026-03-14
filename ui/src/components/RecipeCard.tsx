@@ -131,11 +131,14 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
         <Heart size={18} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-gray-400 dark:text-gray-500'}`} />
       </button>
 
-      <div className="h-64 overflow-hidden relative rounded-b-2xl">
-        <img
-          src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=800&auto=format&fit=crop'}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+      <div className="h-64 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
+        <Image
+          src={imageSrc}
           alt={recipe.title}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImgLoaded(true)}
         />
         <div className="absolute top-6 left-6 flex flex-wrap gap-2 pr-6">
           {labels.map((tag, i) => (
