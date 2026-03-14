@@ -252,7 +252,7 @@ export default function BackplanPage() {
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinishModalRecipeId(null)} />
-            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl">
+            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
               {/* Bild-Header – oben per rounded-t-3xl, unten abgerundet wie RecipeCard */}
               <div className="relative h-48 overflow-hidden rounded-t-3xl rounded-b-2xl">
                 <img
