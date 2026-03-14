@@ -102,6 +102,15 @@ export default function BackplanPage() {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
+  const formatStepDuration = (step: any): string => {
+    const min = parseInt(step.duration_min);
+    const max = parseInt(step.duration_max);
+    if (!isNaN(min) && !isNaN(max)) {
+      return `${formatDuration(min)} – ${formatDuration(max)}`;
+    }
+    return formatDuration(step.duration);
+  };
+
   const formatCountdown = (seconds: number): string => {
     if (seconds <= 0) return "00:00";
     const h = Math.floor(seconds / 3600);
@@ -491,7 +500,7 @@ export default function BackplanPage() {
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
                               {step.type === 'Backen' ? '🔥' : step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
                             </span>
-                            <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatDuration(step.duration)}</span>
+                            <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
@@ -570,7 +579,7 @@ export default function BackplanPage() {
                 <div className="text-[10px] font-bold text-[#8B7355] uppercase tracking-widest">Nächster Schritt um {formatTime(nextStep.start)}</div>
                 <div className="text-[13px] font-semibold text-[#2D2D2D] dark:text-gray-100 truncate">{nextStep.instruction}</div>
               </div>
-              <span className="text-[11px] font-bold text-gray-300 dark:text-gray-500 flex-shrink-0">{formatDuration(nextStep.duration)}</span>
+              <span className="text-[11px] font-bold text-gray-300 dark:text-gray-500 flex-shrink-0">{formatStepDuration(nextStep)}</span>
             </div>
           </div>
         );

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
-import { calcTotalDuration } from "@/lib/backplan-utils";
+import { calcTotalDuration, calcTotalDurationRange } from "@/lib/backplan-utils";
 import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 
 interface RecipeCardProps {
@@ -14,13 +14,16 @@ interface RecipeCardProps {
 }
 
 const getStats = (recipe: any) => {
-  const totalMinutes = calcTotalDuration(recipe.dough_sections || []);
+  const { min, max } = calcTotalDurationRange(recipe.dough_sections || []);
+  const fmt = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+  };
+  const timeString = min !== max ? `${fmt(min)} – ${fmt(max)}` : fmt(min);
   const totalSteps = (recipe.dough_sections || []).reduce(
     (s: number, sec: any) => s + (sec.steps?.length || 0), 0
   );
-  const hours = Math.floor(totalMinutes / 60);
-  const mins = totalMinutes % 60;
-  const timeString = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   const hydration = calcHydration(recipe.dough_sections || []);
   return { timeString, totalSteps, hydration };
 };

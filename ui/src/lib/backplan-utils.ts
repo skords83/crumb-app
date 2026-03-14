@@ -11,11 +11,21 @@ export interface BackplanStep {
   phase: string;
   instruction: string;
   type: string;
-  duration: number;
+  duration: number;       // Effektive Dauer (Mittelwert bei Zeitfenster)
+  duration_min?: number;  // Untere Grenze des Zeitfensters (optional)
+  duration_max?: number;  // Obere Grenze des Zeitfensters (optional)
   start: Date;
   end: Date;
   isParallel?: boolean;
   ingredients?: any[];
+}
+
+// Berechnet die effektive Dauer eines Steps – Mittelwert bei Zeitfenster
+function effectiveDuration(step: any): number {
+  const min = parseInt(step.duration_min);
+  const max = parseInt(step.duration_max);
+  if (!isNaN(min) && !isNaN(max)) return Math.round((min + max) / 2);
+  return parseInt(step.duration) || 0;
 }
 
 export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
@@ -74,9 +84,8 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
     if (name in startOffsets) return startOffsets[name];
     const end = calcEndOffset(name, visited);
     const dur = (sectionMap[name]?.steps || []).reduce(
-      (sum: number, s: any) => sum + (parseInt(s.duration) || 0), 0
+      (sum: number, s: any) => sum + effectiveDuration(s), 0
     );
-    startOffsets[name] = end + dur;
     return startOffsets[name];
   }
 
@@ -87,7 +96,9 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
     const sectionStart = new Date(target.getTime() - offset * 60000);
     let stepMoment = new Date(sectionStart.getTime());
     (section.steps || []).forEach((step: any) => {
-      const duration = parseInt(step.duration) || 0;
+      const duration = effectiveDuration(step);
+      const duration_min = parseInt(step.duration_min) || undefined;
+      const duration_max = parseInt(step.duration_max) || undefined;
       const stepStart = new Date(stepMoment.getTime());
       const stepEnd = new Date(stepMoment.getTime() + duration * 60000);
       timeline.push({
@@ -95,6 +106,8 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
         instruction: step.instruction,
         type: step.type || 'Aktion',
         duration,
+        duration_min,
+        duration_max,
         start: stepStart,
         end: stepEnd,
         isParallel: (endOffsets[section.name] || 0) > 0,
@@ -155,7 +168,11 @@ export function calcTotalDuration(sections: any[]): number {
   function calcStart(name: string, vis = new Set<string>()): number {
     if (name in startO) return startO[name];
     const dur = (sectionMap[name]?.steps || []).reduce(
-      (s: number, st: any) => s + (parseInt(st.duration) || 0), 0
+      (s: number, st: any) => {
+        const min = parseInt(st.duration_min);
+        const max = parseInt(st.duration_max);
+        return s + (!isNaN(min) && !isNaN(max) ? Math.round((min + max) / 2) : (parseInt(st.duration) || 0));
+      }, 0
     );
     startO[name] = calcEnd(name, vis) + dur;
     return startO[name];
@@ -163,8 +180,70 @@ export function calcTotalDuration(sections: any[]): number {
   phaseNames.forEach((n: string) => calcStart(n));
   return phaseNames.length ? Math.max(...phaseNames.map((n: string) => startO[n] || 0)) : 0;
 }
-// ============================================================
-// DYNAMIC TIMELINE
+// Gibt { min, max } zurück wenn mindestens ein Step ein Zeitfenster hat,
+// sonst { min: total, max: total } für feste Dauer
+export function calcTotalDurationRange(sections: any[]): { min: number; max: number } {
+  if (!sections?.length) return { min: 0, max: 0 };
+  let hasRange = false;
+  sections.forEach((s: any) => {
+    (s.steps || []).forEach((st: any) => {
+      if (!isNaN(parseInt(st.duration_min)) && !isNaN(parseInt(st.duration_max))) hasRange = true;
+    });
+  });
+  if (!hasRange) {
+    const total = calcTotalDuration(sections);
+    return { min: total, max: total };
+  }
+  // Min-Summe und Max-Summe separat berechnen (vereinfacht: gleiche Dependency-Logik)
+  const calcVariant = (useMax: boolean): number => {
+    const phaseNames = sections.map((s: any) => s.name as string);
+    const normalizePhaseName = (name: string): string =>
+      name.toLowerCase().replace(/^\d+\.\s*/, '').replace(/\bstufe\s+\d+\b/g, '')
+        .replace(/\breifer?\b/g, '').replace(/\bfrischer?\b/g, '')
+        .replace(/\bfertig[a-z]*\b/g, '').replace(/\s+/g, ' ').trim();
+    const deps: Record<string, string[]> = {};
+    sections.forEach((section: any) => {
+      deps[section.name] = [];
+      (section.ingredients || []).forEach((ing: any) => {
+        const ingName = normalizePhaseName(ing.name || '');
+        phaseNames.forEach((otherName: string) => {
+          if (otherName === section.name) return;
+          const normOther = normalizePhaseName(otherName);
+          if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
+            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        });
+      });
+    });
+    const sectionMap = Object.fromEntries(sections.map((s: any) => [s.name, s]));
+    const endO: Record<string, number> = {};
+    const startO: Record<string, number> = {};
+    const getDur = (st: any): number => {
+      const min = parseInt(st.duration_min);
+      const max = parseInt(st.duration_max);
+      if (!isNaN(min) && !isNaN(max)) return useMax ? max : min;
+      return parseInt(st.duration) || 0;
+    };
+    function calcEnd(name: string, vis = new Set<string>()): number {
+      if (name in endO) return endO[name];
+      if (vis.has(name)) return 0;
+      vis.add(name);
+      const deps2 = phaseNames.filter((n: string) => deps[n]?.includes(name));
+      endO[name] = deps2.length === 0 ? 0 : Math.min(...deps2.map((d: string) => calcStart(d, new Set(vis))));
+      return endO[name];
+    }
+    function calcStart(name: string, vis = new Set<string>()): number {
+      if (name in startO) return startO[name];
+      const dur = (sectionMap[name]?.steps || []).reduce((s: number, st: any) => s + getDur(st), 0);
+      startO[name] = calcEnd(name, vis) + dur;
+      return startO[name];
+    }
+    phaseNames.forEach((n: string) => calcStart(n));
+    return phaseNames.length ? Math.max(...phaseNames.map((n: string) => startO[n] || 0)) : 0;
+  };
+  return { min: calcVariant(false), max: calcVariant(true) };
+}
+
+
 // Neuberechnung wenn Schritte früher abgehakt wurden.
 // stepCompletedAt: { "recipeId-stepIndex": timestampMs }
 // Abgeschlossene Schritte dienen als Ankerpunkte; alle Folge-
