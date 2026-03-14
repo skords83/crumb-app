@@ -555,7 +555,7 @@ const toLocalISOString = (d: Date): string => {
         </div>{/* Ende scrollbarer Bereich */}
 
         {/* Buttons – immer sichtbar */}
-        <div className="flex gap-3 px-7 pt-4 pb-6 flex-shrink-0 border-t border-[#F0EBE3] dark:border-gray-700">
+        <div className="flex gap-3 px-7 pt-4 pb-6 flex-shrink-0">
           <button
             onClick={onClose}
             className="flex-1 py-4 rounded-2xl text-[14px] font-bold text-gray-400 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
