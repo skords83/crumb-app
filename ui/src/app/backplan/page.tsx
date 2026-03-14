@@ -252,9 +252,9 @@ export default function BackplanPage() {
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinishModalRecipeId(null)} />
-            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden">
-              {/* Bild-Header */}
-              <div className="relative h-32 overflow-hidden">
+            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl">
+              {/* Bild-Header – unten abgerundet wie RecipeCard */}
+              <div className="relative h-48 overflow-hidden rounded-b-2xl">
                 <img
                   src={modalRecipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=400'}
                   className="w-full h-full object-cover"
@@ -268,17 +268,16 @@ export default function BackplanPage() {
               </div>
               {/* Content */}
               <div className="p-5">
-                <h3 className="text-center text-[17px] font-extrabold text-gray-800 dark:text-gray-100 mb-1 mt-1">Brot fertig?</h3>
-                <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mb-5">Der Backplan wird abgeschlossen und aus deiner Liste entfernt.</p>
+                <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mb-5 mt-1">Backplan abschließen und entfernen?</p>
                 <button
                   onClick={() => finishBaking(finishModalRecipeId)}
-                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-2"
+                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-4"
                 >
                   Ja, fertig gebacken
                 </button>
                 <button
                   onClick={() => setFinishModalRecipeId(null)}
-                  className="w-full py-3 rounded-2xl bg-[#F5F0E8] dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold text-[13px] transition-colors hover:bg-[#EDE8DF] dark:hover:bg-gray-600"
+                  className="w-full py-2 text-gray-400 dark:text-gray-500 font-bold text-[13px] transition-colors hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   Weiterbacken
                 </button>
