@@ -415,6 +415,20 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
   recipeData.ingredients    = dough_sections.flatMap(s => s.ingredients);
   console.log(`✅ ${dough_sections.length} Phasen, ${recipeData.steps.length} Schritte, ${recipeData.ingredients.length} Zutaten gesamt`);
 
+  // Post-Processing: Warten-Steps mit Zeitfenster anreichern
+  const { extractDurationRange } = require('./utils');
+  (recipeData.dough_sections || []).forEach(sec => {
+    (sec.steps || []).forEach(step => {
+      if (step.type === 'Warten' && step.instruction) {
+        const r = extractDurationRange(step.instruction);
+        if (r.duration_min !== undefined) {
+          step.duration_min = r.duration_min;
+          step.duration_max = r.duration_max;
+        }
+      }
+    });
+  });
+
   return {
     title: recipeData.title || 'Importiertes Rezept',
     description: recipeData.description || '',

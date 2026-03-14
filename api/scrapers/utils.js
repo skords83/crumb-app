@@ -47,6 +47,30 @@ function extractFirstDuration(text) {
   return 0;
 }
 
+/**
+ * Wie extractFirstDuration, gibt aber { duration, duration_min, duration_max } zurück.
+ * duration_min/max sind nur gesetzt wenn ein echtes Zeitfenster erkannt wurde.
+ */
+function extractDurationRange(text) {
+  if (!text) return { duration: 0 };
+  const norm = text.replace(new RegExp(APPROX_PREFIX.source, 'gi'), ' ');
+  const lower = norm.toLowerCase();
+  const rangeM = lower.match(/(\d+[,.]?\d*)\s*[-–]\s*(\d+[,.]?\d*)\s*(tage?n?|stunden?|std\.?|h\b|minuten?|min\.?\b)/);
+  if (rangeM) {
+    const min = _toMinutes(rangeM[1], rangeM[3]);
+    const max = _toMinutes(rangeM[2], rangeM[3]);
+    const duration = Math.round((min + max) / 2);
+    return { duration, duration_min: min, duration_max: max };
+  }
+  const dayM  = lower.match(/(\d+[,.]?\d*)\s*tage?n?/);
+  const hourM = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?|h\b)/);
+  const minM  = lower.match(/(\d+)\s*(?:minuten?|min\.?\b)/);
+  if (dayM)  return { duration: _toMinutes(dayM[1],  'Tage') };
+  if (hourM) return { duration: _toMinutes(hourM[1], 'Stunden') };
+  if (minM)  return { duration: _toMinutes(minM[1],  'Minuten') };
+  return { duration: 0 };
+}
+
 function isBakingStep(text) {
   return /\b(?:backen|ausbacken|anbacken)\b/i.test(text) && !/^\s*(?:den\s+)?backofen\b/i.test(text.trim());
 }
@@ -55,6 +79,21 @@ function stepDuration(text, type) {
   if (type === 'Backen' || isBakingStep(text)) return sumAllDurations(text) || 45;
   if (type === 'Warten') return extractFirstDuration(text) || 60;
   return extractFirstDuration(text) || 0;
+}
+
+/**
+ * Wie stepDuration, gibt aber { duration, duration_min?, duration_max? } zurück.
+ */
+function stepDurationRange(text, type) {
+  if (type === 'Backen' || isBakingStep(text)) {
+    return { duration: sumAllDurations(text) || 45 };
+  }
+  if (type === 'Warten') {
+    const r = extractDurationRange(text);
+    return r.duration ? r : { duration: 60 };
+  }
+  const r = extractDurationRange(text);
+  return r.duration ? r : { duration: 0 };
 }
 
 // ─── splitCompoundStep ───────────────────────────────────────────────────────
@@ -176,12 +215,10 @@ function _bakingDuration(text) {
 function splitCompoundStep(text) {
   if (!text || text.length < 15) {
     const type = _classify(text || '');
-    return [{ instruction: text || '', duration: stepDuration(text || '', type), type }];
+    const dr = stepDurationRange(text || '', type);
+    return [{ instruction: text || '', ...dr, type }];
   }
 
-  // Backphase-Kurzschluss: gesamten Text als einen Backen-Schritt zurückgeben
-  // Begründung: Anweisungen wie "Schwaden geben", "Temperatur reduzieren" sind
-  // Teilschritte *während* des Backens, kein eigener Workflow.
   if (_isBakingBlock(text)) {
     return [{ instruction: text.trim(), duration: _bakingDuration(text), type: 'Backen' }];
   }
@@ -189,7 +226,8 @@ function splitCompoundStep(text) {
   const segments = _tokenize(text);
   if (segments.length <= 1) {
     const type = _classify(text);
-    return [{ instruction: text, duration: stepDuration(text, type), type }];
+    const dr = stepDurationRange(text, type);
+    return [{ instruction: text, ...dr, type }];
   }
 
   // Aufeinanderfolgende Kneten-Segmente zusammenfassen
@@ -207,11 +245,10 @@ function splitCompoundStep(text) {
   }
   if (pending) merged.push(pending);
 
-  return merged.map(({ text: t, type }) => ({
-    instruction: _cleanInstr(t),
-    duration: stepDuration(t, type),
-    type
-  }));
+  return merged.map(({ text: t, type }) => {
+    const dr = stepDurationRange(t, type);
+    return { instruction: _cleanInstr(t), ...dr, type };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,8 +279,10 @@ function scaleSectionsToOnePortion(sections, portionCount) {
 module.exports = {
   sumAllDurations,
   extractFirstDuration,
+  extractDurationRange,
   isBakingStep,
   stepDuration,
+  stepDurationRange,
   detectPortionCount,
   scaleSectionsToOnePortion,
   splitCompoundStep

@@ -186,7 +186,6 @@ const scrapePloetz = async (url) => {
       if (hourRangeMatch) {
         return Math.round(parseFloat(hourRangeMatch[2].replace(',', '.')) * 60);
       }
-
       const hourMatch = lower.match(/(\d+[,.]?\d*)\s*(?:stunden?|std\.?)/);
 
       // FIX: Minuten NUR addieren wenn kein "dabei/nach"-Kontext vorhanden.
@@ -618,6 +617,20 @@ const parseHtml = async ($, filename) => {
         });
       });
     }
+
+    // Post-Processing: Warten-Steps mit Zeitfenster anreichern
+    const { extractDurationRange } = require('./utils');
+    doughSections.forEach(sec => {
+      (sec.steps || []).forEach(step => {
+        if (step.type === 'Warten' && step.instruction) {
+          const r = extractDurationRange(step.instruction);
+          if (r.duration_min !== undefined && r.duration_max !== undefined) {
+            step.duration_min = r.duration_min;
+            step.duration_max = r.duration_max;
+          }
+        }
+      });
+    });
 
     return { title, subtitle, description, image_url: imageUrl, dough_sections: doughSections };
   } catch (error) {
