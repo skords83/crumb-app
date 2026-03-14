@@ -563,7 +563,7 @@ export default function BackplanPage() {
 
       {/* ── TAB: ZEITPLAN ── */}
       {activeTab === 'zeitplan' && (
-        <GanttChart sections={sortedSections} timeline={timeline} currentTime={currentTime} formatTime={formatTime} formatDuration={formatDuration} />
+        <GanttChart sections={sortedSections} timeline={timeline} currentTime={currentTime} formatTime={formatTime} formatDuration={formatDuration} formatStepDuration={formatStepDuration} />
       )}
 
       {/* ── NÄCHSTER SCHRITT (fixed bottom) ── */}
@@ -596,7 +596,7 @@ const PHASE_COLORS = [
   { bg: 'bg-violet-50 dark:bg-violet-900/20', bar: '#8B5CF6', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-100 dark:border-violet-800' },
 ];
 
-function GanttChart({ sections, timeline, currentTime, formatTime, formatDuration }: any) {
+function GanttChart({ sections, timeline, currentTime, formatTime, formatDuration, formatStepDuration }: any) {
   if (timeline.length === 0) return <div className="p-8 text-center text-gray-400">Keine Schritte</div>;
   const sortedSections = [...sections].sort((a: any, b: any) => {
     const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
@@ -673,7 +673,7 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
                   <div key={si} className="flex items-start gap-2 text-[12px]">
                     <span className="text-gray-400 dark:text-gray-500 font-bold tabular-nums w-10 flex-shrink-0 pt-px">{formatTime(step.start)}</span>
                     <span className={`flex-1 text-gray-700 dark:text-gray-300 leading-relaxed ${step.type === 'Warten' ? 'opacity-60 italic' : ''}`}>{step.instruction.length > 90 ? step.instruction.slice(0, 90) + '…' : step.instruction}</span>
-                    <span className="text-gray-300 dark:text-gray-600 text-[11px] flex-shrink-0 pt-px">{formatDuration(step.duration)}</span>
+                    <span className="text-gray-300 dark:text-gray-600 text-[11px] flex-shrink-0 pt-px">{formatStepDuration(step)}</span>
                   </div>
                 ))}
               </div>
