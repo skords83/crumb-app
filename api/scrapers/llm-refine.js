@@ -1,20 +1,18 @@
 // scrapers/llm-refine.js
-// Optionaler Post-Processing-Schritt: Gemini Flash korrigiert Backschritte
+// Optionaler Post-Processing-Schritt: Groq korrigiert Backschritte
 // die der Regex-Parser nicht sauber aufgelöst hat.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const OPENROUTER_MODEL = 'meta-llama/llama-3.1-8b-instruct:free';
+const OPENROUTER_URL   = 'https://openrouter.ai/api/v1/chat/completions';
 
 // ── Quality-Gate ─────────────────────────────────────────────────────────────
-// Prüft ob die Schritte einer Phase LLM-Korrektur brauchen.
-// Gibt true zurück wenn mindestens eines der Kriterien zutrifft.
 
 function _needsRefinement(steps) {
   for (const step of steps) {
     const instr = step.instruction || '';
 
-    // Abgeschnittener Satz: beginnt mit Kleinbuchstabe (kein Eigenname, keine Zahl)
+    // Abgeschnittener Satz: beginnt mit Kleinbuchstabe
     if (/^[a-zäöü]/.test(instr)) return true;
 
     // Sehr kurzer Satz der wahrscheinlich ein Fragment ist
@@ -29,34 +27,33 @@ function _needsRefinement(steps) {
   return false;
 }
 
-// Gibt true zurück wenn mindestens eine Phase Korrektur braucht
 function needsRefinement(dough_sections) {
   return dough_sections.some(sec => _needsRefinement(sec.steps));
 }
 
-// ── Gemini-Call ───────────────────────────────────────────────────────────────
+// ── Groq-Call ─────────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Du bist ein Experte für Brotbackrezepte. Du bekommst automatisch geparste Backschritte als JSON und korrigierst sie.
+const SYSTEM_PROMPT = `Du bist ein Experte für Brotbackrezepte. Du bekommst automatisch geparste Backschritte als JSON-Array und korrigierst sie.
 
 Regeln:
-- Behalte alle Schritte – lösche nichts, füge nichts hinzu
-- Korrigiere nur: abgeschnittene Sätze (vervollständige sie sinnvoll), falsche Typen, fehlende oder falsche Zeitangaben
-- "duration" ist immer in Minuten (ganze Zahl)
+- Behalte ALLE Schritte – lösche nichts, füge nichts hinzu
+- Korrigiere nur: abgeschnittene Sätze (vervollständige sie sinnvoll auf Deutsch), falsche Typen, fehlende oder falsche Zeitangaben
+- "duration" ist immer in Minuten (ganze Zahl, 0 wenn keine Wartezeit)
 - Erlaubte Typen: "Kneten", "Warten", "Backen", "Vorheizen"
 - "Kneten" = aktive Handarbeit ohne Wartezeit
 - "Warten" = Teigruhe, Gare, Kühlschrank, Reifezeit
 - "Backen" = im Ofen backen (nicht Vorheizen)
 - "Vorheizen" = Ofen vorheizen
 - Wenn ein Schritt sowohl Aktion als auch Wartezeit beschreibt, behalte ihn als einen Schritt mit dem dominanten Typ
-- Gib NUR valides JSON zurück – kein Text, keine Erklärung, keine Markdown-Backticks`;
+- Gib NUR ein valides JSON-Array zurück – kein Text, keine Erklärung, keine Markdown-Backticks
+- Das Array hat genau so viele Objekte wie die Eingabe`;
 
-async function refineWithGemini(dough_sections, apiKey) {
+async function refineWithOpenRouter(dough_sections, apiKey) {
   if (!apiKey) {
-    console.warn('  ⚠ GEMINI_API_KEY nicht gesetzt – LLM-Refinement übersprungen');
+    console.warn('  ⚠ OPENROUTER_API_KEY nicht gesetzt – LLM-Refinement übersprungen');
     return dough_sections;
   }
 
-  // Nur Schritte an Gemini schicken, Zutaten bleiben unverändert
   const sectionsForLLM = dough_sections.map(sec => ({
     name: sec.name,
     steps: sec.steps.map(({ instruction, duration, duration_min, duration_max, type }) => ({
@@ -68,65 +65,68 @@ async function refineWithGemini(dough_sections, apiKey) {
     }))
   }));
 
-  const userPrompt = `Korrigiere diese Backschritte:\n${JSON.stringify(sectionsForLLM, null, 2)}`;
+  const userPrompt = `Korrigiere diese Backschritte und gib ein JSON-Array zurück:\n${JSON.stringify(sectionsForLLM, null, 2)}`;
 
   let raw = '';
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+    const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://crumb.skords.de',
+        'X-Title': 'Crumb Recipe Scraper'
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: userPrompt }] }],
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        generationConfig: {
-          temperature: 0.1,       // möglichst deterministisch
-          responseMimeType: 'application/json'
-        }
+        model: OPENROUTER_MODEL,
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user',   content: userPrompt }
+        ]
       })
     });
 
     if (!res.ok) {
       const err = await res.text();
-      console.error(`  ✗ Gemini API Fehler ${res.status}:`, err.slice(0, 200));
+      console.error(`  ✗ OpenRouter API Fehler ${res.status}:`, err.slice(0, 200));
       return dough_sections;
     }
 
     const data = await res.json();
-    raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    raw = data?.choices?.[0]?.message?.content || '';
     if (!raw) {
-      console.warn('  ⚠ Gemini: leere Antwort');
+      console.warn('  ⚠ OpenRouter: leere Antwort');
       return dough_sections;
     }
 
-    // JSON parsen – Backticks entfernen falls Gemini sie doch hinzufügt
     const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
     const refined = JSON.parse(clean);
 
-    // Ergebnis zurückmergen: Schritte ersetzen, Zutaten und Metadaten behalten
     return dough_sections.map((sec, i) => {
-      const refinedSec = Array.isArray(refined) ? refined[i] : refined?.sections?.[i];
+      const refinedSec = Array.isArray(refined) ? refined[i] : null;
       if (!refinedSec || !Array.isArray(refinedSec.steps)) {
-        console.warn(`  ⚠ Gemini: keine Schritte für Phase "${sec.name}" – Original behalten`);
+        console.warn(`  ⚠ OpenRouter: keine Schritte für Phase "${sec.name}" – Original behalten`);
         return sec;
       }
       return { ...sec, steps: refinedSec.steps };
     });
 
   } catch (err) {
-    console.error('  ✗ Gemini Refinement fehlgeschlagen:', err.message);
+    console.error('  ✗ OpenRouter Refinement fehlgeschlagen:', err.message);
     if (raw) console.error('  Raw response:', raw.slice(0, 300));
-    return dough_sections; // Fallback: Regex-Ergebnis unverändert zurückgeben
+    return dough_sections;
   }
 }
 
 // ── Haupt-Export ──────────────────────────────────────────────────────────────
 
 /**
- * Verbessert geparste Backschritte mit Gemini Flash wenn nötig.
+ * Verbessert geparste Backschritte mit Groq wenn nötig.
  * Gibt immer dough_sections zurück – im Fehlerfall das Original.
  *
  * @param {Array} dough_sections  - Ergebnis des Regex-Parsers
- * @param {string} apiKey         - process.env.GEMINI_API_KEY
+ * @param {string} apiKey         - process.env.GROQ_API_KEY
  * @returns {Promise<Array>}
  */
 async function refineSections(dough_sections, apiKey) {
@@ -135,9 +135,9 @@ async function refineSections(dough_sections, apiKey) {
     return dough_sections;
   }
 
-  console.log('  → Qualitätsprobleme erkannt – Gemini Flash wird aufgerufen...');
-  const result = await refineWithGemini(dough_sections, apiKey);
-  console.log('  ✓ Gemini Refinement abgeschlossen');
+  console.log('  → Qualitätsprobleme erkannt – OpenRouter wird aufgerufen...');
+  const result = await refineWithOpenRouter(dough_sections, apiKey);
+  console.log('  ✓ OpenRouter Refinement abgeschlossen');
   return result;
 }
 

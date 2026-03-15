@@ -391,7 +391,7 @@ const scrapeHomebaking = async (url) => {
     }
 
     // 2c. LLM-Refinement (optional, nur wenn Qualität unzureichend)
-    const refined = await refineSections(dough_sections, process.env.GEMINI_API_KEY);
+    const refined = await refineSections(dough_sections, process.env.OPENROUTER_API_KEY);
     dough_sections.splice(0, dough_sections.length, ...refined);
 
     // 3. BILD
