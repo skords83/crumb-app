@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { detectPortionCount, scaleSectionsToOnePortion } = require('./utils');
+const { detectPortionCount, scaleSectionsToOnePortion, splitCompoundStep } = require('./utils');
 const { parseStepsWithLLM } = require('./llm-refine');
 
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
@@ -193,24 +193,13 @@ const scrapeHomebaking = async (url) => {
         let s = $(el).next();
         while (s.length && !s.is('h3, h2')) {
           if (s.is('ul')) {
-            // Prüfen ob es eine Zutaten-Liste ist (erstes li sieht aus wie "Xg Name")
-            const firstLiText = $(s).find('li').first().text().replace(/[\u00a0\s]+/g, ' ').trim();
-            const looksLikeIngredient = /^[\d,./]+\s*[a-zA-ZgmlkGMLKäöüÄÖÜ%]*\s+\S/.test(firstLiText);
-            if (looksLikeIngredient) {
-              s.find('li').each((_, li) => {
-                const ing = parseIngredientFromLi($(li).text());
-                if (ing) ingredients.push(ing);
-              });
-            } else {
-              // ul mit Schritt-Text (z.B. Herstellungsschritte als Liste)
-              s.find('li').each((_, li) => {
-                const t = $(li).text().trim();
-                if (t.length > 10) rawSteps.push(t);
-              });
-            }
-          } else if (s.is('p, div, blockquote')) {
-            const t = s.text().replace(/[\u00a0]/g, ' ').trim();
-            if (t.length > 10) rawSteps.push(t);
+            s.find('li').each((_, li) => {
+              const ing = parseIngredientFromLi($(li).text());
+              if (ing) ingredients.push(ing);
+            });
+          } else if (s.is('p')) {
+            const t = s.text().trim();
+            if (t.length > 15) rawSteps.push(t);
           }
           s = s.next();
         }
@@ -343,11 +332,11 @@ const scrapeHomebaking = async (url) => {
           }
         }
       } else {
-        // Fallback: rawSteps als einzelne Schritte ohne Dauer
-        console.warn('  ⚠ LLM fehlgeschlagen – Rohtext als Fallback');
+        // Fallback: rawSteps via splitCompoundStep zumindest halbwegs strukturieren
+        console.warn('  ⚠ LLM fehlgeschlagen – splitCompoundStep als Fallback');
         for (const sec of dough_sections) {
           if (!sec.steps) {
-            sec.steps = (sec.rawSteps || []).map(t => ({ instruction: t, duration: 0, type: 'Kneten' }));
+            sec.steps = (sec.rawSteps || []).flatMap(t => splitCompoundStep(t));
           }
         }
       }

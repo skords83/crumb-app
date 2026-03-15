@@ -139,14 +139,28 @@ async function callOpenRouter(model, systemPrompt, userPrompt, apiKey) {
   return parsed;
 }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function callWithFallback(systemPrompt, userPrompt, apiKey) {
-  for (const model of [OPENROUTER_MODEL, OPENROUTER_MODEL_FALLBACK]) {
-    try {
-      const result = await callOpenRouter(model, systemPrompt, userPrompt, apiKey);
-      console.log(`  ✓ OpenRouter abgeschlossen (${model})`);
-      return result;
-    } catch (err) {
-      console.warn(`  ⚠ Modell ${model} fehlgeschlagen: ${err.message}`);
+  const models = [OPENROUTER_MODEL, OPENROUTER_MODEL_FALLBACK];
+
+  for (const model of models) {
+    // Bei 429: einmal kurz warten und nochmal versuchen
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const result = await callOpenRouter(model, systemPrompt, userPrompt, apiKey);
+        console.log(`  ✓ OpenRouter abgeschlossen (${model})`);
+        return result;
+      } catch (err) {
+        const is429 = err.message.includes('429');
+        if (is429 && attempt === 1) {
+          console.warn(`  ⚠ ${model} rate-limited – warte 5s...`);
+          await sleep(5000);
+          continue;
+        }
+        console.warn(`  ⚠ Modell ${model} fehlgeschlagen: ${err.message.slice(0, 120)}`);
+        break; // nächstes Modell
+      }
     }
   }
   console.error('  ✗ Alle Modelle fehlgeschlagen');
