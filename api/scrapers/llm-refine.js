@@ -1,71 +1,48 @@
 // scrapers/llm-refine.js
-// Optionaler Post-Processing-Schritt: Groq korrigiert Backschritte
-// die der Regex-Parser nicht sauber aufgelöst hat.
+// LLM-basiertes Schritt-Parsing für homebaking.at
+// Bekommt Roh-Texte der Herstellungsschritte und gibt fertige Step-Objekte zurück.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
 const OPENROUTER_URL   = 'https://openrouter.ai/api/v1/chat/completions';
 
-// ── Quality-Gate ─────────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `Du bist ein Experte für Brotbackrezepte. Du bekommst pro Teigphase einen Array von Rohtext-Schritten aus einem Rezept und zerlegst jeden Rohtext in einzelne, sinnvolle Arbeitsschritte.
 
-function _needsRefinement(steps) {
-  for (const step of steps) {
-    const instr = step.instruction || '';
+Ausgabe-Format: Ein JSON-Array von Phasen. Jede Phase hat "name" und "steps".
+Jeder Step hat:
+- "instruction": string (vollständiger, sinnvoller Satz auf Deutsch)
+- "duration": number (Minuten als ganze Zahl, 0 wenn keine Wartezeit)
+- "duration_min": number (optional, nur bei echtem Zeitfenster z.B. "12-15 Stunden")
+- "duration_max": number (optional, nur bei echtem Zeitfenster)
+- "type": "Kneten" | "Warten" | "Backen" | "Vorheizen"
 
-    // Abgeschnittener Satz: beginnt mit Kleinbuchstabe
-    if (/^[a-zäöü]/.test(instr)) return true;
+Typen-Regeln:
+- "Kneten" = aktive Handarbeit (mischen, falten, formen, aufarbeiten) – duration meist 0
+- "Warten" = passive Ruhezeit (Teigruhe, Gare, Kühlschrank, Reifezeit, akklimatisieren) – duration > 0
+- "Backen" = aktiv im Ofen backen – duration = Backzeit in Minuten
+- "Vorheizen" = Ofen vorheizen – duration = 0
 
-    // Sehr kurzer Satz der wahrscheinlich ein Fragment ist
-    if (instr.replace(/\.$/, '').trim().split(/\s+/).length < 4) return true;
+Wichtige Regeln:
+- Jeden Rohtext in so viele Schritte aufteilen wie sinnvoll (Aktion + Wartezeit = 2 Schritte)
+- Zeitangaben aus dem Text korrekt in Minuten umrechnen (1 Stunde = 60, 12-15 Stunden = duration_min:720, duration_max:900, duration:810)
+- Bei Zeitfenstern (z.B. "12-15 Stunden") immer duration_min, duration_max UND duration (Durchschnitt) setzen
+- Abgeschnittene oder unvollständige Sätze sinnvoll vervollständigen
+- Gib NUR valides JSON zurück – kein Text, keine Erklärung, keine Markdown-Backticks`;
 
-    // Schritt hat Zeitangabe im Text aber duration = 0
-    if (step.duration === 0 && /\d+\s*(?:minuten?|min\.?|stunden?|std\.?|h\b|tage?)/i.test(instr)) return true;
-
-    // Warte-Verb im Text aber type = Kneten
-    if (step.type === 'Kneten' && /(?:stehen|reifen|ruhen|gehen|rasten|quellen|kühlen|lagern|fermentieren)\s+lassen/i.test(instr)) return true;
-  }
-  return false;
-}
-
-function needsRefinement(dough_sections) {
-  return dough_sections.some(sec => _needsRefinement(sec.steps));
-}
-
-// ── Groq-Call ─────────────────────────────────────────────────────────────────
-
-const SYSTEM_PROMPT = `Du bist ein Experte für Brotbackrezepte. Du bekommst automatisch geparste Backschritte als JSON-Array und korrigierst sie.
-
-Regeln:
-- Behalte ALLE Schritte – lösche nichts, füge nichts hinzu
-- Korrigiere nur: abgeschnittene Sätze (vervollständige sie sinnvoll auf Deutsch), falsche Typen, fehlende oder falsche Zeitangaben
-- "duration" ist immer in Minuten (ganze Zahl, 0 wenn keine Wartezeit)
-- Erlaubte Typen: "Kneten", "Warten", "Backen", "Vorheizen"
-- "Kneten" = aktive Handarbeit ohne Wartezeit
-- "Warten" = Teigruhe, Gare, Kühlschrank, Reifezeit
-- "Backen" = im Ofen backen (nicht Vorheizen)
-- "Vorheizen" = Ofen vorheizen
-- Wenn ein Schritt sowohl Aktion als auch Wartezeit beschreibt, behalte ihn als einen Schritt mit dem dominanten Typ
-- Gib NUR ein valides JSON-Array zurück – kein Text, keine Erklärung, keine Markdown-Backticks
-- Das Array hat genau so viele Objekte wie die Eingabe`;
-
-async function refineWithOpenRouter(dough_sections, apiKey) {
+/**
+ * Parst Roh-Schritttexte per LLM in strukturierte Step-Objekte.
+ *
+ * @param {Array<{name: string, rawSteps: string[]}>} phases
+ * @param {string} apiKey - process.env.OPENROUTER_API_KEY
+ * @returns {Promise<Array<{name: string, steps: object[]}>>}
+ */
+async function parseStepsWithLLM(phases, apiKey) {
   if (!apiKey) {
-    console.warn('  ⚠ OPENROUTER_API_KEY nicht gesetzt – LLM-Refinement übersprungen');
-    return dough_sections;
+    console.warn('  ⚠ OPENROUTER_API_KEY nicht gesetzt – LLM-Schritt-Parsing übersprungen');
+    return phases.map(p => ({ name: p.name, steps: [] }));
   }
 
-  const sectionsForLLM = dough_sections.map(sec => ({
-    name: sec.name,
-    steps: sec.steps.map(({ instruction, duration, duration_min, duration_max, type }) => ({
-      instruction,
-      duration,
-      ...(duration_min !== undefined ? { duration_min } : {}),
-      ...(duration_max !== undefined ? { duration_max } : {}),
-      type
-    }))
-  }));
-
-  const userPrompt = `Korrigiere diese Backschritte und gib ein JSON-Array zurück:\n${JSON.stringify(sectionsForLLM, null, 2)}`;
+  const userPrompt = `Zerlege diese Backschritte in einzelne Arbeitsschritte:\n${JSON.stringify(phases, null, 2)}`;
 
   let raw = '';
   try {
@@ -90,55 +67,26 @@ async function refineWithOpenRouter(dough_sections, apiKey) {
     if (!res.ok) {
       const err = await res.text();
       console.error(`  ✗ OpenRouter API Fehler ${res.status}:`, err.slice(0, 200));
-      return dough_sections;
+      return null;
     }
 
     const data = await res.json();
     raw = data?.choices?.[0]?.message?.content || '';
     if (!raw) {
       console.warn('  ⚠ OpenRouter: leere Antwort');
-      return dough_sections;
+      return null;
     }
 
     const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-    const refined = JSON.parse(clean);
-
-    return dough_sections.map((sec, i) => {
-      const refinedSec = Array.isArray(refined) ? refined[i] : null;
-      if (!refinedSec || !Array.isArray(refinedSec.steps)) {
-        console.warn(`  ⚠ OpenRouter: keine Schritte für Phase "${sec.name}" – Original behalten`);
-        return sec;
-      }
-      return { ...sec, steps: refinedSec.steps };
-    });
+    const parsed = JSON.parse(clean);
+    console.log('  ✓ OpenRouter Schritt-Parsing abgeschlossen');
+    return Array.isArray(parsed) ? parsed : null;
 
   } catch (err) {
-    console.error('  ✗ OpenRouter Refinement fehlgeschlagen:', err.message);
+    console.error('  ✗ OpenRouter Parsing fehlgeschlagen:', err.message);
     if (raw) console.error('  Raw response:', raw.slice(0, 300));
-    return dough_sections;
+    return null;
   }
 }
 
-// ── Haupt-Export ──────────────────────────────────────────────────────────────
-
-/**
- * Verbessert geparste Backschritte mit Groq wenn nötig.
- * Gibt immer dough_sections zurück – im Fehlerfall das Original.
- *
- * @param {Array} dough_sections  - Ergebnis des Regex-Parsers
- * @param {string} apiKey         - process.env.GROQ_API_KEY
- * @returns {Promise<Array>}
- */
-async function refineSections(dough_sections, apiKey) {
-  if (!needsRefinement(dough_sections)) {
-    console.log('  ✓ LLM-Refinement nicht nötig (Qualität OK)');
-    return dough_sections;
-  }
-
-  console.log('  → Qualitätsprobleme erkannt – OpenRouter wird aufgerufen...');
-  const result = await refineWithOpenRouter(dough_sections, apiKey);
-  console.log('  ✓ OpenRouter Refinement abgeschlossen');
-  return result;
-}
-
-module.exports = { refineSections, needsRefinement };
+module.exports = { parseStepsWithLLM };
