@@ -189,7 +189,7 @@ export default function NewRecipePage() {
   const handleAutoImport = async () => {
     if (!importUrl) return;
     setUrlError(null);
-    const normalizedUrl = importUrl.startsWith('http') ? importUrl : `https://${importUrl}`;
+    const normalizedUrl = importUrl.replace(/^https?:\/\//i, '').replace(/^/, 'https://');
     setIsImporting(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import`, {
