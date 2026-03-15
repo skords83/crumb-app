@@ -288,6 +288,15 @@ function scaleSectionsToOnePortion(sections, portionCount) {
   }));
 }
 
+/**
+ * Stellt sicher dass eine Bild-URL https:// verwendet.
+ * Verhindert Mixed-Content-Fehler wenn der Scraper http:// zurückliefert.
+ */
+function ensureHttps(url) {
+  if (!url || typeof url !== 'string') return url;
+  return url.replace(/^http:\/\//i, 'https://');
+}
+
 module.exports = {
   sumAllDurations,
   extractFirstDuration,
@@ -297,5 +306,6 @@ module.exports = {
   stepDurationRange,
   detectPortionCount,
   scaleSectionsToOnePortion,
-  splitCompoundStep
+  splitCompoundStep,
+  ensureHttps
 };

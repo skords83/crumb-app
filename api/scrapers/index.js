@@ -5,6 +5,7 @@ const scrapeHomebaking = require('./homebaking');
 const scrapeJoSemola   = require('./josemola');
 const parseHtmlImport  = require('./smry');
 const axios            = require('axios');
+const { ensureHttps }  = require('./utils');
 
 // ── SMRY-FALLBACK: URL fetchen, dann HTML-Parser aufrufen ────
 const scrapeViaSmry = async (originalUrl) => {
@@ -35,4 +36,16 @@ const getScraper = (url) => {
   return scrapeViaSmry;
 };
 
-module.exports = { getScraper };
+/**
+ * Scrapt eine URL und stellt sicher dass image_url immer https:// verwendet.
+ */
+const scrape = async (url) => {
+  const scraper = getScraper(url);
+  const result = await scraper(url);
+  if (result && result.image_url) {
+    result.image_url = ensureHttps(result.image_url);
+  }
+  return result;
+};
+
+module.exports = { getScraper, scrape };
