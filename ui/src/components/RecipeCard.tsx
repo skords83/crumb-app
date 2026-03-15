@@ -29,7 +29,13 @@ const getStats = (recipe: any) => {
 };
 
 const getRecipeLabels = (recipe: any) => {
-  const content = JSON.stringify(recipe).toLowerCase();
+  // Nur strukturierte Daten durchsuchen – NICHT description/title,
+  // um falsche Treffer durch Fließtext zu vermeiden.
+  const structuredContent = {
+    dough_sections: recipe.dough_sections,
+    tags: recipe.tags,
+  };
+  const content = JSON.stringify(structuredContent).toLowerCase();
   const labels: { label: string; color: string }[] = [];
 
   // --- 1. Triebmittel (always first) ---
