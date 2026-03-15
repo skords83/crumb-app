@@ -56,6 +56,15 @@ const upload = multer({ storage });
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 pool.on('connect', client => { client.query("SET timezone = 'UTC'"); });
 
+// Öffentliche Base-URL für generierte Datei-URLs.
+// Traefik terminiert TLS → req.protocol ist intern immer "http".
+// Deshalb: BASE_URL env-Variable bevorzugen, sonst X-Forwarded-Proto auswerten.
+const getPublicBaseUrl = (req) => {
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '');
+  const proto = req.get('x-forwarded-proto') || req.protocol;
+  return `${proto}://${req.get('host')}`;
+};
+
 const initDB = async () => {
   const createUsersTable = `
     CREATE TABLE IF NOT EXISTS users (
@@ -231,7 +240,7 @@ app.use(authenticateToken);
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
-  const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  const imageUrl = `${getPublicBaseUrl(req)}/uploads/${req.file.filename}`;
   res.json({ url: imageUrl });
 });
 
@@ -254,7 +263,7 @@ app.post('/api/import', async (req, res) => {
         const response = await axios.get(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
         const fileName = `import-${Date.now()}-${uuidv4().substring(0, 8)}.jpg`;
         fs.writeFileSync(path.join(uploadDir, fileName), response.data);
-        recipeData.image_url = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+        recipeData.image_url = `${getPublicBaseUrl(req)}/uploads/${fileName}`;
       } catch (e) { console.error("⚠️ Bild-Fehler:", e.message); }
     }
     res.json(recipeData);
@@ -280,7 +289,7 @@ app.post('/api/import/html', async (req, res) => {
         const response = await axios.get(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
         const fileName = `import-${Date.now()}-${uuidv4().substring(0, 8)}.jpg`;
         fs.writeFileSync(path.join(uploadDir, fileName), response.data);
-        recipeData.image_url = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+        recipeData.image_url = `${getPublicBaseUrl(req)}/uploads/${fileName}`;
         console.log('✅ Bild heruntergeladen');
       } catch (e) { console.error("⚠️ Bild-Download Fehler:", e.message); }
     }
