@@ -193,13 +193,24 @@ const scrapeHomebaking = async (url) => {
         let s = $(el).next();
         while (s.length && !s.is('h3, h2')) {
           if (s.is('ul')) {
-            s.find('li').each((_, li) => {
-              const ing = parseIngredientFromLi($(li).text());
-              if (ing) ingredients.push(ing);
-            });
-          } else if (s.is('p')) {
-            const t = s.text().trim();
-            if (t.length > 15) rawSteps.push(t);
+            // Prüfen ob es eine Zutaten-Liste ist (erstes li sieht aus wie "Xg Name")
+            const firstLiText = $(s).find('li').first().text().replace(/[\u00a0\s]+/g, ' ').trim();
+            const looksLikeIngredient = /^[\d,./]+\s*[a-zA-ZgmlkGMLKäöüÄÖÜ%]*\s+\S/.test(firstLiText);
+            if (looksLikeIngredient) {
+              s.find('li').each((_, li) => {
+                const ing = parseIngredientFromLi($(li).text());
+                if (ing) ingredients.push(ing);
+              });
+            } else {
+              // ul mit Schritt-Text (z.B. Herstellungsschritte als Liste)
+              s.find('li').each((_, li) => {
+                const t = $(li).text().trim();
+                if (t.length > 10) rawSteps.push(t);
+              });
+            }
+          } else if (s.is('p, div, blockquote')) {
+            const t = s.text().replace(/[\u00a0]/g, ' ').trim();
+            if (t.length > 10) rawSteps.push(t);
           }
           s = s.next();
         }
