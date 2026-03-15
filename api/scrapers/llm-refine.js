@@ -3,7 +3,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OPENROUTER_MODEL         = 'meta-llama/llama-3.3-70b-instruct:free';
-const OPENROUTER_MODEL_FALLBACK = 'mistralai/mistral-small-3.1-24b-instruct:free';
+const OPENROUTER_MODEL_FALLBACK  = 'mistralai/mistral-small-3.1-24b-instruct:free';
+const OPENROUTER_MODEL_FALLBACK2 = 'qwen/qwen3-8b:free';
 const OPENROUTER_URL           = 'https://openrouter.ai/api/v1/chat/completions';
 
 // ── SYSTEM PROMPTS ────────────────────────────────────────────────────────────
@@ -118,9 +119,12 @@ async function callOpenRouter(model, systemPrompt, userPrompt, apiKey) {
     body: JSON.stringify({
       model,
       temperature: 0.1,
+      // Qwen3: thinking-mode deaktivieren damit JSON-Output sauber bleibt
+      ...(model.includes('qwen3') ? { reasoning: { effort: 'none' } } : {}),
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt }
+        // Qwen3: /nothink im User-Prompt als zusätzliche Sicherheit
+        { role: 'user', content: model.includes('qwen3') ? userPrompt + '\n/nothink' : userPrompt }
       ]
     })
   });
@@ -142,7 +146,7 @@ async function callOpenRouter(model, systemPrompt, userPrompt, apiKey) {
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function callWithFallback(systemPrompt, userPrompt, apiKey) {
-  const models = [OPENROUTER_MODEL, OPENROUTER_MODEL_FALLBACK];
+  const models = [OPENROUTER_MODEL, OPENROUTER_MODEL_FALLBACK, OPENROUTER_MODEL_FALLBACK2];
 
   for (const model of models) {
     // Bei 429: einmal kurz warten und nochmal versuchen
