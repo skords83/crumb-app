@@ -15,6 +15,7 @@ const SORT_OPTIONS = [
   { value: 'oldest', label: 'Älteste zuerst' },
   { value: 'az', label: 'A → Z' },
   { value: 'za', label: 'Z → A' },
+  { value: 'random', label: 'Zufällig' },
 ];
 
 // "Heute fertig" bleibt clientseitig (Laufzeitberechnung)
@@ -90,7 +91,7 @@ function HomePageContent() {
     if (activeFilter && activeFilter !== 'Alle' && activeFilter !== 'Heute fertig') {
       params.set('filter', activeFilter);
     }
-    if (activeSort && activeSort !== 'newest') params.set('sort', activeSort);
+    if (activeSort && activeSort !== 'newest' && activeSort !== 'random') params.set('sort', activeSort);
 
     const url = `${process.env.NEXT_PUBLIC_API_URL}/recipes${params.toString() ? '?' + params.toString() : ''}`;
 
@@ -99,7 +100,11 @@ function HomePageContent() {
     })
       .then(res => res.json())
       .then(data => {
-        setRecipes(Array.isArray(data) ? data : []);
+        let list = Array.isArray(data) ? data : [];
+        if (activeSort === 'random') {
+          list = [...list].sort(() => Math.random() - 0.5);
+        }
+        setRecipes(list);
         setIsLoading(false);
       })
       .catch(err => {
@@ -230,7 +235,7 @@ function HomePageContent() {
                 <span className="hidden sm:inline">{activeSortLabel}</span>
               </button>
               {showSortMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-xl z-20 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
                   {SORT_OPTIONS.map(opt => (
                     <button
                       key={opt.value}

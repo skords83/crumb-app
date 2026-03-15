@@ -149,7 +149,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
         />
-        <div className="absolute top-6 left-6 flex flex-wrap gap-2 pr-6">
+        <div className="absolute top-6 left-6 flex flex-wrap gap-2 pr-14 z-10">
           {labels.map((tag, i) => (
             <span key={i} className={`backdrop-blur-md px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm border ${tag.color}`}>
               {tag.label}
