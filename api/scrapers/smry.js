@@ -281,7 +281,7 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
       }
     }
   }
-  recipeData.image_url = imageUrl;
+  recipeData.image_url = imageUrl ? imageUrl.replace(/^http:\/\//i, 'https://') : imageUrl;
 
   // BESCHREIBUNG
   let description = $('meta[property="og:description"]').attr('content') || '';

@@ -19,7 +19,7 @@ Jeder Step hat:
 Typen-Regeln:
 - "Kneten" = aktive Handarbeit (mischen, falten, formen, aufarbeiten) – duration meist 0
 - "Warten" = passive Ruhezeit (Teigruhe, Gare, Kühlschrank, Reifezeit, akklimatisieren) – duration > 0
-- "Backen" = aktiv im Ofen backen – duration = Backzeit in Minuten
+- "Backen" = aktiv im Ofen backen – duration = verbleibende Backzeit in Minuten
 - "Vorheizen" = Ofen vorheizen – duration = 0
 
 Wichtige Regeln:
@@ -27,7 +27,20 @@ Wichtige Regeln:
 - Zeitangaben aus dem Text korrekt in Minuten umrechnen (1 Stunde = 60, 12-15 Stunden = duration_min:720, duration_max:900, duration:810)
 - Bei Zeitfenstern (z.B. "12-15 Stunden") immer duration_min, duration_max UND duration (Durchschnitt) setzen
 - Abgeschnittene oder unvollständige Sätze sinnvoll vervollständigen
-- Gib NUR valides JSON zurück – kein Text, keine Erklärung, keine Markdown-Backticks`;
+- Gib NUR valides JSON zurück – kein Text, keine Erklärung, keine Markdown-Backticks
+
+Spezialregel Kneten mit mehreren Geschwindigkeiten:
+- "6-8 Minuten langsam und 5-6 Minuten schnell kneten" → ZWEI separate Kneten-Schritte:
+  1. { instruction: "Teig 6-8 Minuten langsam kneten.", duration: 7, duration_min: 6, duration_max: 8, type: "Kneten" }
+  2. { instruction: "Teig 5-6 Minuten schnell kneten, bis er sich von den Schüsselwänden löst.", duration: 5, duration_min: 5, duration_max: 6, type: "Kneten" }
+- Jede Knetphase mit eigener Geschwindigkeit oder Zeitangabe ist ein eigener Schritt.
+
+Spezialregel Backzeit:
+- Wenn im Text steht "nach X Minuten Temperatur reduzieren" gefolgt von einer Gesamtbackzeit, dann ist die verbleibende Backzeit = Gesamtbackzeit minus X.
+- Beispiel: "Backtemperatur nach 10 Minuten auf 210°C reduzieren und kräftig ausbacken. Backzeit: 35-40 Minuten."
+  → Schritt 1: { instruction: "Mit Schwaden einschießen, nach 10 Minuten Temperatur auf 210°C reduzieren.", duration: 10, type: "Backen" }
+  → Schritt 2: { instruction: "Bei 210°C kräftig ausbacken.", duration: 27, duration_min: 25, duration_max: 30, type: "Backen" }
+- Die Gesamtbackzeit (35-40 Min) minus die bereits vergangene Zeit (10 Min) ergibt die Restbackzeit (25-30 Min).`;
 
 /**
  * Parst Roh-Schritttexte per LLM in strukturierte Step-Objekte.
