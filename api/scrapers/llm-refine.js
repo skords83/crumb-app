@@ -36,10 +36,15 @@ Spezialregel Kneten mit mehreren Geschwindigkeiten:
 - Jede Knetphase mit eigener Geschwindigkeit oder Zeitangabe ist ein eigener Schritt.
 
 Spezialregel Backzeit:
-- Wenn im Text steht "nach X Minuten Temperatur reduzieren" gefolgt von einer Gesamtbackzeit, dann ist die verbleibende Backzeit = Gesamtbackzeit minus X.
-- Beispiel: "Backtemperatur nach 10 Minuten auf 210°C reduzieren und kräftig ausbacken. Backzeit: 35-40 Minuten."
-  → Schritt 1: { instruction: "Mit Schwaden einschießen, nach 10 Minuten Temperatur auf 210°C reduzieren.", duration: 10, type: "Backen" }
-  → Schritt 2: { instruction: "Bei 210°C kräftig ausbacken.", duration: 27, duration_min: 25, duration_max: 30, type: "Backen" }
+- "Einschießen" (Teigling in den Ofen schieben) ist eine aktive Handlung → type "Kneten", duration 0
+- Danach folgt IMMER ein impliziter Backen-Schritt mit der Zeit bis zur nächsten Aktion (z.B. Temperatur reduzieren) – dieser Schritt steht nicht explizit im Text, muss aber ergänzt werden
+- "Temperatur reduzieren" ist selbst eine aktive Handlung → type "Kneten", duration 0
+- Danach folgt der Restback-Schritt → type "Backen", duration = Gesamtbackzeit minus bereits vergangene Zeit
+- Beispiel: "Die reifen Teiglinge mit Schwaden in den Ofen schieben. Backtemperatur nach 10 Minuten auf 210°C reduzieren und kräftig ausbacken. Backzeit: 35-40 Minuten."
+  → Schritt 1: { instruction: "Die reifen Teiglinge mit kräftigen Schwaden in den Ofen schieben.", duration: 0, type: "Kneten" }
+  → Schritt 2: { instruction: "10 Minuten bei Anbacktemperatur backen.", duration: 10, type: "Backen" }
+  → Schritt 3: { instruction: "Backtemperatur auf 210°C reduzieren.", duration: 0, type: "Kneten" }
+  → Schritt 4: { instruction: "Bei 210°C kräftig ausbacken.", duration: 27, duration_min: 25, duration_max: 30, type: "Backen" }
 - Die Gesamtbackzeit (35-40 Min) minus die bereits vergangene Zeit (10 Min) ergibt die Restbackzeit (25-30 Min).`;
 
 /**
