@@ -201,7 +201,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
         {/* Herz oben rechts */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
-          className="absolute top-3 right-3 z-10 p-2 bg-white/20 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
+          className="absolute top-3 right-3 z-10 p-2 bg-white/35 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
         >
           <Heart size={16} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
         </button>
@@ -252,12 +252,12 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
         </div>
 
         {/* Quelle — feste Höhe damit Buttons nicht rutschen */}
-        <div className="text-right h-5 flex items-center justify-end">
+        <div className="text-right h-5 flex items-center justify-end pb-1">
           {(() => {
             const url = recipe.original_source_url || recipe.source_url;
             try {
               return url ? (
-                <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
                   {new URL(url).hostname.replace('www.', '')}
                 </span>
               ) : null;
