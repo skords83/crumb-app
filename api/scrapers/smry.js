@@ -222,7 +222,7 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
     description: '',
     image_url: '',
     source_url: filename || 'uploaded.html',
-    original_source_url: '',
+    original_source_url: $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '',
     ingredients: [],
     steps: [],
     dough_sections: []
