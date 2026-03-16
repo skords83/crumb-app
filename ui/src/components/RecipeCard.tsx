@@ -215,7 +215,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       </div>
 
       {/* Card Body */}
-      <div className="px-4 pb-2 pt-3 flex-1 flex flex-col gap-2.5">
+      <div className="px-4 pb-2 pt-3 flex-1 flex flex-col gap-3">
 
         {/* Badges eine Zeile + X */}
         <BadgeRow labels={labels} />
