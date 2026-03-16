@@ -215,7 +215,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       </div>
 
       {/* Card Body */}
-      <div className="px-4 pb-2 pt-3 flex-1 flex flex-col gap-3">
+      <div className="px-4 pb-0 pt-3 flex-1 flex flex-col gap-3">
 
         {/* Badges eine Zeile + X */}
         <BadgeRow labels={labels} />
@@ -238,8 +238,8 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           )}
         </div>
 
-        {/* Buttons */}
-        <div className="grid grid-cols-2 gap-2 mt-auto">
+        {/* Buttons — gap = px-4 für Symmetrie */}
+        <div className="grid grid-cols-2 gap-4 mt-auto">
           <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
             <Utensils size={13} /> Details
           </div>
@@ -251,19 +251,19 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           </button>
         </div>
 
-        {/* Quelle */}
-        {(() => {
-          const url = recipe.original_source_url || recipe.source_url;
-          try {
-            return url ? (
-              <div className="text-right">
+        {/* Quelle — feste Höhe damit Buttons nicht rutschen */}
+        <div className="text-right h-5 flex items-center justify-end">
+          {(() => {
+            const url = recipe.original_source_url || recipe.source_url;
+            try {
+              return url ? (
                 <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">
                   {new URL(url).hostname.replace('www.', '')}
                 </span>
-              </div>
-            ) : null;
-          } catch { return null; }
-        })()}
+              ) : null;
+            } catch { return null; }
+          })()}
+        </div>
       </div>
     </Link>
   );
