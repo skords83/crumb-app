@@ -110,6 +110,17 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
         if (child.offsetTop === firstTop) count++;
         else break;
       }
+      // Wenn nicht alle passen: prüfe ob der letzte in Zeile 1 noch Platz für +X lässt
+      if (count < labels.length && count > 0) {
+        const containerWidth = row.offsetWidth;
+        const lastVisible = children[count - 1];
+        const usedWidth = lastVisible.offsetLeft + lastVisible.offsetWidth;
+        const plusWidth = 42; // +X Badge ca. 42px
+        const gap = 6;
+        if (usedWidth + gap + plusWidth > containerWidth) {
+          count = Math.max(1, count - 1);
+        }
+      }
       setVisibleCount(Math.max(1, count));
     });
   }, [labels.length]);
