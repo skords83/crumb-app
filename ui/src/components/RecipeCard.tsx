@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
-import { calcTotalDuration, calcTotalDurationRange } from "@/lib/backplan-utils";
-import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
+import { calcTotalDurationRange } from "@/lib/backplan-utils";
+import { calcHydration } from '@/lib/hydration';
 
 interface RecipeCardProps {
   recipe: any;
@@ -29,8 +29,6 @@ const getStats = (recipe: any) => {
 };
 
 const getRecipeLabels = (recipe: any) => {
-  // Nur strukturierte Daten durchsuchen – NICHT description/title,
-  // um falsche Treffer durch Fließtext zu vermeiden.
   const structuredContent = {
     dough_sections: recipe.dough_sections,
     tags: recipe.tags,
@@ -38,20 +36,16 @@ const getRecipeLabels = (recipe: any) => {
   const content = JSON.stringify(structuredContent).toLowerCase();
   const labels: { label: string; color: string }[] = [];
 
-  // --- 1. Triebmittel (always first) ---
+  // --- 1. Triebmittel ---
   const hatSauerteig = content.includes("sauerteig") || content.includes("anstellgut") || content.includes("lievito madre");
   const hatHefe = /\b(hefe|trockenhefe|frischhefe|wildhefe)\b/.test(content);
 
   const getSauerteigLabel = (): { label: string; color: string } => {
-    const st = "border-[#f5c5c5] text-[#A23939]" + " " + "bg-[#FDE2E2]";
-    if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig"))
-      return { label: "Roggensauerteig", color: st };
-    if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig"))
-      return { label: "Dinkelsauerteig", color: st };
-    if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig"))
-      return { label: "Weizensauerteig", color: st };
-    if (content.includes("hafersauerteig") || content.includes("hafer-sauerteig"))
-      return { label: "Hafersauerteig", color: st };
+    const st = "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]";
+    if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig")) return { label: "Roggensauerteig", color: st };
+    if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig")) return { label: "Dinkelsauerteig", color: st };
+    if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) return { label: "Weizensauerteig", color: st };
+    if (content.includes("hafersauerteig") || content.includes("hafer-sauerteig")) return { label: "Hafersauerteig", color: st };
     if (content.includes("roggen")) return { label: "Roggensauerteig", color: st };
     if (content.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
     if (content.includes("weizenmehl") || content.includes("weizen")) return { label: "Weizensauerteig", color: st };
@@ -91,21 +85,75 @@ const getRecipeLabels = (recipe: any) => {
   const hatWeizen = content.includes("weizenmehl") || weizenTypen.some(t => content.includes(t));
   const hatHafer = content.includes("hafer");
 
-  if (hatRoggen) {
-    labels.push({ label: "Roggen", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
-  }
-  if (hatDinkel) {
-    labels.push({ label: "Dinkel", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
-  }
-  if (hatWeizen) {
-    labels.push({ label: "Weizen", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
-  }
-  if (hatHafer) {
-    labels.push({ label: "Hafer", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
-  }
+  if (hatRoggen) labels.push({ label: "Roggen",  color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
+  if (hatDinkel) labels.push({ label: "Dinkel",  color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
+  if (hatWeizen) labels.push({ label: "Weizen",  color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
+  if (hatHafer)  labels.push({ label: "Hafer",   color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
 
-  return labels.slice(0, 3).sort((a, b) => b.label.length - a.label.length);
+  return labels;
 };
+
+// Badge-Zeile: eine Zeile, überlaufende als +X
+function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(labels.length);
+
+  const measure = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || labels.length === 0) return;
+    const containerWidth = container.offsetWidth;
+    const gap = 6; // gap-1.5 = 6px
+    const plusWidth = 36; // geschätzte Breite "+X" Badge
+    let used = 0;
+    let count = 0;
+    const children = Array.from(container.children) as HTMLElement[];
+    for (let i = 0; i < Math.min(children.length, labels.length); i++) {
+      const w = children[i].offsetWidth;
+      const needed = used + (count > 0 ? gap : 0) + w;
+      const remainingForPlus = labels.length > count + 1 ? gap + plusWidth : 0;
+      if (needed + remainingForPlus <= containerWidth) {
+        used = needed;
+        count++;
+      } else {
+        break;
+      }
+    }
+    setVisibleCount(count || 1);
+  }, [labels]);
+
+  useLayoutEffect(() => {
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  const hidden = labels.length - visibleCount;
+
+  return (
+    <div className="flex items-center gap-1.5 overflow-hidden" style={{ height: '1.625rem' }}>
+      {/* Unsichtbare Messreihe */}
+      <div ref={containerRef} className="flex items-center gap-1.5 absolute opacity-0 pointer-events-none" style={{ whiteSpace: 'nowrap' }}>
+        {labels.map((tag, i) => (
+          <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${tag.color}`}>
+            {tag.label}
+          </span>
+        ))}
+      </div>
+      {/* Sichtbare Badges */}
+      {labels.slice(0, visibleCount).map((tag, i) => (
+        <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 ${tag.color}`}>
+          {tag.label}
+        </span>
+      ))}
+      {hidden > 0 && (
+        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600">
+          +{hidden}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeCardProps) {
   const stats = getStats(recipe);
@@ -119,7 +167,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       href={`/recipes/${recipe.id}`}
       className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 group active:scale-[0.98]"
     >
-      {/* Bild */}
+      {/* Bild mit Titel-Overlay */}
       <div className="h-56 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
         <Image
           src={imageSrc}
@@ -129,34 +177,34 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
         />
-        {/* Herz oben rechts auf dem Bild */}
+
+        {/* Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent pointer-events-none" />
+
+        {/* Herz oben rechts */}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
           className="absolute top-3 right-3 z-10 p-2 bg-white/20 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
         >
           <Heart size={16} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
         </button>
+
+        {/* Titel unten im Bild */}
+        <div className="absolute bottom-0 inset-x-0 z-10 px-4 pb-4">
+          <h3 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+            {recipe.title}
+          </h3>
+        </div>
       </div>
 
       {/* Card Body */}
-      <div className="px-4 pb-3 pt-3 flex-1 flex flex-col gap-3">
+      <div className="px-4 pb-2 pt-3 flex-1 flex flex-col gap-2.5">
 
-        {/* Badges */}
-        <div className="flex flex-wrap gap-1.5">
-          {labels.map((tag, i) => (
-            <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${tag.color}`}>
-              {tag.label}
-            </span>
-          ))}
-        </div>
+        {/* Badges eine Zeile + X */}
+        <BadgeRow labels={labels} />
 
-        {/* Titel */}
-        <h3 className="text-xl font-black text-gray-900 dark:text-white leading-tight line-clamp-2">
-          {recipe.title}
-        </h3>
-
-        {/* Stats — eine Zeile */}
-        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-auto">
+        {/* Stats */}
+        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1.5">
             <Clock size={13} className="text-[#8B7355] dark:text-[#A68B6A]" />
             {stats.timeString}
@@ -174,13 +222,13 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
         </div>
 
         {/* Buttons */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+        <div className="grid grid-cols-2 gap-2 mt-auto">
+          <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
             <Utensils size={13} /> Details
           </div>
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
-            className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/10 dark:bg-[#8B7355]/20 text-[#8B7355] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/20 dark:border-[#8B7355]/30 hover:bg-[#8B7355] hover:text-white transition-all"
+            className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/15 dark:bg-[#8B7355]/25 text-[#6B5340] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/30 dark:border-[#8B7355]/40 hover:bg-[#8B7355] hover:text-white transition-all"
           >
             <Clock size={13} /> Planen
           </button>
@@ -191,13 +239,13 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           const url = recipe.original_source_url || recipe.source_url;
           try {
             return url ? (
-              <div className="text-right h-3">
+              <div className="text-right">
                 <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">
                   {new URL(url).hostname.replace('www.', '')}
                 </span>
               </div>
-            ) : <div className="h-3" />;
-          } catch { return <div className="h-3" />; }
+            ) : null;
+          } catch { return null; }
         })()}
       </div>
     </Link>
