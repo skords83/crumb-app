@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
@@ -96,45 +96,57 @@ const getRecipeLabels = (recipe: any) => {
 // Badge-Zeile: eine Zeile, überlaufende als +X
 function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const [visibleCount, setVisibleCount] = useState<number | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(labels.length);
 
   const measure = useCallback(() => {
-    const row = rowRef.current;
-    if (!row || labels.length === 0) return;
-    const children = Array.from(row.children) as HTMLElement[];
-    if (children.length === 0) return;
-    const firstTop = children[0].getBoundingClientRect().top;
-    let count = 0;
-    for (const child of children) {
-      if (Math.abs(child.getBoundingClientRect().top - firstTop) < 4) count++;
-      else break;
-    }
-    setVisibleCount(count);
-  }, [labels]);
+    requestAnimationFrame(() => {
+      const row = rowRef.current;
+      if (!row || labels.length === 0) return;
+      const children = Array.from(row.querySelectorAll('[data-badge]')) as HTMLElement[];
+      if (children.length === 0) return;
+      const firstTop = children[0].offsetTop;
+      let count = 0;
+      for (const child of children) {
+        if (child.offsetTop === firstTop) count++;
+        else break;
+      }
+      setVisibleCount(Math.max(1, count));
+    });
+  }, [labels.length]);
 
   useLayoutEffect(() => {
     measure();
+  }, [measure]);
+
+  useEffect(() => {
     const ro = new ResizeObserver(measure);
     if (rowRef.current) ro.observe(rowRef.current);
     return () => ro.disconnect();
   }, [measure]);
 
-  const visible = visibleCount ?? labels.length;
-  const hidden = labels.length - visible;
+  const hidden = labels.length - visibleCount;
 
   return (
-    <div className="relative" style={{ height: '1.625rem', overflow: 'hidden' }}>
-      {/* Alle Badges unsichtbar im Flow rendern zum Messen */}
-      <div ref={rowRef} className="flex flex-wrap gap-1.5 absolute inset-0" style={{ visibility: 'hidden' }}>
+    <div className="relative" style={{ height: '1.625rem' }}>
+      {/* Messreihe: flex-wrap im Flow, aber unsichtbar */}
+      <div
+        ref={rowRef}
+        className="flex flex-wrap gap-1.5 absolute inset-x-0 top-0"
+        style={{ visibility: 'hidden', pointerEvents: 'none' }}
+      >
         {labels.map((tag, i) => (
-          <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${tag.color}`}>
+          <span
+            key={i}
+            data-badge
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${tag.color}`}
+          >
             {tag.label}
           </span>
         ))}
       </div>
       {/* Sichtbare Badges */}
-      <div className="flex gap-1.5">
-        {labels.slice(0, visible).map((tag, i) => (
+      <div className="flex gap-1.5 absolute inset-x-0 top-0">
+        {labels.slice(0, visibleCount).map((tag, i) => (
           <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 ${tag.color}`}>
             {tag.label}
           </span>
