@@ -43,46 +43,34 @@ const getRecipeLabels = (recipe: any) => {
   const hatHefe = /\b(hefe|trockenhefe|frischhefe|wildhefe)\b/.test(content);
 
   const getSauerteigLabel = (): { label: string; color: string } => {
-    const terracotta = "bg-orange-50 text-orange-900 border-orange-300";
-    if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig")) {
-      return { label: "Roggensauerteig", color: terracotta };
-    }
-    if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig")) {
-      return { label: "Dinkelsauerteig", color: terracotta };
-    }
-    if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) {
-      return { label: "Weizensauerteig", color: terracotta };
-    }
-    if (content.includes("hafersauerteig") || content.includes("hafer-sauerteig")) {
-      return { label: "Hafersauerteig", color: terracotta };
-    }
-    if (content.includes("roggen")) {
-      return { label: "Roggensauerteig", color: terracotta };
-    }
-    if (content.includes("dinkel")) {
-      return { label: "Dinkelsauerteig", color: terracotta };
-    }
-    if (content.includes("weizenmehl") || content.includes("weizen")) {
-      return { label: "Weizensauerteig", color: terracotta };
-    }
-    if (content.includes("hafer")) {
-      return { label: "Hafersauerteig", color: terracotta };
-    }
-    return { label: "Sauerteig", color: terracotta };
+    const st = "border-[#f5c5c5] text-[#A23939]" + " " + "bg-[#FDE2E2]";
+    if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig"))
+      return { label: "Roggensauerteig", color: st };
+    if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig"))
+      return { label: "Dinkelsauerteig", color: st };
+    if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig"))
+      return { label: "Weizensauerteig", color: st };
+    if (content.includes("hafersauerteig") || content.includes("hafer-sauerteig"))
+      return { label: "Hafersauerteig", color: st };
+    if (content.includes("roggen")) return { label: "Roggensauerteig", color: st };
+    if (content.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
+    if (content.includes("weizenmehl") || content.includes("weizen")) return { label: "Weizensauerteig", color: st };
+    if (content.includes("hafer")) return { label: "Hafersauerteig", color: st };
+    return { label: "Sauerteig", color: st };
   };
 
   if (hatSauerteig && hatHefe) {
-    labels.push({ label: "Gemischt", color: "bg-amber-100 text-amber-900 border-amber-300" });
+    labels.push({ label: "Gemischt", color: "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]" });
   } else if (hatSauerteig) {
     labels.push(getSauerteigLabel());
   } else if (hatHefe) {
-    labels.push({ label: "Hefe", color: "bg-orange-100 text-orange-900 border-orange-300" });
+    labels.push({ label: "Hefe", color: "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]" });
   }
 
   // --- 2. Urkorn ---
   const urkornBegriffe = ["emmer", "einkorn", "kamut", "khorasan", "urdinkel", "waldstaudenroggen", "urgerste"];
   if (urkornBegriffe.some(b => content.includes(b))) {
-    labels.push({ label: "Urkorn", color: "bg-yellow-100 text-yellow-900 border-yellow-300" });
+    labels.push({ label: "Urkorn", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
   }
 
   // --- 3. Vollkorn ---
@@ -92,9 +80,9 @@ const getRecipeLabels = (recipe: any) => {
   const hatTypenMehl = [...weizenTypen, ...dinkelTypen, ...roggenTypen].some(t => content.includes(t));
   const hatVollkornBegriffe = content.includes("vollkorn") || content.includes("schrot");
   if (hatVollkornBegriffe && !hatTypenMehl) {
-    labels.push({ label: "Reines Vollkorn", color: "bg-emerald-100 text-emerald-900 border-emerald-300" });
+    labels.push({ label: "Reines Vollkorn", color: "bg-[#E1F2E5] text-[#2D5A39] border-[#b6d9be]" });
   } else if (hatVollkornBegriffe) {
-    labels.push({ label: "Vollkorn-Anteil", color: "bg-emerald-50 text-emerald-800 border-emerald-200" });
+    labels.push({ label: "Vollkorn-Anteil", color: "bg-[#E1F2E5] text-[#2D5A39] border-[#b6d9be]" });
   }
 
   // --- 4. Getreide ---
@@ -104,16 +92,16 @@ const getRecipeLabels = (recipe: any) => {
   const hatHafer = content.includes("hafer");
 
   if (hatRoggen) {
-    labels.push({ label: "Roggen", color: "bg-yellow-50 text-yellow-800 border-yellow-200" });
+    labels.push({ label: "Roggen", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
   }
   if (hatDinkel) {
-    labels.push({ label: "Dinkel", color: "bg-amber-50 text-amber-800 border-amber-200" });
+    labels.push({ label: "Dinkel", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
   }
   if (hatWeizen) {
-    labels.push({ label: "Weizen", color: "bg-yellow-100 text-yellow-900 border-yellow-300" });
+    labels.push({ label: "Weizen", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
   }
   if (hatHafer) {
-    labels.push({ label: "Hafer", color: "bg-amber-100 text-amber-900 border-amber-300" });
+    labels.push({ label: "Hafer", color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });
   }
 
   return labels.slice(0, 3).sort((a, b) => b.label.length - a.label.length);
@@ -131,7 +119,8 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       href={`/recipes/${recipe.id}`}
       className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 group active:scale-[0.98]"
     >
-      <div className="h-64 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
+      {/* Bild */}
+      <div className="h-56 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
         <Image
           src={imageSrc}
           alt={recipe.title}
@@ -140,80 +129,75 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
         />
+        {/* Herz oben rechts auf dem Bild */}
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
+          className="absolute top-3 right-3 z-10 p-2 bg-white/20 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
+        >
+          <Heart size={16} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
+        </button>
+      </div>
 
-        {/* Gradient oben */}
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/65 to-transparent pointer-events-none" />
+      {/* Card Body */}
+      <div className="px-4 pb-3 pt-3 flex-1 flex flex-col gap-3">
 
-        {/* Gradient unten */}
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-
-        {/* Titel + Herz oben */}
-        <div className="absolute top-0 inset-x-0 flex items-start justify-between gap-2 p-4 z-10">
-          <h3 className="text-[15px] font-semibold text-white leading-snug drop-shadow line-clamp-2">
-            {recipe.title}
-          </h3>
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
-            className="flex-shrink-0 p-1.5 bg-white/15 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
-          >
-            <Heart size={18} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
-          </button>
-        </div>
-
-        {/* Badges unten */}
-        <div className="absolute bottom-0 inset-x-0 flex flex-wrap gap-1.5 p-3 z-10">
+        {/* Badges */}
+        <div className="flex flex-wrap gap-1.5">
           {labels.map((tag, i) => (
-            <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm border ${tag.color}`}>
+            <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${tag.color}`}>
               {tag.label}
             </span>
           ))}
         </div>
-      </div>
 
-      <div className="px-6 pb-2 pt-4 flex-1 flex flex-col">
-        <div className="bg-[#F9F9F9] dark:bg-gray-900/40 rounded-2xl p-3 mb-6">
-          <div className="flex flex-col gap-3 text-sm text-gray-500 dark:text-gray-400">
-            <div className="flex items-center gap-3">
-              <Clock size={16} className="text-[#8B7355] dark:text-[#A68B6A]" /> {stats.timeString}
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Layers size={16} className="text-[#8B7355] dark:text-[#A68B6A]" /> {stats.totalSteps} Schritte
-              </div>
-              {stats.hydration !== null && (
-                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-500 dark:text-blue-400">
-                  <Droplets size={13} />
-                  {stats.hydration}%
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Titel */}
+        <h3 className="text-xl font-black text-gray-900 dark:text-white leading-tight line-clamp-2">
+          {recipe.title}
+        </h3>
+
+        {/* Stats — eine Zeile */}
+        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-auto">
+          <span className="flex items-center gap-1.5">
+            <Clock size={13} className="text-[#8B7355] dark:text-[#A68B6A]" />
+            {stats.timeString}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Layers size={13} className="text-[#8B7355] dark:text-[#A68B6A]" />
+            {stats.totalSteps} Schritte
+          </span>
+          {stats.hydration !== null && (
+            <span className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-bold ml-auto">
+              <Droplets size={12} />
+              {stats.hydration}%
+            </span>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mt-auto">
+        {/* Buttons */}
+        <div className="grid grid-cols-2 gap-2">
           <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-            <Utensils size={14} /> Details
+            <Utensils size={13} /> Details
           </div>
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
             className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/10 dark:bg-[#8B7355]/20 text-[#8B7355] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/20 dark:border-[#8B7355]/30 hover:bg-[#8B7355] hover:text-white transition-all"
           >
-            <Clock size={14} /> Planen
+            <Clock size={13} /> Planen
           </button>
         </div>
+
+        {/* Quelle */}
         {(() => {
           const url = recipe.original_source_url || recipe.source_url;
           try {
-            return (
-              <div className="text-right mt-2 mb-2 h-4">
-                {url ? (
-                  <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">
-                    {new URL(url).hostname.replace('www.', '')}
-                  </span>
-                ) : null}
+            return url ? (
+              <div className="text-right h-3">
+                <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">
+                  {new URL(url).hostname.replace('www.', '')}
+                </span>
               </div>
-            );
-          } catch { return <div className="mt-2 mb-2 h-4" />; }
+            ) : <div className="h-3" />;
+          } catch { return <div className="h-3" />; }
         })()}
       </div>
     </Link>
