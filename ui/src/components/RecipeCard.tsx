@@ -95,45 +95,37 @@ const getRecipeLabels = (recipe: any) => {
 
 // Badge-Zeile: eine Zeile, überlaufende als +X
 function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [visibleCount, setVisibleCount] = useState(labels.length);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState<number | null>(null);
 
   const measure = useCallback(() => {
-    const container = containerRef.current;
-    if (!container || labels.length === 0) return;
-    const containerWidth = container.offsetWidth;
-    const gap = 6; // gap-1.5 = 6px
-    const plusWidth = 36; // geschätzte Breite "+X" Badge
-    let used = 0;
+    const row = rowRef.current;
+    if (!row || labels.length === 0) return;
+    const children = Array.from(row.children) as HTMLElement[];
+    if (children.length === 0) return;
+    const firstTop = children[0].getBoundingClientRect().top;
     let count = 0;
-    const children = Array.from(container.children) as HTMLElement[];
-    for (let i = 0; i < Math.min(children.length, labels.length); i++) {
-      const w = children[i].offsetWidth;
-      const needed = used + (count > 0 ? gap : 0) + w;
-      const remainingForPlus = labels.length > count + 1 ? gap + plusWidth : 0;
-      if (needed + remainingForPlus <= containerWidth) {
-        used = needed;
-        count++;
-      } else {
-        break;
-      }
+    for (const child of children) {
+      if (Math.abs(child.getBoundingClientRect().top - firstTop) < 4) count++;
+      else break;
     }
-    setVisibleCount(count || 1);
+    setVisibleCount(count);
   }, [labels]);
 
   useLayoutEffect(() => {
     measure();
     const ro = new ResizeObserver(measure);
-    if (containerRef.current) ro.observe(containerRef.current);
+    if (rowRef.current) ro.observe(rowRef.current);
     return () => ro.disconnect();
   }, [measure]);
 
-  const hidden = labels.length - visibleCount;
+  const visible = visibleCount ?? labels.length;
+  const hidden = labels.length - visible;
 
   return (
-    <div className="flex items-center gap-1.5 overflow-hidden" style={{ height: '1.625rem' }}>
-      {/* Unsichtbare Messreihe */}
-      <div ref={containerRef} className="flex items-center gap-1.5 absolute opacity-0 pointer-events-none" style={{ whiteSpace: 'nowrap' }}>
+    <div className="relative" style={{ height: '1.625rem', overflow: 'hidden' }}>
+      {/* Alle Badges unsichtbar im Flow rendern zum Messen */}
+      <div ref={rowRef} className="flex flex-wrap gap-1.5 absolute inset-0" style={{ visibility: 'hidden' }}>
         {labels.map((tag, i) => (
           <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${tag.color}`}>
             {tag.label}
@@ -141,16 +133,18 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
         ))}
       </div>
       {/* Sichtbare Badges */}
-      {labels.slice(0, visibleCount).map((tag, i) => (
-        <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 ${tag.color}`}>
-          {tag.label}
-        </span>
-      ))}
-      {hidden > 0 && (
-        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600">
-          +{hidden}
-        </span>
-      )}
+      <div className="flex gap-1.5">
+        {labels.slice(0, visible).map((tag, i) => (
+          <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 ${tag.color}`}>
+            {tag.label}
+          </span>
+        ))}
+        {hidden > 0 && (
+          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600">
+            +{hidden}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
