@@ -118,7 +118,7 @@ const getRecipeLabels = (recipe: any) => {
     labels.push({ label: "Hafer", color: "bg-stone-100 text-stone-700 border-stone-200" });
   }
 
-  return labels.slice(0, 3);
+  return labels.slice(0, 3).sort((a, b) => b.label.length - a.label.length);
 };
 
 export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeCardProps) {
