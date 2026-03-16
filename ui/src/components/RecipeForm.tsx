@@ -327,11 +327,22 @@ export default function RecipeForm({
                         <div key={`step-${sIdx}-${stIdx}`} className="flex gap-3 p-4 bg-white dark:bg-gray-700 rounded-2xl border border-gray-50 dark:border-gray-600 shadow-sm relative group/step">
                           <div className="flex-1 space-y-2">
                             <textarea 
-                              className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100"
+                              className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100 overflow-hidden"
                               rows={1}
                               placeholder="Schritt..."
                               value={step.instruction}
                               onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
+                              onInput={(e) => {
+                                const el = e.currentTarget;
+                                el.style.height = 'auto';
+                                el.style.height = el.scrollHeight + 'px';
+                              }}
+                              ref={(el) => {
+                                if (el) {
+                                  el.style.height = 'auto';
+                                  el.style.height = el.scrollHeight + 'px';
+                                }
+                              }}
                             />
                             <div className="flex gap-2">
                               <select 
