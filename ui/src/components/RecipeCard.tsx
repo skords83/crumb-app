@@ -133,14 +133,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       href={`/recipes/${recipe.id}`}
       className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 group active:scale-[0.98]"
     >
-      <button
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
-        className="absolute top-4 right-4 z-20 p-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-transform hover:scale-110"
-      >
-        <Heart size={18} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-gray-400 dark:text-gray-500'}`} />
-      </button>
-
-      <div className="h-64 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
+      <div className="h-64 overflow-hidden relative bg-gray-100 dark:bg-gray-700">
         <Image
           src={imageSrc}
           alt={recipe.title}
@@ -149,20 +142,37 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
           className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
         />
-        <div className="absolute top-6 left-6 flex flex-wrap gap-2 pr-14 z-10">
+
+        {/* Gradient oben */}
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/65 to-transparent pointer-events-none" />
+
+        {/* Gradient unten */}
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+
+        {/* Titel + Herz oben */}
+        <div className="absolute top-0 inset-x-0 flex items-start justify-between gap-2 p-4 z-10">
+          <h3 className="text-[15px] font-semibold text-white leading-snug drop-shadow line-clamp-2">
+            {recipe.title}
+          </h3>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
+            className="flex-shrink-0 p-1.5 bg-white/15 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
+          >
+            <Heart size={18} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
+          </button>
+        </div>
+
+        {/* Badges unten */}
+        <div className="absolute bottom-0 inset-x-0 flex flex-wrap gap-1.5 p-3 z-10">
           {labels.map((tag, i) => (
-            <span key={i} className={`backdrop-blur-md px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm border ${tag.color}`}>
+            <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm border ${tag.color}`}>
               {tag.label}
             </span>
           ))}
         </div>
       </div>
 
-      <div className="px-6 pb-2 pt-2 flex-1 flex flex-col">
-        <h3 className="text-xl font-bold mt-4 mb-4 text-gray-800 dark:text-gray-100 tracking-tight break-words hyphens-auto line-clamp-2 min-h-[3.5rem]">
-          {recipe.title}
-        </h3>
-
+      <div className="px-6 pb-2 pt-4 flex-1 flex flex-col">
         <div className="bg-[#F9F9F9] dark:bg-gray-900/40 rounded-2xl p-3 mb-6">
           <div className="flex flex-col gap-3 text-sm text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-3">
