@@ -43,37 +43,30 @@ const getRecipeLabels = (recipe: any) => {
 
   const st = "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]";
 
-  // Nur der Inhalt von Sauerteig/Anstellgut-Phasen entscheidet über den Typ —
-  // nicht das Mehl im Hauptteig (z.B. Hafer im Hauptteig ≠ Hafersauerteig).
-  const starterSections = (recipe.dough_sections || []).filter((s: any) => {
-    const n = (s.name || "").toLowerCase();
-    return n.includes("sauerteig") || n.includes("anstellgut") || n.includes("lievito") || n.includes("starter");
-  });
-  // Wenn keine explizite Starter-Phase gefunden: Fallback auf Anstellgut-Zutaten im Gesamtcontent
-  const starterContent = starterSections.length > 0
-    ? JSON.stringify(starterSections).toLowerCase()
-    : (() => {
-        // Alle Zutaten-Namen durchsuchen die explizit auf Anstellgut hinweisen
-        const allIngredients = (recipe.dough_sections || []).flatMap((s: any) => s.ingredients || []);
-        const starterIngs = allIngredients.filter((ing: any) =>
-          /anstellgut|starter|sauerteig|lievito/.test((ing.name || "").toLowerCase())
-        );
-        return JSON.stringify(starterIngs).toLowerCase();
-      })();
+  // Den Sauerteig-Typ aus dem Anstellgut ableiten — nicht aus dem Phasennamen
+  // oder dem Mehl im Hauptteig. "Hafersauerteig" als Phasenname bedeutet nur
+  // was dabei entsteht; entscheidend ist was der User im Kühlschrank braucht.
+  const allIngredients = (recipe.dough_sections || []).flatMap((s: any) => s.ingredients || []);
+  const anstellgutZutat = allIngredients.find((ing: any) =>
+    /anstellgut|starter|lievito/.test((ing.name || "").toLowerCase())
+  );
+  const anstellgutName = (anstellgutZutat?.name || "").toLowerCase();
 
   const getSauerteigLabel = (): { label: string; color: string } => {
     // Lievito Madre hat Vorrang
     if (hatLM) return { label: "Lievito Madre", color: st };
-    // Explizite Sauerteig-Typ-Namen im Gesamtcontent (Rezepttitel, Phasennamen etc.)
+    // Anstellgut-Zutat auswerten — das ist die Quelle der Wahrheit
+    if (anstellgutName) {
+      if (anstellgutName.includes("roggen")) return { label: "Roggensauerteig", color: st };
+      if (anstellgutName.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
+      if (anstellgutName.includes("weizen")) return { label: "Weizensauerteig", color: st };
+      if (anstellgutName.includes("hafer")) return { label: "Hafersauerteig", color: st };
+    }
+    // Fallback: expliziter Typ im Phasennamen oder Rezepttitel
     if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig")) return { label: "Roggensauerteig", color: st };
     if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig")) return { label: "Dinkelsauerteig", color: st };
     if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) return { label: "Weizensauerteig", color: st };
     if (content.includes("hafersauerteig") || content.includes("hafer-sauerteig")) return { label: "Hafersauerteig", color: st };
-    // Mehl-Heuristik: NUR im Starter-Content, nicht im Gesamtrezept
-    if (starterContent.includes("roggen")) return { label: "Roggensauerteig", color: st };
-    if (starterContent.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
-    if (starterContent.includes("weizenmehl") || starterContent.includes("weizen")) return { label: "Weizensauerteig", color: st };
-    if (starterContent.includes("hafer")) return { label: "Hafersauerteig", color: st };
     return { label: "Sauerteig", color: st };
   };
 
