@@ -221,22 +221,22 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
         <BadgeRow labels={labels} />
 
         {/* Stats Bar — Variant D */}
-        <div className="flex items-center bg-gray-50 dark:bg-white/[0.04] rounded-xl px-3 py-2">
-          <div className="flex items-center justify-center gap-1.5 flex-1">
+        <div className="flex items-center bg-gray-50 dark:bg-white/[0.04] rounded-xl px-2 py-2">
+          <div className="flex items-center justify-center gap-1.5 flex-[2] min-w-0">
             <Clock size={14} className="text-[#8B7355] dark:text-[#A68B6A] flex-shrink-0" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200 leading-none">{stats.timeString}</span>
+            <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 leading-none truncate">{stats.timeString}</span>
           </div>
-          <div className="w-px self-center h-3.5 bg-gray-200 dark:bg-white/10 flex-shrink-0 mx-0.5" />
-          <div className="flex items-center justify-center gap-1.5 flex-1">
+          <div className="w-px self-center h-3.5 bg-gray-300 dark:bg-white/20 flex-shrink-0" />
+          <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
             <Layers size={14} className="text-[#8B7355] dark:text-[#A68B6A] flex-shrink-0" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200 leading-none">{stats.totalSteps}</span>
+            <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 leading-none">{stats.totalSteps}</span>
           </div>
           {stats.hydration !== null && (
             <>
-              <div className="w-px self-center h-3.5 bg-gray-200 dark:bg-white/10 flex-shrink-0 mx-0.5" />
-              <div className="flex items-center justify-center gap-1.5 flex-1">
+              <div className="w-px self-center h-3.5 bg-gray-300 dark:bg-white/20 flex-shrink-0" />
+              <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
                 <Droplets size={14} className="text-blue-500 dark:text-blue-400 flex-shrink-0" />
-                <span className="text-sm font-bold text-blue-500 dark:text-blue-400 leading-none">{stats.hydration}%</span>
+                <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400 leading-none">{stats.hydration}%</span>
               </div>
             </>
           )}
