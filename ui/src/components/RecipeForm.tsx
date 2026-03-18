@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { 
   Save, 
   Trash2, 
@@ -10,7 +10,8 @@ import {
   Edit3, 
   Type, 
   Thermometer as TempIcon,
-  Images
+  Images,
+  GripVertical,
 } from 'lucide-react';
 import ImageSelectModal from '@/components/ImageSelectModal';
 
@@ -85,6 +86,17 @@ export default function RecipeForm({
   const removeStepFromSection = (sIdx: number, stIdx: number) => {
     const newS = [...doughSections];
     newS[sIdx].steps = newS[sIdx].steps.filter((_: any, i: number) => i !== stIdx);
+    setDoughSections(newS);
+  };
+
+  // Schritt innerhalb einer Phase verschieben
+  const reorderStep = (sIdx: number, fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    const newS = [...doughSections];
+    const steps = [...newS[sIdx].steps];
+    const [moved] = steps.splice(fromIdx, 1);
+    steps.splice(toIdx, 0, moved);
+    newS[sIdx].steps = steps;
     setDoughSections(newS);
   };
 
@@ -289,7 +301,6 @@ export default function RecipeForm({
                             }} className="text-gray-300 dark:text-gray-500 hover:text-red-400"><Trash2 size={14} /></button>
                           </div>
                           <div className="flex gap-2">
-                            {/* FIX: text-[9px] → text-xs */}
                             <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-100/30 dark:border-blue-800/30">
                               <TempIcon size={11} />
                               <input
@@ -299,7 +310,6 @@ export default function RecipeForm({
                                 onChange={(e) => updateIngredient(sIdx, iIdx, 'temperature', e.target.value)}
                               />
                             </div>
-                            {/* FIX: text-[9px] → text-xs */}
                             <input
                               placeholder="Notiz..."
                               className="text-xs bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 px-2 py-1 rounded-md flex-1 outline-none border border-gray-100 dark:border-gray-500"
@@ -316,169 +326,16 @@ export default function RecipeForm({
                   {/* SCHRITTE */}
                   <div className="lg:col-span-7 space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8B7355]">Ablauf</p>
-                    <div className="space-y-3">
-                      {section.steps?.map((step: any, stIdx: number) => {
-                        // Normalisieren: scraper liefert manchmal undefined/null → default 'Aktion'
-                        const stepType: 'Aktion' | 'Warten' | 'Backen' =
-                          step.type === 'Warten' ? 'Warten'
-                          : step.type === 'Backen' ? 'Backen'
-                          : 'Aktion';
-                        return (
-                        <div key={`step-${sIdx}-${stIdx}`} className="flex gap-3 p-4 bg-white dark:bg-gray-700 rounded-2xl border border-gray-50 dark:border-gray-600 shadow-sm relative group/step">
-                          <div className="flex-1 space-y-2">
-                            <textarea 
-                              className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100 overflow-hidden"
-                              rows={1}
-                              placeholder="Schritt..."
-                              value={step.instruction}
-                              onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
-                              onInput={(e) => {
-                                const el = e.currentTarget;
-                                el.style.height = 'auto';
-                                el.style.height = el.scrollHeight + 'px';
-                              }}
-                              ref={(el) => {
-                                if (el) {
-                                  el.style.height = 'auto';
-                                  el.style.height = el.scrollHeight + 'px';
-                                }
-                              }}
-                            />
-                            <div className="flex gap-2">
-                              <select 
-                                className={`text-xs font-black uppercase px-2 py-1 rounded-md border outline-none ${
-                                  stepType === 'Backen'
-                                    ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800'
-                                    : stepType === 'Aktion'
-                                    ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800'
-                                    : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800'
-                                }`}
-                                value={stepType}
-                                onChange={(e) => updateStepInSection(sIdx, stIdx, 'type', e.target.value)}
-                              >
-                                <option value="Aktion">Aktion</option>
-                                <option value="Warten">Warten</option>
-                                <option value="Backen">Backen</option>
-                              </select>
-                              {(() => {
-                                const THRESHOLD = 120; // unter 120 Min → Minuten, sonst Stunden
-                                const toDisplay = (mins: number) => mins >= THRESHOLD
-                                  ? { value: parseFloat((mins / 60).toFixed(1)), unit: 'Std' as const }
-                                  : { value: mins, unit: 'Min' as const };
-                                const toMins = (val: number, unit: 'Min' | 'Std') =>
-                                  unit === 'Std' ? Math.round(val * 60) : val;
-                                const isRange = step.duration_min !== undefined && step.duration_max !== undefined;
-                                const dispMin = isRange ? toDisplay(step.duration_min) : toDisplay(step.duration);
-                                const dispMax = isRange ? toDisplay(step.duration_max) : null;
-                                // Einheit: wenn eines der beiden Stunden ist → beide Stunden
-                                const unit = (isRange ? dispMin.unit === 'Std' || dispMax!.unit === 'Std' : dispMin.unit === 'Std') ? 'Std' : 'Min';
-                                const toggleUnit = () => {
-                                  const newUnit = unit === 'Min' ? 'Std' : 'Min';
-                                  if (isRange) {
-                                    const newMin = newUnit === 'Std' ? Math.round(step.duration_min / 60 * 10) / 10 : step.duration_min;
-                                    const newMax = newUnit === 'Std' ? Math.round(step.duration_max / 60 * 10) / 10 : step.duration_max;
-                                    // Werte bleiben in Minuten in DB, nur Display ändert sich → kein State nötig
-                                    // Trick: wir speichern immer Minuten, Display rechnet um
-                                  }
-                                  // Unit-Toggle: nur display, kein extra State – threshold erledigt das
-                                  // Wir forcen Std: duration auf 60+ setzen, Min: auf <120 lassen
-                                  if (!isRange) {
-                                    updateStepInSection(sIdx, stIdx, 'duration',
-                                      newUnit === 'Std' ? Math.max(step.duration, 120) : Math.min(step.duration, 119));
-                                  }
-                                };
-
-                                return (
-                                  <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
-                                    <Clock size={11} />
-                                    {isRange ? (
-                                      <>
-                                        <input
-                                          className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                          type="number"
-                                          step={unit === 'Std' ? 0.5 : 5}
-                                          value={unit === 'Std' ? parseFloat((step.duration_min / 60).toFixed(1)) : step.duration_min}
-                                          onChange={(e) => {
-                                            const mins = toMins(parseFloat(e.target.value) || 0, unit);
-                                            updateStepInSection(sIdx, stIdx, 'duration_min', mins);
-                                            updateStepInSection(sIdx, stIdx, 'duration', Math.round((mins + step.duration_max) / 2));
-                                          }}
-                                        />
-                                        <span className="text-gray-300 dark:text-gray-500">–</span>
-                                        <input
-                                          className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                          type="number"
-                                          step={unit === 'Std' ? 0.5 : 5}
-                                          value={unit === 'Std' ? parseFloat((step.duration_max / 60).toFixed(1)) : step.duration_max}
-                                          onChange={(e) => {
-                                            const mins = toMins(parseFloat(e.target.value) || 0, unit);
-                                            updateStepInSection(sIdx, stIdx, 'duration_max', mins);
-                                            updateStepInSection(sIdx, stIdx, 'duration', Math.round((step.duration_min + mins) / 2));
-                                          }}
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => updateStepInSection(sIdx, stIdx, 'duration_min',
-                                            unit === 'Std' ? Math.max(step.duration_min, 120) : Math.min(step.duration_min, 119))}
-                                          className="text-[10px] font-black text-gray-400 dark:text-gray-300 hover:text-[#8B7355] transition-colors px-1 rounded"
-                                          title={`Zu ${unit === 'Std' ? 'Minuten' : 'Stunden'} wechseln`}
-                                        >{unit}</button>
-                                        <button
-                                          type="button"
-                                          title="Zurück zu fester Dauer"
-                                          onClick={() => {
-                                            const avg = Math.round(((step.duration_min ?? 0) + (step.duration_max ?? 0)) / 2);
-                                            updateStepInSection(sIdx, stIdx, 'duration', avg || step.duration);
-                                            updateStepInSection(sIdx, stIdx, 'duration_min', undefined);
-                                            updateStepInSection(sIdx, stIdx, 'duration_max', undefined);
-                                          }}
-                                          className="text-[10px] font-black text-gray-300 hover:text-red-400 transition-colors leading-none"
-                                        >✕</button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <input
-                                          className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
-                                          type="number"
-                                          step={unit === 'Std' ? 0.5 : 5}
-                                          value={unit === 'Std' ? parseFloat((step.duration / 60).toFixed(1)) : step.duration}
-                                          onChange={(e) => {
-                                            const mins = toMins(parseFloat(e.target.value) || 0, unit);
-                                            updateStepInSection(sIdx, stIdx, 'duration', mins);
-                                          }}
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => updateStepInSection(sIdx, stIdx, 'duration',
-                                            unit === 'Std' ? Math.max(step.duration, 120) : Math.min(step.duration, 119))}
-                                          className="text-[10px] font-black text-gray-400 dark:text-gray-300 hover:text-[#8B7355] transition-colors px-1 rounded"
-                                          title={`Zu ${unit === 'Std' ? 'Minuten' : 'Stunden'} wechseln`}
-                                        >{unit}</button>
-                                        <button
-                                          type="button"
-                                          title="Zeitfenster festlegen"
-                                          onClick={() => {
-                                            updateStepInSection(sIdx, stIdx, 'duration_min', step.duration);
-                                            updateStepInSection(sIdx, stIdx, 'duration_max', step.duration);
-                                          }}
-                                          className="text-[10px] font-black text-gray-300 hover:text-[#8B7355] transition-colors leading-none"
-                                        >±</button>
-                                      </>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                          <button type="button" onClick={() => removeStepFromSection(sIdx, stIdx)} className="text-gray-300 dark:text-gray-500 hover:text-red-400 self-start"><Trash2 size={14} /></button>
-                        </div>
-                        );
-                      })}
-                      {/* FIX: text-[9px] → text-xs */}
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>
-                        <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Warten</button>
-                      </div>
+                    <StepList
+                      sIdx={sIdx}
+                      steps={section.steps || []}
+                      updateStepInSection={updateStepInSection}
+                      removeStepFromSection={removeStepFromSection}
+                      reorderStep={reorderStep}
+                    />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>
+                      <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Warten</button>
                     </div>
                   </div>
                 </div>
@@ -509,5 +366,203 @@ export default function RecipeForm({
         />
       )}
     </form>
+  );
+}
+
+// ─── StepList: verwaltet Drag & Drop State isoliert pro Phase ───────────────
+
+function StepList({ sIdx, steps, updateStepInSection, removeStepFromSection, reorderStep }: {
+  sIdx: number;
+  steps: any[];
+  updateStepInSection: (sIdx: number, stIdx: number, field: string, value: any) => void;
+  removeStepFromSection: (sIdx: number, stIdx: number) => void;
+  reorderStep: (sIdx: number, from: number, to: number) => void;
+}) {
+  const dragIndex = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  return (
+    <div className="space-y-3">
+      {steps.map((step: any, stIdx: number) => {
+        const stepType: 'Aktion' | 'Warten' | 'Backen' =
+          step.type === 'Warten' ? 'Warten'
+          : step.type === 'Backen' ? 'Backen'
+          : 'Aktion';
+
+        const isDragOver = dragOverIndex === stIdx;
+
+        return (
+          <div
+            key={`step-${sIdx}-${stIdx}`}
+            draggable
+            onDragStart={() => { dragIndex.current = stIdx; }}
+            onDragEnd={() => { dragIndex.current = null; setDragOverIndex(null); }}
+            onDragOver={(e) => { e.preventDefault(); setDragOverIndex(stIdx); }}
+            onDragLeave={() => setDragOverIndex(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIndex.current !== null && dragIndex.current !== stIdx) {
+                reorderStep(sIdx, dragIndex.current, stIdx);
+              }
+              setDragOverIndex(null);
+            }}
+            className={`flex gap-3 p-4 bg-white dark:bg-gray-700 rounded-2xl border shadow-sm relative group/step transition-all ${
+              isDragOver
+                ? 'border-[#8B7355] bg-[#8B7355]/5 dark:bg-[#8B7355]/10 scale-[1.01]'
+                : 'border-gray-50 dark:border-gray-600'
+            }`}
+          >
+            {/* Drag Handle */}
+            <div
+              className="flex items-start pt-1 cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-400 transition-colors flex-shrink-0"
+              title="Ziehen zum Umsortieren"
+            >
+              <GripVertical size={16} />
+            </div>
+
+            <div className="flex-1 space-y-2">
+              <textarea 
+                className="w-full bg-transparent dark:bg-transparent text-sm font-semibold outline-none resize-none leading-snug dark:text-gray-100 overflow-hidden"
+                rows={1}
+                placeholder="Schritt..."
+                value={step.instruction}
+                onChange={(e) => updateStepInSection(sIdx, stIdx, 'instruction', e.target.value)}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.style.height = 'auto';
+                  el.style.height = el.scrollHeight + 'px';
+                }}
+                ref={(el) => {
+                  if (el) {
+                    el.style.height = 'auto';
+                    el.style.height = el.scrollHeight + 'px';
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <select 
+                  className={`text-xs font-black uppercase px-2 py-1 rounded-md border outline-none ${
+                    stepType === 'Backen'
+                      ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800'
+                      : stepType === 'Aktion'
+                      ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800'
+                      : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800'
+                  }`}
+                  value={stepType}
+                  onChange={(e) => updateStepInSection(sIdx, stIdx, 'type', e.target.value)}
+                >
+                  <option value="Aktion">Aktion</option>
+                  <option value="Warten">Warten</option>
+                  <option value="Backen">Backen</option>
+                </select>
+                {(() => {
+                  const THRESHOLD = 120;
+                  const toDisplay = (mins: number) => mins >= THRESHOLD
+                    ? { value: parseFloat((mins / 60).toFixed(1)), unit: 'Std' as const }
+                    : { value: mins, unit: 'Min' as const };
+                  const toMins = (val: number, unit: 'Min' | 'Std') =>
+                    unit === 'Std' ? Math.round(val * 60) : val;
+                  const isRange = step.duration_min !== undefined && step.duration_max !== undefined;
+                  const dispMin = isRange ? toDisplay(step.duration_min) : toDisplay(step.duration);
+                  const dispMax = isRange ? toDisplay(step.duration_max) : null;
+                  const unit = (isRange ? dispMin.unit === 'Std' || dispMax!.unit === 'Std' : dispMin.unit === 'Std') ? 'Std' : 'Min';
+                  const toggleUnit = () => {
+                    if (!isRange) {
+                      updateStepInSection(sIdx, stIdx, 'duration',
+                        unit === 'Std' ? Math.max(step.duration, 120) : Math.min(step.duration, 119));
+                    }
+                  };
+
+                  return (
+                    <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-600 px-2 py-1 rounded-md border border-gray-100 dark:border-gray-500 text-xs font-black text-gray-400 dark:text-gray-300">
+                      <Clock size={11} />
+                      {isRange ? (
+                        <>
+                          <input
+                            className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                            type="number"
+                            step={unit === 'Std' ? 0.5 : 5}
+                            value={unit === 'Std' ? parseFloat((step.duration_min / 60).toFixed(1)) : step.duration_min}
+                            onChange={(e) => {
+                              const mins = toMins(parseFloat(e.target.value) || 0, unit);
+                              updateStepInSection(sIdx, stIdx, 'duration_min', mins);
+                              updateStepInSection(sIdx, stIdx, 'duration', Math.round((mins + step.duration_max) / 2));
+                            }}
+                          />
+                          <span className="text-gray-300 dark:text-gray-500">–</span>
+                          <input
+                            className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                            type="number"
+                            step={unit === 'Std' ? 0.5 : 5}
+                            value={unit === 'Std' ? parseFloat((step.duration_max / 60).toFixed(1)) : step.duration_max}
+                            onChange={(e) => {
+                              const mins = toMins(parseFloat(e.target.value) || 0, unit);
+                              updateStepInSection(sIdx, stIdx, 'duration_max', mins);
+                              updateStepInSection(sIdx, stIdx, 'duration', Math.round((step.duration_min + mins) / 2));
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={toggleUnit}
+                            className="text-[10px] font-black text-gray-400 dark:text-gray-300 hover:text-[#8B7355] transition-colors px-1 rounded"
+                            title={`Zu ${unit === 'Std' ? 'Minuten' : 'Stunden'} wechseln`}
+                          >{unit}</button>
+                          <button
+                            type="button"
+                            title="Zurück zu fester Dauer"
+                            onClick={() => {
+                              const avg = Math.round(((step.duration_min ?? 0) + (step.duration_max ?? 0)) / 2);
+                              updateStepInSection(sIdx, stIdx, 'duration', avg || step.duration);
+                              updateStepInSection(sIdx, stIdx, 'duration_min', undefined);
+                              updateStepInSection(sIdx, stIdx, 'duration_max', undefined);
+                            }}
+                            className="text-[10px] font-black text-gray-300 hover:text-red-400 transition-colors leading-none"
+                          >✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
+                            type="number"
+                            step={unit === 'Std' ? 0.5 : 5}
+                            value={unit === 'Std' ? parseFloat((step.duration / 60).toFixed(1)) : step.duration}
+                            onChange={(e) => {
+                              const mins = toMins(parseFloat(e.target.value) || 0, unit);
+                              updateStepInSection(sIdx, stIdx, 'duration', mins);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={toggleUnit}
+                            className="text-[10px] font-black text-gray-400 dark:text-gray-300 hover:text-[#8B7355] transition-colors px-1 rounded"
+                            title={`Zu ${unit === 'Std' ? 'Minuten' : 'Stunden'} wechseln`}
+                          >{unit}</button>
+                          <button
+                            type="button"
+                            title="Zeitfenster festlegen"
+                            onClick={() => {
+                              updateStepInSection(sIdx, stIdx, 'duration_min', step.duration);
+                              updateStepInSection(sIdx, stIdx, 'duration_max', step.duration);
+                            }}
+                            className="text-[10px] font-black text-gray-300 hover:text-[#8B7355] transition-colors leading-none"
+                          >±</button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => removeStepFromSection(sIdx, stIdx)}
+              className="text-gray-300 dark:text-gray-500 hover:text-red-400 self-start"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
