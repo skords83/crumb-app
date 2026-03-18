@@ -537,16 +537,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* FOOTER ACTION */}
-        <div className="no-print p-8 bg-gray-50/50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-center pb-28">
-          <button
-            onClick={() => setShowPlanModal(true)}
-            className="flex items-center gap-3 bg-[#8B4513] text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-[#6F360F] transition-all transform hover:-translate-y-0.5 active:translate-y-0"
-          >
-            <Icons.Calendar size={18} /> In den Backplan aufnehmen
-          </button>
-        </div>
-
         {/* STICKY BOTTOM BAR */}
         <div className="no-print fixed bottom-0 left-0 right-0 z-40 px-4 pb-4 pt-3 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">
