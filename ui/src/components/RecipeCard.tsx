@@ -37,11 +37,15 @@ const getRecipeLabels = (recipe: any) => {
   const labels: { label: string; color: string }[] = [];
 
   // --- 1. Triebmittel ---
-  const hatSauerteig = content.includes("sauerteig") || content.includes("anstellgut") || content.includes("lievito madre");
+  const hatLM = content.includes("lievito madre");
+  const hatSauerteig = content.includes("sauerteig") || content.includes("anstellgut") || hatLM;
   const hatHefe = /\b(hefe|trockenhefe|frischhefe|wildhefe)\b/.test(content);
 
+  const st = "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]";
+
   const getSauerteigLabel = (): { label: string; color: string } => {
-    const st = "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]";
+    // Lievito Madre hat Vorrang vor allen anderen Heuristiken
+    if (hatLM) return { label: "Lievito Madre", color: st };
     if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig")) return { label: "Roggensauerteig", color: st };
     if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig")) return { label: "Dinkelsauerteig", color: st };
     if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) return { label: "Weizensauerteig", color: st };
@@ -54,11 +58,13 @@ const getRecipeLabels = (recipe: any) => {
   };
 
   if (hatSauerteig && hatHefe) {
-    labels.push({ label: "Gemischt", color: "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]" });
+    // Sauerteig-Typ bestimmen, dann "+ Hefe" anhängen
+    const stLabel = getSauerteigLabel();
+    labels.push({ label: `${stLabel.label} + Hefe`, color: st });
   } else if (hatSauerteig) {
     labels.push(getSauerteigLabel());
   } else if (hatHefe) {
-    labels.push({ label: "Hefe", color: "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]" });
+    labels.push({ label: "Hefe", color: st });
   }
 
   // --- 2. Urkorn ---
@@ -93,10 +99,12 @@ const getRecipeLabels = (recipe: any) => {
   return labels;
 };
 
-// Badge-Zeile: eine Zeile, überlaufende als +X
+// Badge-Zeile: eine Zeile, überlaufende als +X mit Tooltip
 function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState<number>(labels.length);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const measure = useCallback(() => {
     requestAnimationFrame(() => {
@@ -110,12 +118,11 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
         if (child.offsetTop === firstTop) count++;
         else break;
       }
-      // Wenn nicht alle passen: prüfe ob der letzte in Zeile 1 noch Platz für +X lässt
       if (count < labels.length && count > 0) {
         const containerWidth = row.offsetWidth;
         const lastVisible = children[count - 1];
         const usedWidth = lastVisible.offsetLeft + lastVisible.offsetWidth;
-        const plusWidth = 42; // +X Badge ca. 42px
+        const plusWidth = 42;
         const gap = 6;
         if (usedWidth + gap + plusWidth > containerWidth) {
           count = Math.max(1, count - 1);
@@ -135,11 +142,24 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
     return () => ro.disconnect();
   }, [measure]);
 
+  // Tooltip schließen bei Klick außerhalb
+  useEffect(() => {
+    if (!tooltipOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(e.target as Node)) {
+        setTooltipOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [tooltipOpen]);
+
   const hidden = labels.length - visibleCount;
+  const hiddenLabels = labels.slice(visibleCount);
 
   return (
     <div className="relative" style={{ height: '1.625rem' }}>
-      {/* Messreihe: flex-wrap im Flow, aber unsichtbar */}
+      {/* Messreihe: unsichtbar für Layout-Berechnung */}
       <div
         ref={rowRef}
         className="flex flex-wrap gap-1.5 absolute inset-x-0 top-0"
@@ -155,17 +175,46 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
           </span>
         ))}
       </div>
+
       {/* Sichtbare Badges */}
       <div className="flex gap-1.5 absolute inset-x-0 top-0">
         {labels.slice(0, visibleCount).map((tag, i) => (
-          <span key={i} className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 ${tag.color}`}>
+          <span
+            key={i}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 ${tag.color}`}
+          >
             {tag.label}
           </span>
         ))}
+
         {hidden > 0 && (
-          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600">
-            +{hidden}
-          </span>
+          <div ref={tooltipRef} className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTooltipOpen(o => !o); }}
+              onMouseEnter={() => setTooltipOpen(true)}
+              onMouseLeave={() => setTooltipOpen(false)}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              +{hidden}
+            </button>
+
+            {tooltipOpen && (
+              <div
+                className="absolute bottom-full left-0 mb-2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg p-2 flex flex-col gap-1.5 min-w-max"
+                onMouseEnter={() => setTooltipOpen(true)}
+                onMouseLeave={() => setTooltipOpen(false)}
+              >
+                {hiddenLabels.map((tag, i) => (
+                  <span
+                    key={i}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${tag.color}`}
+                  >
+                    {tag.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -217,7 +266,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       {/* Card Body */}
       <div className="px-4 pb-0 pt-3 flex-1 flex flex-col gap-3">
 
-        {/* Badges eine Zeile + X */}
+        {/* Badges eine Zeile + X mit Tooltip */}
         <BadgeRow labels={labels} />
 
         {/* Stats Bar — Variant D */}
