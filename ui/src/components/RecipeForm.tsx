@@ -333,10 +333,7 @@ export default function RecipeForm({
                       removeStepFromSection={removeStepFromSection}
                       reorderStep={reorderStep}
                     />
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Aktion</button>
-                      <button type="button" onClick={() => addStepToSection(sIdx, 'Warten')} className="flex-1 py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Warten</button>
-                    </div>
+                    <button type="button" onClick={() => addStepToSection(sIdx, 'Aktion')} className="w-full py-2 bg-gray-50 dark:bg-gray-600 rounded-xl text-xs font-black uppercase text-gray-400 dark:text-gray-300 hover:text-[#8B7355] border border-transparent dark:border-gray-500 hover:border-[#8B7355]/20">+ Schritt</button>
                   </div>
                 </div>
               </div>
