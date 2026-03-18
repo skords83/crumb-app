@@ -116,8 +116,6 @@ const getRecipeLabels = (recipe: any) => {
 function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState<number>(labels.length);
-  const [tooltipOpen, setTooltipOpen] = useState(false);
-  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const measure = useCallback(() => {
     requestAnimationFrame(() => {
@@ -155,20 +153,7 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
     return () => ro.disconnect();
   }, [measure]);
 
-  // Tooltip schließen bei Klick außerhalb
-  useEffect(() => {
-    if (!tooltipOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (tooltipRef.current && !tooltipRef.current.contains(e.target as Node)) {
-        setTooltipOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [tooltipOpen]);
-
   const hidden = labels.length - visibleCount;
-  const hiddenLabels = labels.slice(visibleCount);
 
   return (
     <div className="relative" style={{ height: '1.625rem' }}>
@@ -199,35 +184,10 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
             {tag.label}
           </span>
         ))}
-
         {hidden > 0 && (
-          <div ref={tooltipRef} className="relative flex-shrink-0">
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTooltipOpen(o => !o); }}
-              onMouseEnter={() => setTooltipOpen(true)}
-              onMouseLeave={() => setTooltipOpen(false)}
-              className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            >
-              +{hidden}
-            </button>
-
-            {tooltipOpen && (
-              <div
-                className="absolute bottom-full left-0 mb-2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg p-2 flex flex-col gap-1.5 min-w-max"
-                onMouseEnter={() => setTooltipOpen(true)}
-                onMouseLeave={() => setTooltipOpen(false)}
-              >
-                {hiddenLabels.map((tag, i) => (
-                  <span
-                    key={i}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${tag.color}`}
-                  >
-                    {tag.label}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border whitespace-nowrap flex-shrink-0 inline-flex items-center bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600">
+            +{hidden}
+          </span>
         )}
       </div>
     </div>
