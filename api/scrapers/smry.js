@@ -197,6 +197,7 @@ const KNOWN_PHASES = {
   'Vorteig':         { is_parallel: true  },
   'Poolish':         { is_parallel: true  },
   'Levain':          { is_parallel: true  },
+  'Mischung':        { is_parallel: true  },
   'Autolyse':        { is_parallel: false },
   'Hauptteig':       { is_parallel: false },
 };
