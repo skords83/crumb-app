@@ -416,9 +416,6 @@ function StepList({ sIdx, steps, updateStepInSection, removeStepFromSection, reo
         return (
           <div
             key={`step-${sIdx}-${stIdx}`}
-            draggable
-            onDragStart={() => { dragIndex.current = stIdx; }}
-            onDragEnd={() => { dragIndex.current = null; setDragOverIndex(null); }}
             onDragOver={(e) => { e.preventDefault(); setDragOverIndex(stIdx); }}
             onDragLeave={() => setDragOverIndex(null)}
             onDrop={(e) => {
@@ -434,8 +431,11 @@ function StepList({ sIdx, steps, updateStepInSection, removeStepFromSection, reo
                 : 'border-gray-50 dark:border-gray-600'
             }`}
           >
-            {/* Drag Handle */}
+            {/* Drag Handle — draggable only here, not on the whole row */}
             <div
+              draggable
+              onDragStart={() => { dragIndex.current = stIdx; }}
+              onDragEnd={() => { dragIndex.current = null; setDragOverIndex(null); }}
               className="flex items-start pt-1 cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-400 transition-colors flex-shrink-0"
               title="Ziehen zum Umsortieren"
             >
@@ -504,7 +504,8 @@ function StepList({ sIdx, steps, updateStepInSection, removeStepFromSection, reo
                             className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
                             type="number"
                             step={unit === 'Std' ? 0.5 : 5}
-                            value={unit === 'Std' ? parseFloat((step.duration_min / 60).toFixed(1)) : step.duration_min}
+                            value={unit === 'Std' ? parseFloat((step.duration_min / 60).toFixed(1)) : step.duration_min || ''}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const mins = toMins(parseFloat(e.target.value) || 0, unit);
                               updateStepInSection(sIdx, stIdx, 'duration_min', mins);
@@ -516,7 +517,8 @@ function StepList({ sIdx, steps, updateStepInSection, removeStepFromSection, reo
                             className="bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
                             type="number"
                             step={unit === 'Std' ? 0.5 : 5}
-                            value={unit === 'Std' ? parseFloat((step.duration_max / 60).toFixed(1)) : step.duration_max}
+                            value={unit === 'Std' ? parseFloat((step.duration_max / 60).toFixed(1)) : step.duration_max || ''}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const mins = toMins(parseFloat(e.target.value) || 0, unit);
                               updateStepInSection(sIdx, stIdx, 'duration_max', mins);
@@ -547,7 +549,8 @@ function StepList({ sIdx, steps, updateStepInSection, removeStepFromSection, reo
                             className="bg-transparent dark:bg-transparent w-10 text-center outline-none text-gray-700 dark:text-gray-200 text-xs"
                             type="number"
                             step={unit === 'Std' ? 0.5 : 5}
-                            value={unit === 'Std' ? parseFloat((step.duration / 60).toFixed(1)) : step.duration}
+                            value={unit === 'Std' ? parseFloat((step.duration / 60).toFixed(1)) : step.duration || ''}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const mins = toMins(parseFloat(e.target.value) || 0, unit);
                               updateStepInSection(sIdx, stIdx, 'duration', mins);
