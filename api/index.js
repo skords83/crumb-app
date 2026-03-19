@@ -11,6 +11,7 @@ const parseHtmlImport = require('./scrapers/smry');
 const { planWithNightWindow } = require('./scrapers/nightWindowPlanner');
 const { v4: uuidv4 } = require('uuid');
 const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
+const { categorizeRecipe } = require('./categorize');
 
 const app = express();
 
@@ -306,7 +307,7 @@ app.post('/api/import/html', async (req, res) => {
 // ============================================================
 app.get('/api/recipes', async (req, res) => {
   try {
-    const { q, filter, sort } = req.query;
+    const { q, category, filter, sort } = req.query;
     const params = [req.user.userId];
     const conditions = ['user_id = $1'];
 
@@ -324,9 +325,16 @@ app.get('/api/recipes', async (req, res) => {
       )`);
     }
 
-    // Filter
-    if (filter) {
-      switch (filter) {
+    // Primärfilter: Produktkategorie (direkte DB-Spalte, schnell via Index)
+    if (category && category !== 'alle') {
+      const idx = params.push(category);
+      conditions.push(`category = $${idx}`);
+    }
+
+    // Sekundärfilter: kombinierbar, kommagetrennt z.B. filter=Sauerteig,Vollkorn
+    const filters = filter ? (Array.isArray(filter) ? filter : filter.split(',')) : [];
+    for (const f of filters) {
+      switch (f.trim()) {
         case 'Favoriten':
           conditions.push('is_favorite = true');
           break;
@@ -341,22 +349,12 @@ app.get('/api/recipes', async (req, res) => {
             )
           )`);
           break;
-        case 'Hefeteig':
+        case 'Hefe':
           conditions.push(`(
-            (title ILIKE '%hefe%' OR description ILIKE '%hefe%'
-              OR EXISTS (
-                SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
-                              jsonb_array_elements(section->'ingredients') AS ing
-                WHERE ing->>'name' ILIKE '%hefe%'
-              )
-            )
-            AND NOT (
-              title ILIKE '%sauerteig%' OR description ILIKE '%sauerteig%'
-              OR EXISTS (
-                SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
-                              jsonb_array_elements(section->'ingredients') AS ing
-                WHERE ing->>'name' ILIKE '%sauerteig%'
-              )
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ~* '\\mhefe\\M|\\mfrischhefe\\M|\\mtrockenhefe\\M'
             )
           )`);
           break;
@@ -370,16 +368,33 @@ app.get('/api/recipes', async (req, res) => {
             )
           )`);
           break;
-        // 'Heute fertig' bleibt clientseitig – braucht Laufzeitberechnung
+        case 'Uebernacht':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'steps') AS step
+              WHERE (step->>'type' = 'Warten') AND (step->>'duration')::int >= 360
+            )
+          )`);
+          break;
+        case 'Schnell':
+          conditions.push(`(
+            (SELECT COALESCE(SUM((step->>'duration')::int), 0)
+             FROM jsonb_array_elements(dough_sections) AS section,
+                  jsonb_array_elements(section->'steps') AS step
+            ) < 240
+          )`);
+          break;
       }
     }
 
     // Sortierung
     const orderMap = {
-      newest:  'created_at DESC',
-      oldest:  'created_at ASC',
-      az:      'title ASC',
-      za:      'title DESC',
+      newest:   'created_at DESC',
+      oldest:   'created_at ASC',
+      az:       'title ASC',
+      za:       'title DESC',
+      shortest: `(SELECT COALESCE(SUM((step->>'duration')::int), 0) FROM jsonb_array_elements(dough_sections) AS section, jsonb_array_elements(section->'steps') AS step) ASC`,
     };
     const orderBy = orderMap[sort] || 'created_at DESC';
 
@@ -406,11 +421,12 @@ app.get('/api/recipes/:id', async (req, res) => {
 app.post('/api/recipes', async (req, res) => {
   const { title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps } = req.body;
   try {
+    const category = categorizeRecipe({ title, dough_sections });
     const result = await pool.query(
-      `INSERT INTO recipes (user_id, title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;`,
+      `INSERT INTO recipes (user_id, title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps, category)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;`,
       [req.user.userId, title, description, image_url, source_url || '', original_source_url || '',
-       JSON.stringify(ingredients || []), JSON.stringify(dough_sections || []), JSON.stringify(steps || [])]
+       JSON.stringify(ingredients || []), JSON.stringify(dough_sections || []), JSON.stringify(steps || []), category]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Datenbankfehler" }); }
@@ -420,11 +436,12 @@ app.put('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
   const { title, image_url, ingredients, steps, description, dough_sections, source_url, original_source_url } = req.body;
   try {
+    const category = categorizeRecipe({ title, dough_sections });
     const result = await pool.query(
-      `UPDATE recipes SET title=$1, image_url=$2, ingredients=$3, steps=$4, description=$5, dough_sections=$6, source_url=$7, original_source_url=$8
-       WHERE id=$9 AND user_id=$10 RETURNING *;`,
+      `UPDATE recipes SET title=$1, image_url=$2, ingredients=$3, steps=$4, description=$5, dough_sections=$6, source_url=$7, original_source_url=$8, category=$9
+       WHERE id=$10 AND user_id=$11 RETURNING *;`,
       [title, image_url, JSON.stringify(ingredients), JSON.stringify(steps), description,
-       JSON.stringify(dough_sections), source_url || '', original_source_url || '', id, req.user.userId]
+       JSON.stringify(dough_sections), source_url || '', original_source_url || '', category, id, req.user.userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, BookOpen, Search, ArrowUpDown } from 'lucide-react';
+import { Plus, BookOpen, Search, ArrowUpDown, X } from 'lucide-react';
 import PlanModal from "@/components/PlanModal";
 import RecipeCard from "@/components/RecipeCard";
 import { RecipeGridSkeleton } from "@/components/LoadingSkeletons";
@@ -13,13 +13,31 @@ const PAGE_SIZE = 12;
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Neueste zuerst' },
   { value: 'oldest', label: 'Älteste zuerst' },
+  { value: 'shortest', label: 'Kürzeste Dauer' },
   { value: 'az', label: 'A → Z' },
   { value: 'za', label: 'Z → A' },
   { value: 'random', label: 'Zufällig' },
 ];
 
-// "Heute fertig" bleibt clientseitig (Laufzeitberechnung)
-const FILTERS = ["Alle", "Sauerteig", "Hefeteig", "Vollkorn", "Heute fertig", "Favoriten"];
+// Primärkategorien — exklusiv, direkte DB-Spalte
+const PRIMARY_CATEGORIES = [
+  { id: 'alle',      label: 'Alle' },
+  { id: 'brot',      label: 'Brot' },
+  { id: 'broetchen', label: 'Brötchen' },
+  { id: 'pizza',     label: 'Pizza & Fladen' },
+  { id: 'suesses',   label: 'Süßes Gebäck' },
+  { id: 'cracker',   label: 'Knäcke & Cracker' },
+];
+
+// Sekundärfilter — kombinierbar, kommagetrennt in URL
+const SECONDARY_FILTERS = [
+  { id: 'Sauerteig',  label: 'Sauerteig' },
+  { id: 'Hefe',       label: 'Hefe' },
+  { id: 'Vollkorn',   label: 'Vollkorn' },
+  { id: 'Uebernacht', label: 'Übernacht' },
+  { id: 'Schnell',    label: 'Unter 4h' },
+  { id: 'Favoriten',  label: 'Favoriten' },
+];
 
 function HomePageContent() {
   const router = useRouter();
@@ -39,7 +57,11 @@ function HomePageContent() {
 
   // URL-Parameter als Source of Truth
   const searchQuery = searchParams.get('q') ?? '';
-  const activeFilter = searchParams.get('filter') ?? 'Alle';
+  const activeCategory = searchParams.get('category') ?? 'alle';
+  const activeFilters = useMemo(() => {
+    const f = searchParams.get('filter');
+    return f ? f.split(',').filter(Boolean) : [];
+  }, [searchParams]);
   const activeSort = searchParams.get('sort') ?? 'newest';
 
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
@@ -57,8 +79,29 @@ function HomePageContent() {
     setInputValue(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      updateParams({ q: value || null, filter: null });
+      updateParams({ q: value || null });
     }, 250);
+  };
+
+  const setCategory = (id: string) => {
+    updateParams({ category: id === 'alle' ? null : id });
+  };
+
+  const toggleSecondaryFilter = (id: string) => {
+    const current = activeFilters;
+    const next = current.includes(id)
+      ? current.filter(f => f !== id)
+      : [...current, id];
+    updateParams({ filter: next.length > 0 ? next.join(',') : null });
+  };
+
+  const removeFilter = (id: string) => {
+    const next = activeFilters.filter(f => f !== id);
+    updateParams({ filter: next.length > 0 ? next.join(',') : null });
+  };
+
+  const clearAllFilters = () => {
+    updateParams({ category: null, filter: null });
   };
 
   // Sort-Menü bei Klick außerhalb schließen
@@ -72,7 +115,7 @@ function HomePageContent() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Alle Rezepte einmalig laden (ungefiltert, für Counts + "Heute fertig")
+  // Alle Rezepte einmalig laden (ungefiltert, für Counts)
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
@@ -87,10 +130,8 @@ function HomePageContent() {
     setIsLoading(true);
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
-    // "Heute fertig" wird clientseitig behandelt – alle laden, dann filtern
-    if (activeFilter && activeFilter !== 'Alle' && activeFilter !== 'Heute fertig') {
-      params.set('filter', activeFilter);
-    }
+    if (activeCategory && activeCategory !== 'alle') params.set('category', activeCategory);
+    if (activeFilters.length > 0) params.set('filter', activeFilters.join(','));
     if (activeSort && activeSort !== 'newest' && activeSort !== 'random') params.set('sort', activeSort);
 
     const url = `${process.env.NEXT_PUBLIC_API_URL}/recipes${params.toString() ? '?' + params.toString() : ''}`;
@@ -101,9 +142,7 @@ function HomePageContent() {
       .then(res => res.json())
       .then(data => {
         let list = Array.isArray(data) ? data : [];
-        if (activeSort === 'random') {
-          list = [...list].sort(() => Math.random() - 0.5);
-        }
+        if (activeSort === 'random') list = [...list].sort(() => Math.random() - 0.5);
         setRecipes(list);
         setIsLoading(false);
       })
@@ -111,7 +150,7 @@ function HomePageContent() {
         console.error("Ladefehler:", err);
         setIsLoading(false);
       });
-  }, [searchQuery, activeFilter, activeSort]);
+  }, [searchQuery, activeCategory, activeFilters, activeSort]);
 
   // Optimistisches Favoriten-Toggle mit Rollback
   const toggleFavorite = async (id: number, status: boolean) => {
@@ -148,45 +187,44 @@ function HomePageContent() {
     return totalMinutes;
   };
 
-  // "Heute fertig" clientseitig filtern (braucht aktuelle Uhrzeit)
-  const filteredRecipes = useMemo(() => {
-    if (activeFilter !== 'Heute fertig') return recipes;
-    const now = new Date();
-    const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
-    return recipes.filter(r => {
-      const d = getRecipeDuration(r);
-      return d > 0 && d <= minutesLeft;
-    });
-  }, [recipes, activeFilter]);
+  // Alle Backend-Rezepte werden bereits gefiltert zurückgegeben
+  const filteredRecipes = recipes;
 
   // visibleCount zurücksetzen bei Filter/Suche/Sort-Wechsel
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery, activeFilter, activeSort]);
+  }, [searchQuery, activeCategory, activeFilters, activeSort]);
 
-  // Filter-Counts aus allRecipes berechnen (clientseitig, kein Extra-Request)
-  const filterCounts = useMemo(() => {
-    const now = new Date();
-    const minutesLeft = (24 * 60) - (now.getHours() * 60 + now.getMinutes());
+  // Counts aus allRecipes berechnen (clientseitig, kein Extra-Request)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { alle: allRecipes.length };
+    for (const cat of PRIMARY_CATEGORIES) {
+      if (cat.id === 'alle') continue;
+      counts[cat.id] = allRecipes.filter(r => r.category === cat.id).length;
+    }
+    return counts;
+  }, [allRecipes]);
 
-    const check = (r: any, f: string): boolean => {
-      const title = (r.title ?? '').toLowerCase();
-      const desc = (r.description ?? '').toLowerCase();
-      const ings = r.dough_sections?.flatMap((s: any) =>
-        s.ingredients?.map((i: any) => i.name?.toLowerCase() ?? '') ?? []
-      ).join(' ') ?? '';
-      const combined = `${title} ${desc} ${ings}`;
-      switch (f) {
-        case 'Alle': return true;
-        case 'Favoriten': return r.is_favorite;
-        case 'Sauerteig': return combined.includes('sauerteig') || combined.includes('anstellgut');
-        case 'Hefeteig': return combined.includes('hefe') && !combined.includes('sauerteig');
-        case 'Vollkorn': return combined.includes('vollkorn');
-        case 'Heute fertig': { const d = getRecipeDuration(r); return d > 0 && d <= minutesLeft; }
-        default: return true;
-      }
-    };
-    return Object.fromEntries(FILTERS.map(f => [f, allRecipes.filter(r => check(r, f)).length]));
+  const secondaryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const ings = (r: any) => r.dough_sections?.flatMap((s: any) =>
+      s.ingredients?.map((i: any) => (i.name ?? '').toLowerCase()) ?? []
+    ).join(' ') ?? '';
+    for (const f of SECONDARY_FILTERS) {
+      counts[f.id] = allRecipes.filter(r => {
+        const combined = `${(r.title ?? '').toLowerCase()} ${ings(r)}`;
+        switch (f.id) {
+          case 'Sauerteig':  return combined.includes('sauerteig') || combined.includes('anstellgut');
+          case 'Hefe':       return /\bhefe\b|frischhefe|trockenhefe/.test(combined);
+          case 'Vollkorn':   return combined.includes('vollkorn');
+          case 'Favoriten':  return r.is_favorite;
+          case 'Uebernacht': return r.dough_sections?.some((s: any) => s.steps?.some((st: any) => st.type === 'Warten' && parseInt(st.duration) >= 360));
+          case 'Schnell':    return getRecipeDuration(r) < 240 && getRecipeDuration(r) > 0;
+          default: return true;
+        }
+      }).length;
+    }
+    return counts;
   }, [allRecipes]);
 
   // IntersectionObserver für Infinite Scroll – callback ref
@@ -204,13 +242,14 @@ function HomePageContent() {
   const visibleRecipes = filteredRecipes.slice(0, visibleCount);
   const hasMore = visibleCount < filteredRecipes.length;
   const activeSortLabel = SORT_OPTIONS.find(o => o.value === activeSort)?.label ?? 'Sortierung';
+  const hasActiveFilters = activeCategory !== 'alle' || activeFilters.length > 0;
 
   return (
     <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] px-6 text-gray-900 dark:text-gray-100 transition-colors duration-200">
       <div className="max-w-6xl mx-auto pt-8 pb-20">
 
         {/* Header: Suche, Sort & Filter */}
-        <div className="space-y-4 mb-10">
+        <div className="space-y-3 mb-10">
 
           {/* Suche + Sort */}
           <div className="flex gap-3 items-center">
@@ -235,7 +274,7 @@ function HomePageContent() {
                 <span className="hidden sm:inline">{activeSortLabel}</span>
               </button>
               {showSortMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
                   {SORT_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
@@ -254,31 +293,92 @@ function HomePageContent() {
             </div>
           </div>
 
-          {/* Filter-Chips mit Anzahl */}
+          {/* Primärkategorien — exklusiv */}
           <div className="flex flex-wrap gap-2">
-            {FILTERS.map((filter) => (
+            {PRIMARY_CATEGORIES.map((cat) => (
               <button
-                key={filter}
-                onClick={() => updateParams({ filter: filter === 'Alle' ? null : filter })}
+                key={cat.id}
+                onClick={() => setCategory(cat.id)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all whitespace-nowrap ${
-                  activeFilter === filter
-                    ? 'bg-[#8B7355] text-white border-[#8B7355] shadow-md scale-105'
-                    : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm hover:shadow-md'
+                  activeCategory === cat.id
+                    ? 'bg-[#8B7355] text-white border-[#8B7355] shadow-md'
+                    : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm'
                 }`}
               >
-                {filter}
+                {cat.label}
                 {allRecipes.length > 0 && (
                   <span className={`text-xs font-normal px-1.5 py-0.5 rounded-full ${
-                    activeFilter === filter
+                    activeCategory === cat.id
                       ? 'bg-white/20 text-white'
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                   }`}>
-                    {filterCounts[filter] ?? 0}
+                    {categoryCounts[cat.id] ?? 0}
                   </span>
                 )}
               </button>
             ))}
           </div>
+
+          {/* Sekundärfilter — kombinierbar */}
+          <div className="flex flex-wrap gap-2">
+            {SECONDARY_FILTERS.map((f) => {
+              const isActive = activeFilters.includes(f.id);
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => toggleSecondaryFilter(f.id)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all whitespace-nowrap ${
+                    isActive
+                      ? 'bg-gray-700 dark:bg-gray-200 text-white dark:text-gray-900 border-gray-700 dark:border-gray-200'
+                      : 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
+                  }`}
+                >
+                  {f.label}
+                  {allRecipes.length > 0 && (
+                    <span className={`font-normal ${isActive ? 'opacity-70' : 'text-gray-300 dark:text-gray-600'}`}>
+                      {secondaryCounts[f.id] ?? 0}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Aktive Filter als entfernbare Tags */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {activeCategory !== 'alle' && (
+                <span
+                  onClick={() => setCategory('alle')}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#8B7355] text-white text-xs font-bold rounded-full cursor-pointer hover:bg-[#7a6248] transition-colors"
+                >
+                  {PRIMARY_CATEGORIES.find(c => c.id === activeCategory)?.label}
+                  <X size={11} />
+                </span>
+              )}
+              {activeFilters.map(id => (
+                <span
+                  key={id}
+                  onClick={() => removeFilter(id)}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-gray-700 dark:bg-gray-200 text-white dark:text-gray-900 text-xs font-bold rounded-full cursor-pointer hover:bg-gray-600 dark:hover:bg-gray-300 transition-colors"
+                >
+                  {SECONDARY_FILTERS.find(f => f.id === id)?.label}
+                  <X size={11} />
+                </span>
+              ))}
+              {(activeCategory !== 'alle' || activeFilters.length > 1) && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 underline transition-colors"
+                >
+                  Alle zurücksetzen
+                </button>
+              )}
+              <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">
+                {filteredRecipes.length} Rezepte
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Rezepte-Grid */}
