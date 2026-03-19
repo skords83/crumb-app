@@ -1,58 +1,59 @@
 // categorize.js — Shared Kategorisierungs-Funktion
-// Wird beim Scrapen/Import und im Migration-Script verwendet.
-// Gibt eine der folgenden Kategorien zurück:
-//   'brot' | 'broetchen' | 'pizza' | 'suesses' | 'cracker'
 
-const KEYWORDS = {
+const PATTERNS = {
   broetchen: [
-    'brötchen', 'broetchen', 'semmel', 'schrippe', 'weck', 'wecken',
-    'bun', 'buns', 'roll ', 'rolls', 'laugenstange', 'laugenbrezel',
-    'brezel', 'bagel', 'ciabattini',
+    /brötchen/, /broetchen/, /semmel/, /schrippe/,
+    /\bweck\b/, /laugenstange/, /laugenbrezel/, /\bbrezel\b/,
+    /\bbagel\b/, /ciabattini/, /\bbun\b/, /\brolls?\b/,
+    /\bsimit\b/,
   ],
   pizza: [
-    'pizza', 'focaccia', 'fladen', 'fladenbrot', 'pinsa', 'pide',
-    'lahmacun', 'tarte flambée', 'flammkuchen', 'schiacciata',
+    /\bpizza\b/, /focaccia/, /\bfladen\b/, /\bpinsa\b/,
+    /\bpide\b/, /lahmacun/, /flammkuchen/, /schiacciata/,
   ],
   suesses: [
-    'brioche', 'zimtschnecke', 'zimtschnecken', 'hefezopf', 'zopf',
-    'babka', 'kardamom', 'kanelbolle', 'kardemumma', 'croissant',
-    'pain au', 'danish', 'cinnamon', 'stollen', 'panettone',
-    'colomba', 'hefekuchen', 'streusel', 'buchteln', 'rohrnudeln',
-    'berliner', 'krapfen', 'donut', 'doughnut', 'churro',
+    /brioche/, /zimtschnecke/, /hefezopf/, /\bzopf\b/,
+    /\bbabka\b/, /kardamom/, /kanelbolle/, /kardemumma/,
+    /croissant/, /\bstollen\b/, /panettone/, /hefekuchen/,
+    /\bbuchteln\b/, /rohrnudeln/, /\bberliner\b/, /\bkrapfen\b/,
+    /\bdonut\b/, /doughnut/, /\bchurro/,
   ],
   cracker: [
-    'cracker', 'knäckebrot', 'knackebrot', 'flatbread', 'lavash',
-    'matze', 'matzah', 'grissini', 'chips', 'crostini',
+    /\bcracker\b/, /knäckebrot/, /knackebrot/, /flatbread/,
+    /\blavash\b/, /\bmatze\b/, /\bgrissini\b/, /crostini/,
+  ],
+  // Explizite Brot-Marker — verhindert Fallthrough bei eindeutigen Brot-Titeln
+  brot: [
+    /\bbrot\b/, /\bbrote\b/, /\blaib\b/, /kastenbrot/,
+    /kruste/, /sauerteigbrot/, /vollkornbrot/, /mischbrot/,
+    /toastbrot/, /\btoast\b/, /bauernbrot/, /schwarzbrot/,
+    /weißbrot/, /graubrot/, /roggenbrot/, /dinkelbrot/,
+    /haferbrot/, /emmer.*brot/, /brot.*emmer/,
   ],
 };
 
 /**
- * Kategorisiert ein Rezept anhand von Titel, Phasennamen und Zutaten.
+ * Kategorisiert ein Rezept anhand von Titel (Vorrang) und Phasennamen.
+ * Zutaten werden bewusst nicht durchsucht — zu viel Rauschen.
  * @param {Object} recipe - { title, dough_sections }
- * @returns {string} Kategorie
+ * @returns {'brot'|'broetchen'|'pizza'|'suesses'|'cracker'} Kategorie
  */
 function categorizeRecipe(recipe) {
   const title = (recipe.title || '').toLowerCase();
   const sections = recipe.dough_sections || [];
+  const phaseNames = sections.map((s) => (s.name || '').toLowerCase()).join(' ');
 
-  // Alle Phasennamen + Zutaten als durchsuchbaren String
-  const sectionContent = JSON.stringify(sections).toLowerCase();
-
-  // Titel hat Vorrang — er beschreibt das Endprodukt am direktesten
-  for (const [cat, keywords] of Object.entries(KEYWORDS)) {
-    if (keywords.some(kw => title.includes(kw))) {
-      return cat;
-    }
+  // Titel hat absolute Priorität
+  for (const [cat, patterns] of Object.entries(PATTERNS)) {
+    if (patterns.some(rx => rx.test(title))) return cat;
   }
 
-  // Fallback: Phasennamen und Zutaten durchsuchen
-  for (const [cat, keywords] of Object.entries(KEYWORDS)) {
-    if (keywords.some(kw => sectionContent.includes(kw))) {
-      return cat;
-    }
+  // Fallback: Phasennamen (ohne brot)
+  for (const [cat, patterns] of Object.entries(PATTERNS)) {
+    if (cat === 'brot') continue;
+    if (patterns.some(rx => rx.test(phaseNames))) return cat;
   }
 
-  // Default: Brot — größte Kategorie, sicherer Fallback
   return 'brot';
 }
 
