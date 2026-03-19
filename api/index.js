@@ -365,6 +365,75 @@ app.get('/api/recipes', async (req, res) => {
             )
           )`);
           break;
+        case 'Hybrid':
+          // Sauerteig + Hefe gleichzeitig
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ~* '\\mhefe\\M|\\mfrischhefe\\M|\\mtrockenhefe\\M'
+            )
+            AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%sauerteig%' OR ing->>'name' ILIKE '%anstellgut%'
+            )
+          )`);
+          break;
+        case 'LM':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%lievito madre%'
+            )
+          )`);
+          break;
+        case 'Weizen':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%weizen%'
+            )
+          )`);
+          break;
+        case 'Roggen':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%roggen%'
+            )
+          )`);
+          break;
+        case 'Dinkel':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%dinkel%'
+            )
+          )`);
+          break;
+        case 'Hafer':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%hafer%'
+            )
+          )`);
+          break;
+        case 'Urkorn':
+          conditions.push(`(
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ~* 'emmer|einkorn|kamut|khorasan|urdinkel|urgerste'
+            )
+          )`);
+          break;
         case 'Vollkorn':
           conditions.push(`(
             title ILIKE '%vollkorn%' OR description ILIKE '%vollkorn%'

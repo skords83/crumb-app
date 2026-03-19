@@ -29,12 +29,7 @@ const PRIMARY_CATEGORIES = [
   { id: 'cracker',   label: 'Knäcke & Cracker' },
 ];
 
-// Sekundärfilter — schlank: nur was die Kategorie nicht abdeckt
-const SECONDARY_FILTERS = [
-  { id: 'Sauerteig',  label: 'Sauerteig' },
-  { id: 'Hefe',       label: 'Nur Hefe' },
-  { id: 'Favoriten',  label: 'Favoriten' },
-];
+
 
 function HomePageContent() {
   const router = useRouter();
@@ -55,10 +50,7 @@ function HomePageContent() {
   // URL-Parameter als Source of Truth
   const searchQuery = searchParams.get('q') ?? '';
   const activeCategory = searchParams.get('category') ?? 'alle';
-  const activeFilters = useMemo(() => {
-    const f = searchParams.get('filter');
-    return f ? f.split(',').filter(Boolean) : [];
-  }, [searchParams]);
+
   const activeSort = searchParams.get('sort') ?? 'newest';
 
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
@@ -84,21 +76,8 @@ function HomePageContent() {
     updateParams({ category: id === 'alle' ? null : id });
   };
 
-  const toggleSecondaryFilter = (id: string) => {
-    const current = activeFilters;
-    const next = current.includes(id)
-      ? current.filter(f => f !== id)
-      : [...current, id];
-    updateParams({ filter: next.length > 0 ? next.join(',') : null });
-  };
-
-  const removeFilter = (id: string) => {
-    const next = activeFilters.filter(f => f !== id);
-    updateParams({ filter: next.length > 0 ? next.join(',') : null });
-  };
-
   const clearAllFilters = () => {
-    updateParams({ category: null, filter: null });
+    updateParams({ category: null });
   };
 
   // Sort-Menü bei Klick außerhalb schließen
@@ -128,7 +107,6 @@ function HomePageContent() {
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
     if (activeCategory && activeCategory !== 'alle') params.set('category', activeCategory);
-    if (activeFilters.length > 0) params.set('filter', activeFilters.join(','));
     if (activeSort && activeSort !== 'newest' && activeSort !== 'random') params.set('sort', activeSort);
 
     const url = `${process.env.NEXT_PUBLIC_API_URL}/recipes${params.toString() ? '?' + params.toString() : ''}`;
@@ -147,7 +125,7 @@ function HomePageContent() {
         console.error("Ladefehler:", err);
         setIsLoading(false);
       });
-  }, [searchQuery, activeCategory, activeFilters, activeSort]);
+  }, [searchQuery, activeCategory, activeSort]);
 
   // Optimistisches Favoriten-Toggle mit Rollback
   const toggleFavorite = async (id: number, status: boolean) => {
@@ -190,7 +168,7 @@ function HomePageContent() {
   // visibleCount zurücksetzen bei Filter/Suche/Sort-Wechsel
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery, activeCategory, activeFilters, activeSort]);
+  }, [searchQuery, activeCategory, activeSort]);
 
   // Counts aus allRecipes berechnen (clientseitig, kein Extra-Request)
   const categoryCounts = useMemo(() => {
@@ -219,7 +197,7 @@ function HomePageContent() {
   const visibleRecipes = filteredRecipes.slice(0, visibleCount);
   const hasMore = visibleCount < filteredRecipes.length;
   const activeSortLabel = SORT_OPTIONS.find(o => o.value === activeSort)?.label ?? 'Sortierung';
-  const hasActiveFilters = activeCategory !== 'alle' || activeFilters.length > 0;
+  const hasActiveFilters = activeCategory !== 'alle';
 
   return (
     <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] px-6 text-gray-900 dark:text-gray-100 transition-colors duration-200">
@@ -296,26 +274,6 @@ function HomePageContent() {
             ))}
           </div>
 
-          {/* Sekundärfilter — kombinierbar */}
-          <div className="flex flex-wrap gap-2">
-            {SECONDARY_FILTERS.map((f) => {
-              const isActive = activeFilters.includes(f.id);
-              return (
-                <button
-                  key={f.id}
-                  onClick={() => toggleSecondaryFilter(f.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all whitespace-nowrap ${
-                    isActive
-                      ? 'bg-gray-700 dark:bg-gray-200 text-white dark:text-gray-900 border-gray-700 dark:border-gray-200'
-                      : 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Aktive Filter als entfernbare Tags */}
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -328,17 +286,7 @@ function HomePageContent() {
                   <X size={11} />
                 </span>
               )}
-              {activeFilters.map(id => (
-                <span
-                  key={id}
-                  onClick={() => removeFilter(id)}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-gray-700 dark:bg-gray-200 text-white dark:text-gray-900 text-xs font-bold rounded-full cursor-pointer hover:bg-gray-600 dark:hover:bg-gray-300 transition-colors"
-                >
-                  {SECONDARY_FILTERS.find(f => f.id === id)?.label}
-                  <X size={11} />
-                </span>
-              ))}
-              {(activeCategory !== 'alle' || activeFilters.length > 1) && (
+              {(activeCategory !== 'alle') && (
                 <button
                   onClick={clearAllFilters}
                   className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 underline transition-colors"

@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 
@@ -63,6 +63,7 @@ export default function Navigation() {
 
   const navItems = [
     { name: 'Rezepte', href: '/', icon: LayoutGrid },
+    { name: 'Suche', href: '/search', icon: Search },
     { name: 'Import', href: '/new', icon: FileDown },
   ];
   const allNavItems = [...navItems];
