@@ -32,7 +32,7 @@ const PRIMARY_CATEGORIES = [
 // Sekundärfilter — schlank: nur was die Kategorie nicht abdeckt
 const SECONDARY_FILTERS = [
   { id: 'Sauerteig',  label: 'Sauerteig' },
-  { id: 'Hefe',       label: 'Hefe' },
+  { id: 'Hefe',       label: 'Nur Hefe' },
   { id: 'Favoriten',  label: 'Favoriten' },
 ];
 

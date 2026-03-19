@@ -350,11 +350,18 @@ app.get('/api/recipes', async (req, res) => {
           )`);
           break;
         case 'Hefe':
+          // Nur reine Hefe-Rezepte — kein Sauerteig/Anstellgut vorhanden
           conditions.push(`(
             EXISTS (
               SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
                             jsonb_array_elements(section->'ingredients') AS ing
               WHERE ing->>'name' ~* '\\mhefe\\M|\\mfrischhefe\\M|\\mtrockenhefe\\M'
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
+                            jsonb_array_elements(section->'ingredients') AS ing
+              WHERE ing->>'name' ILIKE '%sauerteig%' OR ing->>'name' ILIKE '%anstellgut%'
+                 OR ing->>'name' ILIKE '%lievito%'
             )
           )`);
           break;
