@@ -538,7 +538,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         {/* STICKY BOTTOM BAR */}
-        <div className="no-print fixed bottom-0 left-0 right-0 z-40 px-4 pb-4 pt-3 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none">
+        <div className="no-print fixed bottom-0 left-0 right-0 z-40 px-4 pb-20 md:pb-4 pt-3 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">
             <button
               onClick={() => setShowPlanModal(true)}
