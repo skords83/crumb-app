@@ -29,13 +29,10 @@ const PRIMARY_CATEGORIES = [
   { id: 'cracker',   label: 'Knäcke & Cracker' },
 ];
 
-// Sekundärfilter — kombinierbar, kommagetrennt in URL
+// Sekundärfilter — schlank: nur was die Kategorie nicht abdeckt
 const SECONDARY_FILTERS = [
   { id: 'Sauerteig',  label: 'Sauerteig' },
   { id: 'Hefe',       label: 'Hefe' },
-  { id: 'Vollkorn',   label: 'Vollkorn' },
-  { id: 'Uebernacht', label: 'Übernacht' },
-  { id: 'Schnell',    label: 'Unter 4h' },
   { id: 'Favoriten',  label: 'Favoriten' },
 ];
 

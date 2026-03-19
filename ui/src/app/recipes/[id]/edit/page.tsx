@@ -6,7 +6,6 @@ import { ArrowLeft, Loader2, XCircle, RotateCcw } from 'lucide-react';
 import RecipeForm from '@/components/RecipeForm';
 import SaveButton from '@/components/SaveButton';
 
-// Identisch mit new-recipe-page – type normalisieren
 const normalizeSections = (sections: any[]) =>
   sections.map((s: any) => ({
     ...s,
@@ -26,7 +25,6 @@ export default function EditRecipePage() {
   const params = useParams();
   const recipeId = params?.id;
 
-  // ── STATE ────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -38,20 +36,18 @@ export default function EditRecipePage() {
   const [title, setTitle] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
   const [doughSections, setDoughSections] = useState<any[]>([]);
   const [sourceUrl, setSourceUrl] = useState("");
   const [originalSourceUrl, setOriginalSourceUrl] = useState("");
 
-  // Draft-Key pro Rezept
   const draftKey = recipeId ? `crumb_draft_${recipeId}` : null;
 
-  // Änderungen tracken + debounced Autosave
   useEffect(() => {
     if (!loading && initialData.current) {
       const current = JSON.stringify({ title, imageUrl, description, doughSections });
       const dirty = current !== initialData.current;
       setIsDirty(dirty);
-
       if (dirty && draftKey) {
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
         autosaveTimer.current = setTimeout(() => {
@@ -66,7 +62,6 @@ export default function EditRecipePage() {
     return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current); };
   }, [title, imageUrl, description, doughSections, loading, draftKey]);
 
-  // Browser-Warning bei ungespeicherten Änderungen
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (isDirty) { e.preventDefault(); e.returnValue = ''; }
@@ -89,6 +84,7 @@ export default function EditRecipePage() {
         setTitle(data.title || "");
         setImageUrl(data.image_url || "");
         setDescription(data.description || "");
+        setCategory(data.category || null);
         setSourceUrl(data.source_url || "");
         setOriginalSourceUrl(data.original_source_url || "");
 
@@ -99,7 +95,6 @@ export default function EditRecipePage() {
             : [{ name: "Hauptteig", is_parallel: false, ingredients: [{ name: "", amount: "", unit: "g" }], steps: [] }];
 
         setDoughSections(normalizeSections(sections));
-        // Snapshot für dirty-tracking
         initialData.current = JSON.stringify({
           title: data.title || "",
           imageUrl: data.image_url || "",
@@ -107,15 +102,10 @@ export default function EditRecipePage() {
           doughSections: normalizeSections(sections),
         });
 
-        // Draft prüfen
         if (draftKey) {
           try {
             const raw = localStorage.getItem(draftKey);
-            if (raw) {
-              const draft = JSON.parse(raw);
-              // Draft anzeigen wenn er neuer als 0 Sekunden ist (immer, wenn vorhanden)
-              setDraftBanner(true);
-            }
+            if (raw) setDraftBanner(true);
           } catch { /* ignore */ }
         }
       } catch (err) {
@@ -130,8 +120,6 @@ export default function EditRecipePage() {
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setSaveError(null);
-
-    // Validierung
     if (!title.trim()) { setSaveError("Bitte einen Rezepttitel eingeben."); return; }
     const hasIngredient = doughSections.some(s => s.ingredients?.some((i: any) => i.name?.trim()));
     const hasStep = doughSections.some(s => s.steps?.some((st: any) => st.instruction?.trim()));
@@ -142,14 +130,22 @@ export default function EditRecipePage() {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-        body: JSON.stringify({ title, image_url: imageUrl, description, dough_sections: doughSections, steps: [], source_url: sourceUrl, original_source_url: originalSourceUrl }),
+        body: JSON.stringify({
+          title,
+          image_url: imageUrl,
+          description,
+          dough_sections: doughSections,
+          steps: [],
+          source_url: sourceUrl,
+          original_source_url: originalSourceUrl,
+          ...(category ? { category } : {}),
+        }),
       });
       if (res.ok) {
         setIsDirty(false);
         if (draftKey) { try { localStorage.removeItem(draftKey); } catch { /* ignore */ } }
         router.push(`/recipes/${recipeId}`); router.refresh();
-      }
-      else throw new Error("Server-Fehler beim Speichern");
+      } else throw new Error("Server-Fehler beim Speichern");
     } catch (err) {
       setSaveError("Speichern fehlgeschlagen. Bitte nochmal versuchen.");
     } finally {
@@ -168,8 +164,7 @@ export default function EditRecipePage() {
       <div className="max-w-5xl mx-auto">
         {isSaving ? (
           <span className="inline-flex items-center gap-2 text-gray-300 dark:text-gray-600 mb-8 text-sm font-medium cursor-not-allowed">
-            <ArrowLeft size={18} />
-            Abbrechen & Zurück
+            <ArrowLeft size={18} /> Abbrechen & Zurück
           </span>
         ) : (
           <button
@@ -232,6 +227,7 @@ export default function EditRecipePage() {
           title={title} setTitle={setTitle}
           imageUrl={imageUrl} setImageUrl={setImageUrl}
           description={description} setDescription={setDescription}
+          category={category} setCategory={setCategory}
           doughSections={doughSections} setDoughSections={setDoughSections}
           onSubmit={handleSubmit}
           isSubmitting={isSaving}
