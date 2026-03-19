@@ -205,27 +205,7 @@ function HomePageContent() {
     return counts;
   }, [allRecipes]);
 
-  const secondaryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    const ings = (r: any) => r.dough_sections?.flatMap((s: any) =>
-      s.ingredients?.map((i: any) => (i.name ?? '').toLowerCase()) ?? []
-    ).join(' ') ?? '';
-    for (const f of SECONDARY_FILTERS) {
-      counts[f.id] = allRecipes.filter(r => {
-        const combined = `${(r.title ?? '').toLowerCase()} ${ings(r)}`;
-        switch (f.id) {
-          case 'Sauerteig':  return combined.includes('sauerteig') || combined.includes('anstellgut');
-          case 'Hefe':       return /\bhefe\b|frischhefe|trockenhefe/.test(combined);
-          case 'Vollkorn':   return combined.includes('vollkorn');
-          case 'Favoriten':  return r.is_favorite;
-          case 'Uebernacht': return r.dough_sections?.some((s: any) => s.steps?.some((st: any) => st.type === 'Warten' && parseInt(st.duration) >= 360));
-          case 'Schnell':    return getRecipeDuration(r) < 240 && getRecipeDuration(r) > 0;
-          default: return true;
-        }
-      }).length;
-    }
-    return counts;
-  }, [allRecipes]);
+
 
   // IntersectionObserver für Infinite Scroll – callback ref
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -334,11 +314,6 @@ function HomePageContent() {
                   }`}
                 >
                   {f.label}
-                  {allRecipes.length > 0 && (
-                    <span className={`font-normal ${isActive ? 'opacity-70' : 'text-gray-300 dark:text-gray-600'}`}>
-                      {secondaryCounts[f.id] ?? 0}
-                    </span>
-                  )}
                 </button>
               );
             })}
