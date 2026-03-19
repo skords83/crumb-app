@@ -419,9 +419,9 @@ app.get('/api/recipes/:id', async (req, res) => {
 });
 
 app.post('/api/recipes', async (req, res) => {
-  const { title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps } = req.body;
+  const { title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps, category: manualCategory } = req.body;
   try {
-    const category = categorizeRecipe({ title, dough_sections });
+    const category = manualCategory || categorizeRecipe({ title, dough_sections });
     const result = await pool.query(
       `INSERT INTO recipes (user_id, title, description, image_url, source_url, original_source_url, ingredients, dough_sections, steps, category)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;`,
@@ -434,9 +434,9 @@ app.post('/api/recipes', async (req, res) => {
 
 app.put('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, image_url, ingredients, steps, description, dough_sections, source_url, original_source_url } = req.body;
+  const { title, image_url, ingredients, steps, description, dough_sections, source_url, original_source_url, category: manualCategory } = req.body;
   try {
-    const category = categorizeRecipe({ title, dough_sections });
+    const category = manualCategory || categorizeRecipe({ title, dough_sections });
     const result = await pool.query(
       `UPDATE recipes SET title=$1, image_url=$2, ingredients=$3, steps=$4, description=$5, dough_sections=$6, source_url=$7, original_source_url=$8, category=$9
        WHERE id=$10 AND user_id=$11 RETURNING *;`,

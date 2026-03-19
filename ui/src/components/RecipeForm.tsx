@@ -26,6 +26,15 @@ export const PHASE_TYPES = [
   { label: "Backen", isParallel: false },
 ];
 
+export const RECIPE_CATEGORIES = [
+  { value: '',          label: 'Automatisch erkennen' },
+  { value: 'brot',      label: 'Brot' },
+  { value: 'broetchen', label: 'Brötchen' },
+  { value: 'pizza',     label: 'Pizza & Fladen' },
+  { value: 'suesses',   label: 'Süßes Gebäck' },
+  { value: 'cracker',   label: 'Knäcke & Cracker' },
+];
+
 export default function RecipeForm({
   title,
   setTitle,
@@ -33,6 +42,8 @@ export default function RecipeForm({
   setImageUrl,
   description,
   setDescription,
+  category,
+  setCategory,
   doughSections,
   setDoughSections,
   onSubmit,
@@ -193,6 +204,20 @@ export default function RecipeForm({
               value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Beschreibung..."
               rows={2}
             />
+            <div className="flex items-center gap-3">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                Kategorie
+              </label>
+              <select
+                className="bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-3 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:border-[#8B7355] shadow-sm cursor-pointer"
+                value={category || ''}
+                onChange={(e) => setCategory(e.target.value || null)}
+              >
+                {RECIPE_CATEGORIES.map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
             <input 
               className="w-full bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-4 py-2 text-xs outline-none focus:border-[#8B7355] shadow-sm text-gray-400 dark:text-gray-300"
               value={imageUrl || ""}
