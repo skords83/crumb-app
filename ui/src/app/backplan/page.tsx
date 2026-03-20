@@ -205,7 +205,6 @@ export default function BackplanPage() {
     return {
       timeline: recipe.planned_timeline
         ? (() => {
-            // Alle Steps aus dough_sections flach als Lookup aufbauen
             const stepLookup: Record<string, { duration_min?: number; duration_max?: number }> = {};
             (recipe.dough_sections || []).forEach((sec: any) => {
               (sec.steps || []).forEach((st: any) => {
@@ -227,6 +226,16 @@ export default function BackplanPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe?.id, recipe?.planned_at, stepCompletedAt]);
+
+  // Original-Timeline (unverändert) — wird für zeitbasierte done-Erkennung gebraucht
+  // damit verschobene Zeiten in der dynamischen Timeline nicht fälschlich Schritte als erledigt markieren
+  const originalTimeline = useMemo(() => {
+    if (!recipe) return [];
+    return recipe.planned_timeline
+      ? recipe.planned_timeline.map((s: any) => ({ ...s, end: new Date(s.end) }))
+      : calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipe?.id, recipe?.planned_at]);
 
   // Progress map recalculates only once per minute (not every second)
   const currentMinute = Math.floor(currentTime.getTime() / 60000);
@@ -497,17 +506,12 @@ export default function BackplanPage() {
                 <div className="flex flex-col gap-2 pl-10">
                   {sectionSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
                     const key = `${recipe.id}-${globalIdx}`;
-                    // Schritte vor dem ersten early-completed Schritt: zeitbasiert done.
-                    // Schritte ab dem ersten early-completed Schritt: nur explizit done.
-                    // So bleiben vergangene Schritte ausgegraut, aber neu berechnete
-                    // Schritte die in die Vergangenheit rutschen werden nicht fälschlich erledigt.
-                    const firstEarlyIdx = hasEarlyCompleted
-                      ? Math.min(...Object.keys(stepCompletedAt)
-                          .filter(k => k.startsWith(`${recipe.id}-`))
-                          .map(k => parseInt(k.split('-')[1])))
-                      : Infinity;
+                    // Zeitbasierte done-Erkennung immer gegen die ORIGINAL-Timeline prüfen.
+                    // Die dynamische Timeline verschiebt Zeiten — deren step.end ist kein
+                    // zuverlässiger Indikator ob ein Schritt "abgelaufen" ist.
+                    const originalEnd = originalTimeline[globalIdx]?.end;
                     const isDone = completedSteps.has(key)
-                      || (globalIdx < firstEarlyIdx && currentTime > step.end);
+                      || (!!originalEnd && currentTime > originalEnd);
                     const isActiveStep = globalIdx === activeIndex;
                     const isNextStep = globalIdx === nextIndex;
                     const isEarlyCompletable = !isDone && isActiveStep;
