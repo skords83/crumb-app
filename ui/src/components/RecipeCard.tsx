@@ -101,7 +101,8 @@ const getRecipeLabels = (recipe: any) => {
   // --- 4. Getreide ---
   const hatRoggen = content.includes("roggen") || roggenTypen.some(t => content.includes(t));
   const hatDinkel = content.includes("dinkel") || dinkelTypen.some(t => content.includes(t));
-  const hatWeizen = content.includes("weizenmehl") || weizenTypen.some(t => content.includes(t));
+  const hatWeizen = content.includes("weizenmehl") || weizenTypen.some(t => content.includes(t))
+    || /mehl typ 0{1,2}\b|tipo 0{1,2}\b|type 0{1,2}\b|farina 0{1,2}\b|\bw\d{3,4}\b/.test(content);
   const hatHafer = content.includes("hafer");
 
   if (hatRoggen) labels.push({ label: "Roggen",  color: "bg-[#E2E8F0] text-[#475569] border-[#cbd5e1]" });

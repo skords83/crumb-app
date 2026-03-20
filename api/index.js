@@ -395,6 +395,7 @@ app.get('/api/recipes', async (req, res) => {
               SELECT 1 FROM jsonb_array_elements(dough_sections) AS section,
                             jsonb_array_elements(section->'ingredients') AS ing
               WHERE ing->>'name' ILIKE '%weizen%'
+                 OR ing->>'name' ~* 'mehl typ 0{1,2}\\M|tipo 0{1,2}\\M|type 0{1,2}\\M|farina 0{1,2}\\M|W\\d{3,4}\\M'
             )
           )`);
           break;
