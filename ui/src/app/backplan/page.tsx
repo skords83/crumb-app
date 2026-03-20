@@ -654,7 +654,7 @@ export default function BackplanPage() {
           <div className="pl-10 mb-6">
             <div className="rounded-2xl border border-[#E8E0D5] dark:border-gray-700 bg-[#F9F6F2] dark:bg-gray-900/40 p-4 flex items-center justify-between mb-4">
               <span className="text-[#8B7355] dark:text-[#C4A484] font-bold text-[14px]">{recipe.title} – fertig</span>
-              <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">{extractTimeFromString(recipe.planned_at)} Uhr</span>
+              <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">{timeline.length > 0 ? formatTime(timeline[timeline.length - 1].end) : extractTimeFromString(recipe.planned_at)} Uhr</span>
             </div>
             <Link href={`/recipes/${recipe.id}`}
               className="block w-full text-center py-4 rounded-2xl bg-[#8B7355] text-white font-extrabold text-[13px] uppercase tracking-widest shadow-lg shadow-[#8B7355]/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
