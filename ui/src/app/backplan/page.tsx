@@ -500,7 +500,7 @@ export default function BackplanPage() {
                     const isDone = completedSteps.has(key) || currentTime > step.end;
                     const isActiveStep = globalIdx === activeIndex;
                     const isNextStep = globalIdx === nextIndex;
-                    const isEarlyCompletable = !isDone && (isActiveStep || isNextStep);
+                    const isEarlyCompletable = !isDone && isActiveStep;
                     return (
                       <div key={globalIdx} ref={isActiveStep ? activeCardRef : null}
                         onClick={() => isDone ? toggleStep(recipe.id, globalIdx) : undefined}
