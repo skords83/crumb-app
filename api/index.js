@@ -546,9 +546,10 @@ app.patch('/api/recipes/:id', async (req, res) => {
       );
       if (recipeResult.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
 
-      let timelineToSave = planned_timeline ?? null;
-      // Wenn keine Timeline mitkommt, mit planWithNightWindow berechnen (kennt Abhängigkeiten)
-      if (!timelineToSave && planned_at && recipeResult.rows[0].dough_sections) {
+      let timelineToSave = null;
+      // Immer serverseitig neu berechnen — clientseitige Timeline wird ignoriert
+      // damit planned_timeline niemals veraltet ist.
+      if (planned_at && recipeResult.rows[0].dough_sections) {
         try {
           const nightResult = planWithNightWindow(
             recipeResult.rows[0].dough_sections,
