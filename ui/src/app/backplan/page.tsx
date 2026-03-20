@@ -497,7 +497,10 @@ export default function BackplanPage() {
                 <div className="flex flex-col gap-2 pl-10">
                   {sectionSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
                     const key = `${recipe.id}-${globalIdx}`;
-                    const isDone = completedSteps.has(key) || currentTime > step.end;
+                    // Wenn Early-Completions aktiv sind, nur explizit abgehakte Schritte als done werten.
+                    // currentTime > step.end darf nicht greifen, weil die neu berechnete Timeline
+                    // Schritte in die Vergangenheit verschieben kann ohne dass sie wirklich erledigt sind.
+                    const isDone = completedSteps.has(key) || (!hasEarlyCompleted && currentTime > step.end);
                     const isActiveStep = globalIdx === activeIndex;
                     const isNextStep = globalIdx === nextIndex;
                     const isEarlyCompletable = !isDone && isActiveStep;
