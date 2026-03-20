@@ -27,6 +27,15 @@ export default function BackplanPage() {
   const [finishModalRecipeId, setFinishModalRecipeId] = useState<number | null>(null);
   const [openDrawers, setOpenDrawers] = useState<Set<string>>(new Set());
   const activeCardRef = useRef<HTMLDivElement>(null);
+  // Sections whose done-steps are expanded (default: collapsed)
+  const [expandedDoneSections, setExpandedDoneSections] = useState<Set<string>>(new Set());
+  const toggleDoneSection = (key: string) => {
+    setExpandedDoneSections(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   const toggleDrawer = (key: string) => {
     setOpenDrawers(prev => {
@@ -68,11 +77,7 @@ export default function BackplanPage() {
       .catch(() => setIsLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (activeCardRef.current) {
-      activeCardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [activeRecipeIdx, activeTab]);
+  // activeCardRef scroll removed — active step stays in position (Variante B)
 
   const parseLocalDate = (dateStr: string): Date => {
     if (!dateStr) return new Date();
@@ -205,6 +210,7 @@ export default function BackplanPage() {
     return {
       timeline: recipe.planned_timeline
         ? (() => {
+            // Alle Steps aus dough_sections flach als Lookup aufbauen
             const stepLookup: Record<string, { duration_min?: number; duration_max?: number }> = {};
             (recipe.dough_sections || []).forEach((sec: any) => {
               (sec.steps || []).forEach((st: any) => {
@@ -227,8 +233,7 @@ export default function BackplanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe?.id, recipe?.planned_at, stepCompletedAt]);
 
-  // Original-Timeline (unverändert) — wird für zeitbasierte done-Erkennung gebraucht
-  // damit verschobene Zeiten in der dynamischen Timeline nicht fälschlich Schritte als erledigt markieren
+  // Original-Timeline (unveränderlich) — für zeitbasierte isDone-Erkennung
   const originalTimeline = useMemo(() => {
     if (!recipe) return [];
     return recipe.planned_timeline
@@ -503,89 +508,126 @@ export default function BackplanPage() {
                   </div>
                 )}
 
-                <div className="flex flex-col gap-2 pl-10">
-                  {sectionSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
-                    const key = `${recipe.id}-${globalIdx}`;
-                    // Zeitbasierte done-Erkennung immer gegen die ORIGINAL-Timeline prüfen.
-                    // Die dynamische Timeline verschiebt Zeiten — deren step.end ist kein
-                    // zuverlässiger Indikator ob ein Schritt "abgelaufen" ist.
+                {(() => {
+                  const doneSteps = sectionSteps.filter(({ globalIdx }: any) => {
                     const originalEnd = originalTimeline[globalIdx]?.end;
-                    const isDone = completedSteps.has(key)
-                      || (!!originalEnd && currentTime > originalEnd);
-                    const isActiveStep = globalIdx === activeIndex;
-                    const isNextStep = globalIdx === nextIndex;
-                    const isEarlyCompletable = !isDone && isActiveStep;
-                    return (
-                      <div key={globalIdx} ref={isActiveStep ? activeCardRef : null}
-                        onClick={() => isDone ? toggleStep(recipe.id, globalIdx) : undefined}
-                        style={{ cursor: isDone ? 'pointer' : 'default' }}
-                        className={`transition-all duration-300 rounded-2xl ${
-                          isActiveStep ? 'border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-700 p-5'
-                          : isNextStep ? 'border-2 border-dashed border-[#D4C9B8] dark:border-gray-600 bg-white dark:bg-gray-800 p-4'
-                          : isDone ? 'border border-[#F0EBE3] dark:border-gray-700 bg-[#FAFAFA] dark:bg-gray-800/50 p-4 opacity-40'
-                          : 'border border-[#F0EBE3] dark:border-gray-700 bg-white dark:bg-gray-800 p-4'
-                        }`}>
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
-                              {step.type === 'Backen' ? '🔥' : step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
+                    return completedSteps.has(`${recipe.id}-${globalIdx}`) || (!!originalEnd && currentTime > originalEnd);
+                  });
+                  const pendingSteps = sectionSteps.filter(({ globalIdx }: any) => {
+                    const originalEnd = originalTimeline[globalIdx]?.end;
+                    return !(completedSteps.has(`${recipe.id}-${globalIdx}`) || (!!originalEnd && currentTime > originalEnd));
+                  });
+                  const sectionDoneKey = `done-${recipe.id}-${sIdx}`;
+                  const isDoneExpanded = expandedDoneSections.has(sectionDoneKey);
+                  return (
+                    <div className="flex flex-col gap-2 pl-10">
+                      {doneSteps.length > 0 && (
+                        <>
+                          <button
+                            onClick={() => toggleDoneSection(sectionDoneKey)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F9F6F2] dark:bg-gray-800/50 border border-[#EDE5D8] dark:border-gray-700 text-left transition-colors hover:bg-[#F5F0E8] dark:hover:bg-gray-700/50"
+                          >
+                            <Check size={13} className="text-[#8B7355] flex-shrink-0" />
+                            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 flex-1">
+                              {doneSteps.length} Schritt{doneSteps.length !== 1 ? 'e' : ''} erledigt
                             </span>
-                            <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
-                            {isDone && <Check size={14} className="text-[#8B7355]" />}
-                            {isEarlyCompletable && (
-                              <button
-                                onClick={e => { e.stopPropagation(); completeStepEarly(recipe.id, globalIdx, timeline); }}
-                                className="ml-1 px-2 py-1 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors"
-                              >
-                                ✓ Fertig
-                              </button>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`text-gray-300 dark:text-gray-600 transition-transform ${isDoneExpanded ? 'rotate-180' : ''}`}>
+                              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                          {isDoneExpanded && doneSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => (
+                            <div key={globalIdx}
+                              onClick={() => toggleStep(recipe.id, globalIdx)}
+                              className="border border-[#F0EBE3] dark:border-gray-700 bg-[#FAFAFA] dark:bg-gray-800/50 p-4 opacity-40 rounded-2xl cursor-pointer"
+                            >
+                              <div className="flex justify-between items-center mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
+                                    {step.type}
+                                  </span>
+                                  <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
+                                  <Check size={13} className="text-[#8B7355]" />
+                                </div>
+                              </div>
+                              <p className="text-[13px] text-gray-400 dark:text-gray-600 line-through leading-snug">{step.instruction}</p>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      {pendingSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
+                        const isActiveStep = globalIdx === activeIndex;
+                        const isNextStep = globalIdx === nextIndex;
+                        return (
+                          <div key={globalIdx} ref={isActiveStep ? activeCardRef : null}
+                            className={`transition-all duration-300 rounded-2xl ${
+                              isActiveStep ? 'border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-700 p-5'
+                              : isNextStep ? 'border-2 border-dashed border-[#D4C9B8] dark:border-gray-600 bg-white dark:bg-gray-800 p-4'
+                              : 'border border-[#F0EBE3] dark:border-gray-700 bg-white dark:bg-gray-800 p-4'
+                            }`}>
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
+                                  {step.type === 'Backen' ? '🔥' : step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
+                                </span>
+                                <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
+                                {isActiveStep && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); completeStepEarly(recipe.id, globalIdx, timeline); }}
+                                    className="ml-1 px-2 py-1 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors"
+                                  >
+                                    ✓ Fertig
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <p className={`text-[14px] leading-relaxed m-0 ${isActiveStep ? 'text-[15px] font-semibold text-[#2D2D2D] dark:text-gray-100' : 'text-gray-600 dark:text-gray-300 font-medium'}`}>
+                              {step.instruction}
+                            </p>
+                            {isActiveStep && (
+                              <>
+                                <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${step.type === 'Warten' ? 'bg-[#F5F0E8] dark:bg-gray-700' : step.type === 'Backen' ? 'bg-gradient-to-br from-red-500 to-red-700' : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'}`}>
+                                  <div>
+                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${step.type === 'Warten' ? 'text-[#8B7355]' : 'text-white/70'}`}>{step.type === 'Warten' ? 'Restzeit' : 'Timer'}</div>
+                                    <div className={`text-[28px] font-extrabold tabular-nums tracking-tight ${step.type === 'Warten' ? 'text-[#2D2D2D] dark:text-gray-100' : 'text-white'}`}>{formatCountdown(remainingSeconds)}</div>
+                                  </div>
+                                  <div className="relative w-12 h-12">
+                                    <svg width="48" height="48" className="absolute -rotate-90">
+                                      <circle cx="24" cy="24" r="20" fill="none" stroke={step.type === 'Warten' ? '#E8E2D8' : 'rgba(255,255,255,0.2)'} strokeWidth="3" />
+                                      <circle cx="24" cy="24" r="20" fill="none" stroke={step.type === 'Warten' ? '#8B7355' : 'white'} strokeWidth="3"
+                                        strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - stepProgress)}`}
+                                        strokeLinecap="round" className="transition-all duration-1000 ease-linear" />
+                                    </svg>
+                                  </div>
+                                </div>
+                                {step.type === 'Warten' && step.duration_min != null && step.duration_max != null && (() => {
+                                  const earliestEnd = new Date(step.start.getTime() + step.duration_min * 60000);
+                                  const latestEnd = new Date(step.start.getTime() + step.duration_max * 60000);
+                                  return (
+                                    <div className="mt-2 px-4 py-2.5 rounded-xl bg-[#F5F0E8]/60 dark:bg-gray-700/60 border border-[#E8E0D5] dark:border-gray-600 flex items-center justify-between">
+                                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B7355]">Bereit zwischen</span>
+                                      <span className="text-[13px] font-extrabold text-[#2D2D2D] dark:text-gray-100 tabular-nums">
+                                        {formatTime(earliestEnd)} – {formatTime(latestEnd)} Uhr
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+                                <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
+                                  <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
+                                </div>
+                              </>
                             )}
                           </div>
-                        </div>
-                        <p className={`text-[14px] leading-relaxed m-0 ${isActiveStep ? 'text-[15px] font-semibold text-[#2D2D2D] dark:text-gray-100' : isDone ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-600 dark:text-gray-300 font-medium'}`}>
-                          {step.instruction}
-                        </p>
-                        {isActiveStep && (
-                          <>
-                            <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${step.type === 'Warten' ? 'bg-[#F5F0E8] dark:bg-gray-700' : step.type === 'Backen' ? 'bg-gradient-to-br from-red-500 to-red-700' : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'}`}>
-                              <div>
-                                <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${step.type === 'Warten' ? 'text-[#8B7355]' : 'text-white/70'}`}>{step.type === 'Warten' ? 'Restzeit' : 'Timer'}</div>
-                                <div className={`text-[28px] font-extrabold tabular-nums tracking-tight ${step.type === 'Warten' ? 'text-[#2D2D2D] dark:text-gray-100' : 'text-white'}`}>{formatCountdown(remainingSeconds)}</div>
-                              </div>
-                              <div className="relative w-12 h-12">
-                                <svg width="48" height="48" className="absolute -rotate-90">
-                                  <circle cx="24" cy="24" r="20" fill="none" stroke={step.type === 'Warten' ? '#E8E2D8' : 'rgba(255,255,255,0.2)'} strokeWidth="3" />
-                                  <circle cx="24" cy="24" r="20" fill="none" stroke={step.type === 'Warten' ? '#8B7355' : 'white'} strokeWidth="3"
-                                    strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - stepProgress)}`}
-                                    strokeLinecap="round" className="transition-all duration-1000 ease-linear" />
-                                </svg>
-                              </div>
-                            </div>
-                            {step.type === 'Warten' && step.duration_min != null && step.duration_max != null && (() => {
-                              const earliestEnd = new Date(step.start.getTime() + step.duration_min * 60000);
-                              const latestEnd = new Date(step.start.getTime() + step.duration_max * 60000);
-                              return (
-                                <div className="mt-2 px-4 py-2.5 rounded-xl bg-[#F5F0E8]/60 dark:bg-gray-700/60 border border-[#E8E0D5] dark:border-gray-600 flex items-center justify-between">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B7355]">Bereit zwischen</span>
-                                  <span className="text-[13px] font-extrabold text-[#2D2D2D] dark:text-gray-100 tabular-nums">
-                                    {formatTime(earliestEnd)} – {formatTime(latestEnd)} Uhr
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                            <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
-                              <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
-                            </div>
-                            {step.type === 'Aktion' && (step.ingredients?.length ?? 0) > 0 && null}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
