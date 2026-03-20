@@ -283,9 +283,34 @@ export default function BackplanPage() {
   });
 
   const totalDuration = timeline.reduce((s: number, t: any) => s + t.duration, 0);
-  const activeIndex = timeline.findIndex((s: any, i: number) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime >= s.start && currentTime < s.end);
-  // nextIndex: first non-completed future step — robust when activeIndex === -1 (between steps)
-  const nextIndex = timeline.findIndex((s: any, i: number) => !completedSteps.has(`${recipe.id}-${i}`) && currentTime < s.start);
+
+  // isDone helper — consistent met de rendering logik
+  const isStepDone = (globalIdx: number) => {
+    const originalEnd = originalTimeline[globalIdx]?.end;
+    return completedSteps.has(`${recipe.id}-${globalIdx}`)
+      || (!!originalEnd && currentTime > originalEnd);
+  };
+
+  // activeIndex: schritt der gerade läuft (start <= now < end in dynamischer timeline)
+  // Falls kein schritt exakt aktiv ist maar er wel een pending step is waarvan start in verleden ligt
+  // (door early completion verschoven), dan is die ook actief.
+  const activeIndex = (() => {
+    // Eerst: exact actieve stap
+    const exact = timeline.findIndex((s: any, i: number) =>
+      !isStepDone(i) && currentTime >= s.start && currentTime < s.end
+    );
+    if (exact >= 0) return exact;
+    // Fallback: eerste niet-gedane stap waarvan start al verstreken is maar end ook
+    // (gap na early completion — schritt hätte schon angefangen)
+    return timeline.findIndex((s: any, i: number) =>
+      !isStepDone(i) && currentTime >= s.start
+    );
+  })();
+
+  // nextIndex: erster nicht-erledigter Schritt in der Zukunft
+  const nextIndex = timeline.findIndex((s: any, i: number) =>
+    !isStepDone(i) && currentTime < s.start
+  );
   const activeStep = activeIndex >= 0 ? timeline[activeIndex] : null;
   const remainingSeconds = activeStep ? Math.max(0, Math.floor((activeStep.end.getTime() - currentTime.getTime()) / 1000)) : 0;
   const stepProgress = activeStep ? Math.min(1, (currentTime.getTime() - activeStep.start.getTime()) / (activeStep.duration * 60000)) : 0;
@@ -509,14 +534,8 @@ export default function BackplanPage() {
                 )}
 
                 {(() => {
-                  const doneSteps = sectionSteps.filter(({ globalIdx }: any) => {
-                    const originalEnd = originalTimeline[globalIdx]?.end;
-                    return completedSteps.has(`${recipe.id}-${globalIdx}`) || (!!originalEnd && currentTime > originalEnd);
-                  });
-                  const pendingSteps = sectionSteps.filter(({ globalIdx }: any) => {
-                    const originalEnd = originalTimeline[globalIdx]?.end;
-                    return !(completedSteps.has(`${recipe.id}-${globalIdx}`) || (!!originalEnd && currentTime > originalEnd));
-                  });
+                  const doneSteps = sectionSteps.filter(({ globalIdx }: any) => isStepDone(globalIdx));
+                  const pendingSteps = sectionSteps.filter(({ globalIdx }: any) => !isStepDone(globalIdx));
                   const sectionDoneKey = `done-${recipe.id}-${sIdx}`;
                   const isDoneExpanded = expandedDoneSections.has(sectionDoneKey);
                   return (
