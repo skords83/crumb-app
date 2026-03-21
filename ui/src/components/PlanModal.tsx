@@ -126,7 +126,8 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
   const wrapRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragState = useRef({ startX: 0, startOffset: 0 });
-  const WINDOW = 220;
+  // Fenster dynamisch: planDur + ~30% Puffer, min 240, max 1440
+  const WINDOW = Math.min(1440, Math.max(240, Math.round(planDur * 1.4)));
 
   const getSleepSegments = useCallback((planStart: number) => {
     const dayBase = Math.floor(planStart / 1440) * 1440;
