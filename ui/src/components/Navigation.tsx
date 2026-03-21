@@ -4,13 +4,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search, BedDouble, AlarmClock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
-
-const SETTINGS_KEY = 'crumb_settings';
-const loadSettings = () => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return {}; } };
-const saveSettings = (s: Record<string, any>) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
 
 export default function Navigation() {
   const pathname = usePathname();
@@ -24,12 +21,26 @@ export default function Navigation() {
   const [mounted, setMounted] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showBakersPercent, setShowBakersPercent] = useState(false);
+  const [showPlanSettings, setShowPlanSettings] = useState(false);
+
+  // Backplan settings state
+  const [sleepFromStr, setSleepFromStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.sleepFrom));
+  const [sleepToStr, setSleepToStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.sleepTo));
+  const [abendStr, setAbendStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.abendZiel));
+  const [morgenStr, setMorgenStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.morgenZiel));
+  const [snapMin, setSnapMin] = useState(SETTINGS_DEFAULTS.snapMin);
 
   useEffect(() => {
     setMounted(true);
     const isDark = document.documentElement.classList.contains('dark');
     setDarkMode(isDark);
-    setShowBakersPercent(!!loadSettings().showBakersPercent);
+    const s = loadSettings();
+    setShowBakersPercent(!!s.showBakersPercent);
+    setSleepFromStr(minToHHMM(s.sleepFrom));
+    setSleepToStr(minToHHMM(s.sleepTo));
+    setAbendStr(minToHHMM(s.abendZiel));
+    setMorgenStr(minToHHMM(s.morgenZiel));
+    setSnapMin(s.snapMin);
   }, []);
 
   const toggleTheme = () => {
@@ -41,9 +52,17 @@ export default function Navigation() {
   const toggleBakersPercent = () => {
     const next = !showBakersPercent;
     setShowBakersPercent(next);
-    saveSettings({ ...loadSettings(), showBakersPercent: next });
-    // page.tsx lauscht auf storage-Events und reagiert live
-    window.dispatchEvent(new StorageEvent('storage', { key: SETTINGS_KEY }));
+    saveSettings({ showBakersPercent: next });
+  };
+
+  const savePlanSetting = (field: string, value: string | number) => {
+    if (typeof value === 'string') {
+      // time string HH:MM → minutes
+      const min = hhmmToMin(value);
+      saveSettings({ [field]: min });
+    } else {
+      saveSettings({ [field]: value });
+    }
   };
 
   useEffect(() => {
@@ -126,6 +145,132 @@ export default function Navigation() {
                         <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showBakersPercent ? 'translate-x-4' : 'translate-x-0.5'}`} />
                       </div>
                     </button>
+                    {/* Backplan-Einstellungen */}
+                    <button
+                      onClick={() => setShowPlanSettings(!showPlanSettings)}
+                      className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700"
+                    >
+                      <div className="flex items-center gap-3">
+                        <BedDouble size={15} className="text-gray-400" />
+                        Backplan-Einstellungen
+                      </div>
+                      <span className="text-xs text-gray-400">{showPlanSettings ? '▲' : '▼'}</span>
+                    </button>
+
+                    {showPlanSettings && (
+                      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 space-y-3 bg-gray-50 dark:bg-gray-700/40">
+
+                        {/* Nachtruhe */}
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <Moon size={11} className="text-gray-400" />
+                            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Nachtruhe</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={sleepFromStr}
+                              onChange={(e) => {
+                                setSleepFromStr(e.target.value);
+                                savePlanSetting('sleepFrom', e.target.value);
+                              }}
+                              className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 outline-none focus:border-[#8B7355]"
+                            />
+                            <span className="text-gray-300 dark:text-gray-500 text-sm">–</span>
+                            <input
+                              type="time"
+                              value={sleepToStr}
+                              onChange={(e) => {
+                                setSleepToStr(e.target.value);
+                                savePlanSetting('sleepTo', e.target.value);
+                              }}
+                              className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 outline-none focus:border-[#8B7355]"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Zielzeiten */}
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <AlarmClock size={11} className="text-gray-400" />
+                            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Zielzeiten</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-20 flex-shrink-0">Abend fertig</span>
+                              <input
+                                type="time"
+                                value={abendStr}
+                                onChange={(e) => {
+                                  setAbendStr(e.target.value);
+                                  savePlanSetting('abendZiel', e.target.value);
+                                }}
+                                className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 outline-none focus:border-[#8B7355]"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-20 flex-shrink-0">Morgen fertig</span>
+                              <input
+                                type="time"
+                                value={morgenStr}
+                                onChange={(e) => {
+                                  setMorgenStr(e.target.value);
+                                  savePlanSetting('morgenZiel', e.target.value);
+                                }}
+                                className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 outline-none focus:border-[#8B7355]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Snap */}
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <Clock size={11} className="text-gray-400" />
+                            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Snap-Granularität</span>
+                          </div>
+                          <div className="flex gap-1.5">
+                            {[0, 5, 15, 30].map((v) => (
+                              <button
+                                key={v}
+                                onClick={() => {
+                                  setSnapMin(v);
+                                  saveSettings({ snapMin: v });
+                                }}
+                                className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
+                                  snapMin === v
+                                    ? 'bg-[#8B7355] border-[#8B7355] text-white'
+                                    : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'
+                                }`}
+                              >
+                                {v === 0 ? 'aus' : `${v} min`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Reset */}
+                        <button
+                          onClick={() => {
+                            const d = SETTINGS_DEFAULTS;
+                            saveSettings({
+                              sleepFrom: d.sleepFrom, sleepTo: d.sleepTo,
+                              abendZiel: d.abendZiel, morgenZiel: d.morgenZiel,
+                              snapMin: d.snapMin,
+                            });
+                            setSleepFromStr(minToHHMM(d.sleepFrom));
+                            setSleepToStr(minToHHMM(d.sleepTo));
+                            setAbendStr(minToHHMM(d.abendZiel));
+                            setMorgenStr(minToHHMM(d.morgenZiel));
+                            setSnapMin(d.snapMin);
+                          }}
+                          className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+                        >
+                          Auf Standardwerte zurücksetzen
+                        </button>
+                      </div>
+                    )}
+
                     <Link href="/profile" onClick={() => setShowUserMenu(false)}
                       className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                       <KeyRound size={16} /> Passwort ändern
