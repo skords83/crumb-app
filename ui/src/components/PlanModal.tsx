@@ -114,6 +114,7 @@ interface TimelineProps {
   gaps: GapSegment[];
   planDur: number;
   planOffset: number;
+  viewCenter: number; // absolute minute to center view on
   scenario: Scenario;
   sleepFrom: number;
   sleepTo: number;
@@ -121,13 +122,13 @@ interface TimelineProps {
   snapMin: number;
 }
 
-function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom, sleepTo, onOffsetChange, snapMin }: TimelineProps) {
+const WINDOW = 360; // always 6h — readable at any recipe length
+
+function TimelineCanvas({ phases, gaps, planDur, planOffset, viewCenter, scenario, sleepFrom, sleepTo, onOffsetChange, snapMin }: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragState = useRef({ startX: 0, startOffset: 0 });
-  // Fenster dynamisch: planDur + ~30% Puffer, min 240, max 1440
-  const WINDOW = Math.min(1440, Math.max(240, Math.round(planDur * 1.4)));
 
   const getSleepSegments = useCallback((planStart: number) => {
     const dayBase = Math.floor(planStart / 1440) * 1440;
@@ -150,7 +151,8 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
 
     const ppm = W / WINDOW;
     const planStart = planOffset;
-    const viewStart = planStart - (WINDOW - planDur) / 2;
+    // Center view on the longest gap (viewCenter), not on block center
+    const viewStart = viewCenter - WINDOW / 2;
     const ax = (abs: number) => (abs - viewStart) * ppm;
     const bx = (rel: number) => ax(planStart + rel);
     const TT = 14, TH = 24, TICK_Y = TT + TH + 5;
@@ -248,8 +250,9 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     ctx.textAlign = "left"; ctx.fillText(minToHHMM(planStart), blockX + 2, TT - 1);
     ctx.textAlign = "right"; ctx.fillText(minToHHMM(planStart + planDur), blockX + blockW - 2, TT - 1);
 
-    // Axis
-    const step = 30, first = Math.ceil(viewStart / step) * step;
+    // Axis — adaptive tick step so labels never overlap
+    const step = WINDOW <= 120 ? 15 : WINDOW <= 360 ? 30 : WINDOW <= 720 ? 60 : 120;
+    const first = Math.ceil(viewStart / step) * step;
     for (let t = first; t <= viewStart + WINDOW + step; t += step) {
       const x = ax(t);
       ctx.strokeStyle = "#2d3440"; ctx.lineWidth = 0.5;
@@ -302,7 +305,9 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
 
   const mpp = () => {
     const c = canvasRef.current;
-    return c ? WINDOW / c.getBoundingClientRect().width : 1;
+    if (!c) return 1;
+    const w = c.getBoundingClientRect().width;
+    return w > 0 ? WINDOW / w : 1;
   };
 
   return (
@@ -645,12 +650,23 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 )}
               </div>
 
-              <TimelineCanvas
-                phases={phases} gaps={gaps} planDur={planDur}
-                planOffset={planOffset} scenario={scenario}
-                sleepFrom={sleepFrom} sleepTo={sleepTo}
-                onOffsetChange={handleOffsetChange} snapMin={snapMin}
-              />
+              {(() => {
+                // Center view on longest gap, falling back to block center
+                const bestGap = gaps.length
+                  ? gaps.reduce((a, b) => b.end - b.start > a.end - a.start ? b : a, gaps[0])
+                  : null;
+                const viewCenter = bestGap
+                  ? planOffset + (bestGap.start + bestGap.end) / 2
+                  : planOffset + planDur / 2;
+                return (
+                  <TimelineCanvas
+                    phases={phases} gaps={gaps} planDur={planDur}
+                    planOffset={planOffset} viewCenter={viewCenter} scenario={scenario}
+                    sleepFrom={sleepFrom} sleepTo={sleepTo}
+                    onOffsetChange={handleOffsetChange} snapMin={snapMin}
+                  />
+                );
+              })()}
 
               {warning && (
                 <div className={`flex items-center gap-1.5 mt-1.5 text-[11px] ${warning.level === "error" ? "text-[#f85149]" : "text-[#e3b341]"}`}>
