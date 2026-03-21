@@ -101,31 +101,78 @@ function computeGaps(phases: PhaseSegment[]): GapSegment[] {
 }
 
 function sectionsToPhases(doughSections: any[]): PhaseSegment[] {
+  // Use the same dependency-graph logic as calcTotalDuration / calculateBackplan
+  // so section start offsets are accurate (pre-doughs parallel, main dough sequential).
   const phases: PhaseSegment[] = [];
   if (!doughSections?.length) return phases;
 
-  // Determine which sections are "pre-doughs" (Vorstufen) that run in parallel.
-  // Heuristic: a section is parallel if it has NO dependency on another section
-  // (i.e. its steps don't reference other sections) AND it's not the last/main section.
-  // Simpler heuristic: sections marked as parallel, OR all sections except the last
-  // when the last section's duration >= sum of others (main dough uses pre-doughs).
-  //
-  // Most reliable: treat ALL sections as starting at t=0 in parallel,
-  // since calcTotalDuration already accounts for parallelism via the backend.
-  // The main dough (last section) may start after the pre-doughs finish —
-  // but we don't know that offset here without the full backplan.
-  // Best approximation: all start at 0, gaps computed from union of phases.
+  const phaseNames = doughSections.map((s: any) => s.name as string);
 
-  (doughSections || []).forEach((section: any, si: number) => {
+  const normalizeName = (name: string): string =>
+    name.toLowerCase()
+      .replace(/^\d+\.\s*/, '').replace(/\bstufe\s+\d+\b/g, '')
+      .replace(/\breifer?\b/g, '').replace(/\bfrischer?\b/g, '')
+      .replace(/\bfertig[a-z]*\b/g, '').replace(/\s+/g, ' ').trim();
+
+  // Build dependency graph
+  const deps: Record<string, string[]> = {};
+  doughSections.forEach((section: any) => {
+    deps[section.name] = [];
+    (section.ingredients || []).forEach((ing: any) => {
+      const ingName = normalizeName(ing.name || '');
+      phaseNames.forEach(otherName => {
+        if (otherName === section.name) return;
+        const normOther = normalizeName(otherName);
+        if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
+          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+      });
+    });
+  });
+
+  const sectionMap = Object.fromEntries(doughSections.map((s: any) => [s.name, s]));
+  const endO: Record<string, number> = {};
+  const startO: Record<string, number> = {};
+
+  const stepDur = (st: any): number => {
+    const min = parseInt(st.duration_min), max = parseInt(st.duration_max);
+    return (!isNaN(min) && !isNaN(max)) ? Math.round((min + max) / 2) : (parseInt(st.duration) || 0);
+  };
+
+  function calcEnd(name: string, vis = new Set<string>()): number {
+    if (name in endO) return endO[name];
+    if (vis.has(name)) return 0;
+    vis.add(name);
+    const dependents = phaseNames.filter(n => deps[n]?.includes(name));
+    endO[name] = dependents.length === 0 ? 0
+      : Math.min(...dependents.map(d => calcStart(d, new Set(vis))));
+    return endO[name];
+  }
+  function calcStart(name: string, vis = new Set<string>()): number {
+    if (name in startO) return startO[name];
+    const dur = (sectionMap[name]?.steps || []).reduce((s: number, st: any) => s + stepDur(st), 0);
+    startO[name] = calcEnd(name, vis) + dur;
+    return startO[name];
+  }
+  phaseNames.forEach(n => calcStart(n));
+
+  // totalDur = max startOffset across all sections
+  const totalDur = Math.max(...phaseNames.map(n => startO[n] || 0));
+
+  // Convert: startOffset is "minutes before end", so
+  // section starts at (totalDur - startOffset) relative to plan start
+  doughSections.forEach((section: any, si: number) => {
     const teigId = `s${si}`;
-    let t = 0; // all sections start at 0 (parallel)
+    // How many minutes after plan start does this section begin?
+    const sectionRelStart = totalDur - (startO[section.name] || 0);
+    let t = sectionRelStart;
     (section.steps || []).forEach((step: any) => {
-      const dur = step.duration || step.duration_min || 1;
+      const dur = stepDur(step);
       const isRest = step.type === "Warten" || step.type === "Kühl" || step.type === "Ruhen";
       phases.push({ start: t, dur, type: isRest ? "rest" : "action", teig: teigId });
       t += dur;
     });
   });
+
   return phases;
 }
 
