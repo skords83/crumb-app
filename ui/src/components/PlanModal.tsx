@@ -127,7 +127,10 @@ function sectionsToPhases(doughSections: any[]): PhaseSegment[] {
         phaseNames.forEach(otherName => {
           if (otherName === section.name) return;
           const normOther = normalizeName(otherName);
-          if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
+          if (normOther.length < 4) return;
+          // Use word-boundary matching to avoid "vorteig" matching inside "roggensauerteig"
+          const wordBoundary = new RegExp(`(?:^|\\s)${normOther.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+          if (wordBoundary.test(ingName) || ingName === normOther)
             if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
         });
       });
@@ -384,11 +387,11 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
         }}
         onPointerMove={(e) => {
           if (!isDragging) return;
-          onOffsetChange(dragState.current.startOffset - (e.clientX - dragState.current.startX) * mpp());
+          onOffsetChange(dragState.current.startOffset + (e.clientX - dragState.current.startX) * mpp());
         }}
         onPointerUp={(e) => {
           setIsDragging(false);
-          const raw = dragState.current.startOffset - (e.clientX - dragState.current.startX) * mpp();
+          const raw = dragState.current.startOffset + (e.clientX - dragState.current.startX) * mpp();
           onOffsetChange(snapTo(raw, snapMin));
         }}
       />
@@ -672,16 +675,6 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 );
               })}
             </div>
-
-            {/* Sleep time override (nacht mode only) */}
-            {scenario === "nacht" && (
-              <div className="flex items-center gap-3 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 mb-3">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="flex-shrink-0">
-                  <path d="M9 2a4 4 0 1 0 0 8 5 5 0 0 1 0-8z" stroke="#8b949e" strokeWidth="1" strokeLinecap="round"/>
-                </svg>
-                <span className="text-xs text-[#8b949e] flex-1">Nachtruhe</span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => openPicker("from")}
                     className="bg-[#21262d] border border-[#30363d] rounded px-2.5 py-1 text-sm text-[#e6edf3] font-mono hover:border-[#484f58] transition-colors">
                     {minToHHMM(sleepFrom)}
                   </button>
