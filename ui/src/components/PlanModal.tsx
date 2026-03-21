@@ -147,7 +147,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     const W = canvas.width / dpr;
     ctx.save();
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, W, 58);
+    ctx.clearRect(0, 0, W, 68);
 
     // Proportional layout: block = BLOCK_RATIO of width, equal padding each side
     const pad = (W * (1 - BLOCK_RATIO)) / 2;
@@ -158,7 +158,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     const mpp = totalMin / W; // minutes per pixel
     const viewStart = planOffset - pad * mpp;
 
-    const TT = 4, TH = 24, TICK_Y = TT + TH + 5;
+    const TT = 14, TH = 24, TICK_Y = TT + TH + 5;
 
     // Full-width track background
     ctx.fillStyle = "#21262d";
@@ -204,7 +204,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     for (const p of phases) {
       if (p.type === "rest") continue;
       const x = blockX + (p.start / planDur) * blockW;
-      const pw = Math.max(2, (p.dur / planDur) * blockW);
+      const pw = Math.max(6, (p.dur / planDur) * blockW);
       ctx.fillStyle = TEIG_COLORS[p.teig] || "#f0a500";
       ctx.globalAlpha = 0.9;
       ctx.fillRect(x, TT + 3, pw, TH - 6);
@@ -265,9 +265,9 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
       const w = wrap.clientWidth;
       if (w === 0) return;
       canvas.width = w * dpr;
-      canvas.height = 58 * dpr;
+      canvas.height = 68 * dpr;
       canvas.style.width = w + "px";
-      canvas.style.height = "58px";
+      canvas.style.height = "68px";
       draw();
     };
 
@@ -292,7 +292,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
   };
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", height: 58 }}>
+    <div ref={wrapRef} style={{ position: "relative", height: 68 }}>
       <canvas
         ref={canvasRef}
         style={{ position: "absolute", inset: 0, cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
@@ -555,23 +555,23 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                     key={sc.id}
                     onClick={() => !isDisabled && activateScenario(sc.id)}
                     className={[
-                      "rounded-xl p-3 flex flex-col gap-1 transition-colors select-none",
+                      "rounded-xl px-3 py-2 flex items-center gap-2.5 transition-colors select-none",
                       isDisabled ? "bg-[#21262d] border border-[#30363d] opacity-35 cursor-not-allowed"
                       : isActive ? "bg-[rgba(240,165,0,0.07)] border border-[#f0a500] cursor-pointer"
                       : isManual ? "bg-[#21262d] border border-[#30363d] opacity-50 cursor-pointer hover:opacity-75 hover:border-[#484f58]"
                       : "bg-[#21262d] border border-[#30363d] cursor-pointer hover:border-[#484f58]",
                     ].join(" ")}
                   >
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isActive ? "bg-[rgba(240,165,0,0.15)]" : "bg-[#2d333b]"}`}>
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? "bg-[rgba(240,165,0,0.15)]" : "bg-[#2d333b]"}`}>
                       <ScenarioIcon id={sc.id} />
                     </div>
-                    <div className="text-[13px] font-semibold text-[#e6edf3]">{sc.label}</div>
-                    <div className={`text-[11px] ${isActive ? "text-[#f0a500]" : "text-[#8b949e]"}`}>{sc.sub}</div>
-                    {sc.note && (
-                      <div className={`text-[10px] ${sc.id === "nacht" ? "text-[#f85149]" : "text-[#e3b341]"}`}>
-                        {sc.note}
-                      </div>
-                    )}
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[12px] font-semibold text-[#e6edf3] leading-snug">{sc.label}</span>
+                      <span className={`text-[10px] leading-snug ${isActive ? "text-[#f0a500]" : "text-[#8b949e]"}`}>{sc.sub}</span>
+                      {sc.note && (
+                        <span className={`text-[10px] leading-snug ${sc.id === "nacht" ? "text-[#f85149]" : "text-[#e3b341]"}`}>{sc.note}</span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -666,8 +666,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                     const absStart = planStart + g.start;
                     const absEnd = planStart + g.end;
                     const dur = g.end - g.start;
-                    const night = inSleepWindow(absStart, sleepFrom, sleepTo) ||
-                                  inSleepWindow(absStart + dur / 2, sleepFrom, sleepTo);
+                    // Count minutes inside sleep window to determine if majority is at night
+                    let nightMins = 0;
+                    for (let t = 0; t < dur; t += 5) {
+                      if (inSleepWindow(absStart + t, sleepFrom, sleepTo)) nightMins += 5;
+                    }
+                    const night = nightMins > dur / 2;
                     const durText = dur < 60 ? `${dur} min` : `${Math.floor(dur/60)}h${dur%60>0?' '+dur%60+'m':''}`;
                     return (
                       <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
