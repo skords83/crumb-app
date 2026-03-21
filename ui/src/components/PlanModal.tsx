@@ -55,7 +55,12 @@ function inSleepWindow(absMin: number, sleepFrom: number, sleepTo: number): bool
 }
 
 function isPastAbsolute(absMin: number): boolean {
+  // absMin can be >1440 for tomorrow — compare full value against today's minutes
+  // Today = 0..1439, Tomorrow = 1440..2879 etc.
+  // nowMin() returns 0..1439, so today's "absolute" is just nowMin()
+  // If absMin >= 1440 it's tomorrow or later → never past
   if (absMin >= 1440) return false;
+  // absMin < 1440 means today — check if already passed
   return absMin < nowMin();
 }
 
@@ -400,15 +405,20 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       return snapTo(start, snapMin);
     }
     if (s === "morgen") {
-      let start = morgenZiel - planDur;
-      if (start <= now) start += 1440;
+      // Always target next morning — add 1440 to ensure it's tomorrow
+      let start = morgenZiel - planDur + 1440;
+      // If that's still in the past somehow (very long recipe), add another day
+      if (start < now) start += 1440;
       return snapTo(start, snapMin);
     }
     if (s === "nacht" && longestGap) {
       const gapMid = (longestGap.start + longestGap.end) / 2;
       const sleepDur = ((sleepTo + 1440 - sleepFrom) % 1440);
       const sleepMid = (sleepFrom + sleepDur / 2) % 1440;
-      return snapTo(sleepMid - gapMid, snapMin);
+      let start = snapTo(sleepMid - gapMid, snapMin);
+      // Ensure result is in the future — add 1440 until it is
+      while (start < now) start += 1440;
+      return start;
     }
     return planOffset;
   }, [abendZiel, morgenZiel, planDur, longestGap, sleepFrom, sleepTo, snapMin, planOffset]);
@@ -425,7 +435,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const warning = useMemo((): { level: "error" | "hint"; text: string } | null => {
     if (isPastAbsolute(planStart)) return { level: "error", text: "Plan liegt in der Vergangenheit" };
     if (inSleepWindow(planStart, sleepFrom, sleepTo))
-      return { level: "error", text: `Plan startet um ${minToHHMM(planStart)} – mitten in der Nachtruhe` };
+      return { level: "hint", text: `Plan startet um ${minToHHMM(planStart)} – mitten in der Nachtruhe` };
     const actionInSleep = phases.filter((p) => p.type === "action").some((p) => {
       for (let t = p.start; t < p.start + p.dur; t++)
         if (inSleepWindow(planStart + t, sleepFrom, sleepTo)) return true;
@@ -435,7 +445,9 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     return null;
   }, [planStart, sleepFrom, sleepTo, phases]);
 
-  const canConfirm = !warning || warning.level !== "error";
+  // Only block on past — sleep collision is a hint, user can override
+  const isPastWarning = warning?.text?.includes("Vergangenheit");
+  const canConfirm = !isPastWarning;
 
   // ─── card notes ───────────────────────────────────────────────────────────
 
@@ -716,7 +728,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             className={`flex-[2] py-3 rounded-xl text-sm font-semibold transition-colors ${
               canConfirm ? "bg-[#1a7a3c] text-[#4ade80] hover:bg-[#1f9447]" : "bg-[#21262d] text-[#484f58] cursor-not-allowed"
             }`}>
-            Backplan starten
+            {warning && !isPastWarning ? "Trotzdem starten" : "Backplan starten"}
           </button>
         </div>
 
