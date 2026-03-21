@@ -675,17 +675,6 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 );
               })}
             </div>
-                    className="bg-[#21262d] border border-[#30363d] rounded px-2.5 py-1 text-sm text-[#e6edf3] font-mono hover:border-[#484f58] transition-colors">
-                    {minToHHMM(sleepFrom)}
-                  </button>
-                  <span className="text-xs text-[#484f58]">–</span>
-                  <button onClick={() => openPicker("to")}
-                    className="bg-[#21262d] border border-[#30363d] rounded px-2.5 py-1 text-sm text-[#e6edf3] font-mono hover:border-[#484f58] transition-colors">
-                    {minToHHMM(sleepTo)}
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Times */}
             <div className="flex items-baseline justify-between mb-2">
