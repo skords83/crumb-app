@@ -115,16 +115,21 @@ function sectionsToPhases(doughSections: any[]): PhaseSegment[] {
       .replace(/\bfertig[a-z]*\b/g, '').replace(/\s+/g, ' ').trim();
 
   // Build dependency graph
+  // Also check ingredient.temperature field — some scrapers put the phase name there
   const deps: Record<string, string[]> = {};
   doughSections.forEach((section: any) => {
     deps[section.name] = [];
     (section.ingredients || []).forEach((ing: any) => {
-      const ingName = normalizeName(ing.name || '');
-      phaseNames.forEach(otherName => {
-        if (otherName === section.name) return;
-        const normOther = normalizeName(otherName);
-        if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
-          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+      // Check both name and temperature fields for phase references (scraper artefact)
+      const candidates = [ing.name || '', ing.temperature || ''];
+      candidates.forEach(candidate => {
+        const ingName = normalizeName(candidate);
+        phaseNames.forEach(otherName => {
+          if (otherName === section.name) return;
+          const normOther = normalizeName(otherName);
+          if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
+            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        });
       });
     });
   });
