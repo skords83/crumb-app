@@ -268,18 +268,36 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     ctx.restore();
   }, [phases, gaps, planDur, planOffset, scenario, isDragging, getSleepSegments, sleepFrom, sleepTo]);
 
+  // ResizeObserver: setzt Dimensionen sobald wrap wirklich eine Breite hat,
+  // dann draw(). Löst das Problem dass canvas.width=0 beim ersten Render.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = wrap.clientWidth;
+      if (w === 0) return;
+      canvas.width = w * dpr;
+      canvas.height = 58 * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = "58px";
+      draw();
+    };
+
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+    resize();
+    return () => ro.disconnect();
+  }, [draw]);
+
+  // Redraw whenever draw-deps change (planOffset, scenario, isDragging etc.)
   useEffect(() => {
     const canvas = canvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
-    const dpr = window.devicePixelRatio || 1;
-    const rect = wrap.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = 58 * dpr;
-    canvas.style.width = rect.width + "px";
-    canvas.style.height = "58px";
+    if (!canvas || canvas.width === 0) return;
     draw();
-  });
+  }, [draw]);
 
   const mpp = () => {
     const c = canvasRef.current;
