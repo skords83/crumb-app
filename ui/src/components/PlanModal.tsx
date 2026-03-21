@@ -451,11 +451,14 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   const warning = useMemo((): { level: "error" | "hint"; text: string } | null => {
     if (isPastAbsolute(planStart)) return { level: "error", text: "Plan liegt in der Vergangenheit" };
-    if (inSleepWindow(planStart, sleepFrom, sleepTo))
+    if (inSleepWindow(((planStart % 1440) + 1440) % 1440, sleepFrom, sleepTo))
       return { level: "hint", text: `Plan startet um ${minToHHMM(planStart)} – mitten in der Nachtruhe` };
     const actionInSleep = phases.filter((p) => p.type === "action").some((p) => {
-      for (let t = p.start; t < p.start + p.dur; t++)
-        if (inSleepWindow(planStart + t, sleepFrom, sleepTo)) return true;
+      for (let t = p.start; t < p.start + p.dur; t++) {
+        // Normalize to 0..1439 correctly regardless of how many days ahead planStart is
+        const absT = ((planStart + t) % 1440 + 1440) % 1440;
+        if (inSleepWindow(absT, sleepFrom, sleepTo)) return true;
+      }
       return false;
     });
     if (actionInSleep) return { level: "hint", text: "Eine Aktionsphase fällt in die Nachtruhe" };
