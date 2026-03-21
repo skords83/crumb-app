@@ -54,6 +54,18 @@ function inSleepWindow(absMin: number, sleepFrom: number, sleepTo: number): bool
     : norm >= sleepFrom || norm < sleepTo;
 }
 
+function dayLabel(absMin: number): string {
+  // absMin: absolute minutes from today's midnight
+  // Returns "heute", "morgen", or weekday name
+  const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const today = new Date();
+  if (absMin < 1440) return "heute";
+  if (absMin < 2880) return "morgen";
+  const d = new Date(today);
+  d.setDate(d.getDate() + Math.floor(absMin / 1440));
+  return days[d.getDay()];
+}
+
 function isPastAbsolute(absMin: number): boolean {
   // absMin can be >1440 for tomorrow — compare full value against today's minutes
   // Today = 0..1439, Tomorrow = 1440..2879 etc.
@@ -414,11 +426,16 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     if (s === "nacht" && longestGap) {
       const gapMid = (longestGap.start + longestGap.end) / 2;
       const sleepDur = ((sleepTo + 1440 - sleepFrom) % 1440);
+      // sleepMid in absolute minutes from midnight
       const sleepMid = (sleepFrom + sleepDur / 2) % 1440;
-      let start = snapTo(sleepMid - gapMid, snapMin);
-      // Ensure result is in the future — add 1440 until it is
-      while (start < now) start += 1440;
-      return start;
+      // planStart such that planStart + gapMid = sleepMid
+      // Try tonight first, then tomorrow night
+      const base = snapTo(sleepMid - gapMid, snapMin);
+      // Candidates: tonight, tomorrow night
+      const candidates = [base, base + 1440, base + 2880];
+      // Pick the first candidate that is in the future
+      const chosen = candidates.find(c => c > now) ?? candidates[candidates.length - 1];
+      return chosen;
     }
     return planOffset;
   }, [abendZiel, morgenZiel, planDur, longestGap, sleepFrom, sleepTo, snapMin, planOffset]);
@@ -625,9 +642,19 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             {/* Times */}
             <div className="flex items-baseline justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-base font-semibold text-[#f0a500]">{minToHHMM(planStart)}</span>
+                <div className="flex flex-col items-start">
+                  <span className="text-base font-semibold text-[#f0a500] leading-tight">{minToHHMM(planStart)}</span>
+                  {dayLabel(planStart) !== "heute" && (
+                    <span className="text-[10px] text-[#8b949e] leading-tight">{dayLabel(planStart)}</span>
+                  )}
+                </div>
                 <span className="text-sm text-[#484f58]">→</span>
-                <span className="text-base font-semibold text-[#f0a500]">{minToHHMM(planStart + planDur)}</span>
+                <div className="flex flex-col items-start">
+                  <span className="text-base font-semibold text-[#f0a500] leading-tight">{minToHHMM(planStart + planDur)}</span>
+                  {dayLabel(planStart + planDur) !== dayLabel(planStart) && (
+                    <span className="text-[10px] text-[#8b949e] leading-tight">{dayLabel(planStart + planDur)}</span>
+                  )}
+                </div>
               </div>
               <span className="text-xs text-[#484f58]">{totalHours}h {totalMins}m</span>
             </div>
