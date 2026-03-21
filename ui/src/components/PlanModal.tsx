@@ -85,17 +85,29 @@ function computeGaps(phases: PhaseSegment[]): GapSegment[] {
 
 function sectionsToPhases(doughSections: any[]): PhaseSegment[] {
   const phases: PhaseSegment[] = [];
-  let cursor = 0;
+  if (!doughSections?.length) return phases;
+
+  // Determine which sections are "pre-doughs" (Vorstufen) that run in parallel.
+  // Heuristic: a section is parallel if it has NO dependency on another section
+  // (i.e. its steps don't reference other sections) AND it's not the last/main section.
+  // Simpler heuristic: sections marked as parallel, OR all sections except the last
+  // when the last section's duration >= sum of others (main dough uses pre-doughs).
+  //
+  // Most reliable: treat ALL sections as starting at t=0 in parallel,
+  // since calcTotalDuration already accounts for parallelism via the backend.
+  // The main dough (last section) may start after the pre-doughs finish —
+  // but we don't know that offset here without the full backplan.
+  // Best approximation: all start at 0, gaps computed from union of phases.
+
   (doughSections || []).forEach((section: any, si: number) => {
     const teigId = `s${si}`;
-    let t = si === 0 ? 0 : cursor;
+    let t = 0; // all sections start at 0 (parallel)
     (section.steps || []).forEach((step: any) => {
       const dur = step.duration || step.duration_min || 1;
       const isRest = step.type === "Warten" || step.type === "Kühl" || step.type === "Ruhen";
       phases.push({ start: t, dur, type: isRest ? "rest" : "action", teig: teigId });
       t += dur;
     });
-    if (si === 0) cursor = t;
   });
   return phases;
 }
