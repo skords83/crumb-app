@@ -9,11 +9,15 @@ export interface CrumbSettings {
   showBakersPercent: boolean;
 
   // Backplan-Planung
-  sleepFrom: number;   // Nachtruhe Beginn in Minuten ab Mitternacht (default: 22:00 = 1320)
-  sleepTo: number;     // Nachtruhe Ende in Minuten ab Mitternacht (default: 06:30 = 390)
-  abendZiel: number;   // Zielzeit "Abend" in Minuten ab Mitternacht (default: 19:00 = 1140)
-  morgenZiel: number;  // Zielzeit "Morgen früh" in Minuten ab Mitternacht (default: 07:30 = 450)
-  snapMin: number;     // Snap-Granularität in Minuten: 0=aus, 5, 15, 30 (default: 15)
+  sleepFrom: number;        // Nachtruhe Beginn in Minuten ab Mitternacht (default: 22:00 = 1320)
+  sleepTo: number;          // Nachtruhe Ende in Minuten ab Mitternacht (default: 06:30 = 390)
+  abendZiel: number;        // Zielzeit "Abend" in Minuten ab Mitternacht (default: 19:00 = 1140)
+  morgenZiel: number;       // Zielzeit "Morgen früh" in Minuten ab Mitternacht (default: 07:30 = 450)
+  snapMin: number;          // Snap-Granularität in Minuten: 0=aus, 5, 15, 30 (default: 15)
+
+  // Freizeit-Liste
+  showFreieZeit: boolean;   // Freizeit-Liste im Backplan-Modal anzeigen (default: true)
+  minFreieZeit: number;     // Mindestdauer freie Zeit in Minuten: 15, 30, 60 (default: 30)
 }
 
 export const SETTINGS_DEFAULTS: CrumbSettings = {
@@ -23,6 +27,8 @@ export const SETTINGS_DEFAULTS: CrumbSettings = {
   abendZiel: 19 * 60,       // 19:00
   morgenZiel: 7 * 60 + 30,  // 07:30
   snapMin: 15,
+  showFreieZeit: true,
+  minFreieZeit: 30,
 };
 
 export function loadSettings(): CrumbSettings {

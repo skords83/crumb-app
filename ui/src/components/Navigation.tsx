@@ -29,6 +29,8 @@ export default function Navigation() {
   const [abendStr, setAbendStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.abendZiel));
   const [morgenStr, setMorgenStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.morgenZiel));
   const [snapMin, setSnapMin] = useState(SETTINGS_DEFAULTS.snapMin);
+  const [showFreieZeit, setShowFreieZeit] = useState(SETTINGS_DEFAULTS.showFreieZeit);
+  const [minFreieZeit, setMinFreieZeit] = useState(SETTINGS_DEFAULTS.minFreieZeit);
 
   useEffect(() => {
     setMounted(true);
@@ -41,6 +43,8 @@ export default function Navigation() {
     setAbendStr(minToHHMM(s.abendZiel));
     setMorgenStr(minToHHMM(s.morgenZiel));
     setSnapMin(s.snapMin);
+    setShowFreieZeit(s.showFreieZeit ?? true);
+    setMinFreieZeit(s.minFreieZeit ?? 30);
   }, []);
 
   const toggleTheme = () => {
@@ -249,6 +253,49 @@ export default function Navigation() {
                           </div>
                         </div>
 
+                        {/* Freizeit-Liste */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Clock size={11} className="text-gray-400" />
+                              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Freizeit-Liste</span>
+                            </div>
+                            <div
+                              onClick={() => {
+                                const next = !showFreieZeit;
+                                setShowFreieZeit(next);
+                                saveSettings({ showFreieZeit: next });
+                              }}
+                              className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${showFreieZeit ? 'bg-[#8B7355]' : 'bg-gray-200 dark:bg-gray-600'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showFreieZeit ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                            </div>
+                          </div>
+                          {showFreieZeit && (
+                            <div>
+                              <span className="text-xs text-gray-400 block mb-1.5">Mindestdauer</span>
+                              <div className="flex gap-1.5">
+                                {[15, 30, 60].map((v) => (
+                                  <button
+                                    key={v}
+                                    onClick={() => {
+                                      setMinFreieZeit(v);
+                                      saveSettings({ minFreieZeit: v });
+                                    }}
+                                    className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${
+                                      minFreieZeit === v
+                                        ? 'bg-[#8B7355] border-[#8B7355] text-white'
+                                        : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'
+                                    }`}
+                                  >
+                                    {v < 60 ? `${v} min` : '1 h'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Reset */}
                         <button
                           onClick={() => {
@@ -257,12 +304,16 @@ export default function Navigation() {
                               sleepFrom: d.sleepFrom, sleepTo: d.sleepTo,
                               abendZiel: d.abendZiel, morgenZiel: d.morgenZiel,
                               snapMin: d.snapMin,
+                              showFreieZeit: d.showFreieZeit,
+                              minFreieZeit: d.minFreieZeit,
                             });
                             setSleepFromStr(minToHHMM(d.sleepFrom));
                             setSleepToStr(minToHHMM(d.sleepTo));
                             setAbendStr(minToHHMM(d.abendZiel));
                             setMorgenStr(minToHHMM(d.morgenZiel));
                             setSnapMin(d.snapMin);
+                            setShowFreieZeit(d.showFreieZeit);
+                            setMinFreieZeit(d.minFreieZeit);
                           }}
                           className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
                         >

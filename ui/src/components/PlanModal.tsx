@@ -114,7 +114,6 @@ interface TimelineProps {
   gaps: GapSegment[];
   planDur: number;
   planOffset: number;
-  viewCenter: number; // absolute minute to center view on
   scenario: Scenario;
   sleepFrom: number;
   sleepTo: number;
@@ -122,9 +121,10 @@ interface TimelineProps {
   snapMin: number;
 }
 
-const WINDOW = 360; // always 6h — readable at any recipe length
+// Block occupies 75% of canvas width — 12.5% padding each side for context
+const BLOCK_RATIO = 0.75;
 
-function TimelineCanvas({ phases, gaps, planDur, planOffset, viewCenter, scenario, sleepFrom, sleepTo, onOffsetChange, snapMin }: TimelineProps) {
+function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom, sleepTo, onOffsetChange, snapMin }: TimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -149,112 +149,93 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, viewCenter, scenari
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, W, 58);
 
-    const ppm = W / WINDOW;
-    const planStart = planOffset;
-    // Center view on the longest gap (viewCenter), not on block center
-    const viewStart = viewCenter - WINDOW / 2;
-    const ax = (abs: number) => (abs - viewStart) * ppm;
-    const bx = (rel: number) => ax(planStart + rel);
-    const TT = 14, TH = 24, TICK_Y = TT + TH + 5;
-    const blockX = bx(0), blockW = planDur * ppm;
+    // Proportional layout: block = BLOCK_RATIO of width, equal padding each side
+    const pad = (W * (1 - BLOCK_RATIO)) / 2;
+    const blockW = W * BLOCK_RATIO;
+    const blockX = pad;
+    // Total minutes shown = planDur / BLOCK_RATIO (includes padding context)
+    const totalMin = planDur / BLOCK_RATIO;
+    const mpp = totalMin / W; // minutes per pixel
+    const viewStart = planOffset - pad * mpp;
 
-    // Track
-    ctx.fillStyle = "#1a1f27";
+    const TT = 4, TH = 24, TICK_Y = TT + TH + 5;
+
+    // Full-width track background
+    ctx.fillStyle = "#21262d";
     ctx.beginPath(); ctx.roundRect(0, TT, W, TH, 5); ctx.fill();
-    ctx.strokeStyle = "#252c38"; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.roundRect(0, TT, W, TH, 5); ctx.stroke();
 
-    // Sleep zone
-    const sleepAlpha = scenario === "nacht" ? 1 : 0.35;
-    const renderSleep = (labelsOnly: boolean) => {
-      for (const seg of getSleepSegments(planStart)) {
-        const x1 = ax(seg.from), x2 = ax(seg.to);
-        const cx1 = Math.max(0, x1), cx2 = Math.min(W, x2);
-        if (cx2 <= cx1) continue;
-        if (!labelsOnly) {
-          ctx.fillStyle = "rgba(96,130,210,0.09)"; ctx.fillRect(cx1, TT, cx2 - cx1, TH);
-          ctx.save(); ctx.beginPath(); ctx.rect(cx1, TT, cx2 - cx1, TH); ctx.clip();
-          ctx.strokeStyle = "rgba(96,130,210,0.13)"; ctx.lineWidth = 1;
-          for (let s = cx1 - TH; s < cx2 + TH; s += 7) {
-            ctx.beginPath(); ctx.moveTo(s, TT); ctx.lineTo(s + TH, TT + TH); ctx.stroke();
-          }
-          ctx.restore();
-          const lx = (cx1 + cx2) / 2;
-          ctx.fillStyle = "rgba(96,130,210,0.4)"; ctx.font = "11px sans-serif";
-          ctx.textBaseline = "middle"; ctx.textAlign = "center";
-          ctx.fillText("☽", lx, TT + TH / 2);
-        } else {
-          if (x1 >= 0 && x1 <= W) {
-            ctx.save(); ctx.strokeStyle = "rgba(96,130,210,0.35)"; ctx.lineWidth = 0.75; ctx.setLineDash([3, 3]);
-            ctx.beginPath(); ctx.moveTo(x1, TT); ctx.lineTo(x1, TT + TH); ctx.stroke();
-            ctx.setLineDash([]); ctx.restore();
-            ctx.fillStyle = "rgba(96,130,210,0.55)"; ctx.font = "9px sans-serif";
-            ctx.textBaseline = "bottom"; ctx.textAlign = "left";
-            ctx.fillText(minToHHMM(sleepFrom), x1 + 2, TT - 1);
-          }
-          if (x2 >= 0 && x2 <= W) {
-            ctx.save(); ctx.strokeStyle = "rgba(96,130,210,0.35)"; ctx.lineWidth = 0.75; ctx.setLineDash([3, 3]);
-            ctx.beginPath(); ctx.moveTo(x2, TT); ctx.lineTo(x2, TT + TH); ctx.stroke();
-            ctx.setLineDash([]); ctx.restore();
-            ctx.fillStyle = "rgba(96,130,210,0.55)"; ctx.font = "9px sans-serif";
-            ctx.textBaseline = "bottom"; ctx.textAlign = "right";
-            ctx.fillText(minToHHMM(sleepTo), x2 - 2, TT - 1);
-          }
-        }
-      }
-    };
-    ctx.save(); ctx.globalAlpha = sleepAlpha;
+    // Sleep zone — shown at full opacity in nacht mode, dimmed otherwise
+    const sleepAlpha = scenario === "nacht" ? 1 : 0.4;
+    const dayBase = Math.floor(planOffset / 1440) * 1440;
+    const sleepSegs = [
+      { from: dayBase + sleepFrom, to: sleepFrom < sleepTo ? dayBase + sleepTo : dayBase + sleepTo + 1440 },
+      { from: dayBase + sleepFrom + 1440, to: sleepFrom < sleepTo ? dayBase + sleepTo + 1440 : dayBase + sleepTo + 2880 },
+      { from: dayBase + sleepFrom - 1440, to: sleepFrom < sleepTo ? dayBase + sleepTo - 1440 : dayBase + sleepTo },
+    ];
+    ctx.save();
+    ctx.globalAlpha = sleepAlpha;
     ctx.beginPath(); ctx.roundRect(0, TT, W, TH, 5); ctx.clip();
-    renderSleep(false); ctx.restore();
-    ctx.globalAlpha = sleepAlpha; renderSleep(true); ctx.globalAlpha = 1;
-
-    // Gaps
-    ctx.save(); ctx.beginPath(); ctx.roundRect(0, TT, W, TH, 5); ctx.clip();
-    for (const g of gaps) {
-      const x1 = bx(g.start), x2 = bx(g.end), gw = x2 - x1;
-      if (gw < 1) continue;
-      ctx.fillStyle = "rgba(34,197,94,0.22)"; ctx.fillRect(x1, TT, gw, TH);
-      if (gw > 36) {
-        ctx.fillStyle = "rgba(34,197,94,0.75)"; ctx.font = "9px sans-serif";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(`${g.end - g.start} min`, x1 + gw / 2, TT + TH / 2);
+    for (const seg of sleepSegs) {
+      const x1 = (seg.from - viewStart) / mpp, x2 = (seg.to - viewStart) / mpp;
+      const cx1 = Math.max(0, x1), cx2 = Math.min(W, x2);
+      if (cx2 <= cx1) continue;
+      ctx.fillStyle = "rgba(96,130,210,0.12)"; ctx.fillRect(cx1, TT, cx2 - cx1, TH);
+      ctx.save(); ctx.beginPath(); ctx.rect(cx1, TT, cx2 - cx1, TH); ctx.clip();
+      ctx.strokeStyle = "rgba(96,130,210,0.16)"; ctx.lineWidth = 1;
+      for (let s = cx1 - TH; s < cx2 + TH; s += 7) {
+        ctx.beginPath(); ctx.moveTo(s, TT); ctx.lineTo(s + TH, TT + TH); ctx.stroke();
       }
+      ctx.restore();
+      const lx = (cx1 + cx2) / 2;
+      ctx.fillStyle = "rgba(96,130,210,0.45)"; ctx.font = "11px sans-serif";
+      ctx.textBaseline = "middle"; ctx.textAlign = "center";
+      ctx.fillText("☽", lx, TT + TH / 2);
     }
     ctx.restore();
+    ctx.globalAlpha = 1;
 
-    // Block
-    ctx.save(); ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.clip();
-    ctx.fillStyle = "rgba(30,36,46,0.6)"; ctx.fillRect(blockX, TT, blockW, TH);
+    // Block background
+    ctx.fillStyle = "rgba(22,27,34,0.85)";
+    ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.fill();
+
+    // Action phases inside block — proportional within block width
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.clip();
     for (const p of phases) {
       if (p.type === "rest") continue;
+      const x = blockX + (p.start / planDur) * blockW;
+      const pw = Math.max(2, (p.dur / planDur) * blockW);
       ctx.fillStyle = TEIG_COLORS[p.teig] || "#f0a500";
       ctx.globalAlpha = 0.9;
-      ctx.fillRect(bx(p.start), TT + 3, p.dur * ppm, TH - 6);
+      ctx.fillRect(x, TT + 3, pw, TH - 6);
       ctx.globalAlpha = 1;
     }
     ctx.restore();
-    ctx.strokeStyle = isDragging ? "rgba(240,165,0,0.9)" : "rgba(240,165,0,0.5)";
+
+    // Block border
+    ctx.strokeStyle = isDragging ? "rgba(240,165,0,0.9)" : "rgba(240,165,0,0.55)";
     ctx.lineWidth = isDragging ? 1.5 : 1;
     ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.stroke();
 
-    // Grip
-    ctx.strokeStyle = isDragging ? "rgba(240,165,0,0.7)" : "rgba(255,255,255,0.2)";
-    ctx.lineWidth = 1.5; ctx.lineCap = "round";
+    // Grip handle
     const gx = blockX + blockW / 2, gy = TT + TH / 2;
+    ctx.strokeStyle = isDragging ? "rgba(240,165,0,0.7)" : "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 1.5; ctx.lineCap = "round";
     [-4, 0, 4].forEach((dx) => {
       ctx.beginPath(); ctx.moveTo(gx + dx, gy - 4); ctx.lineTo(gx + dx, gy + 4); ctx.stroke();
     });
 
-    // Time labels
+    // Time labels above block edges
     ctx.font = "9px sans-serif"; ctx.fillStyle = "#f0a500"; ctx.textBaseline = "bottom";
-    ctx.textAlign = "left"; ctx.fillText(minToHHMM(planStart), blockX + 2, TT - 1);
-    ctx.textAlign = "right"; ctx.fillText(minToHHMM(planStart + planDur), blockX + blockW - 2, TT - 1);
+    ctx.textAlign = "left"; ctx.fillText(minToHHMM(planOffset), blockX + 2, TT);
+    ctx.textAlign = "right"; ctx.fillText(minToHHMM(planOffset + planDur), blockX + blockW - 2, TT);
 
-    // Axis — adaptive tick step so labels never overlap
-    const step = WINDOW <= 120 ? 15 : WINDOW <= 360 ? 30 : WINDOW <= 720 ? 60 : 120;
+    // Adaptive axis ticks — step based on totalMin shown
+    const step = totalMin <= 180 ? 30 : totalMin <= 480 ? 60 : totalMin <= 960 ? 120 : 240;
     const first = Math.ceil(viewStart / step) * step;
-    for (let t = first; t <= viewStart + WINDOW + step; t += step) {
-      const x = ax(t);
+    for (let t = first; t <= viewStart + totalMin + step; t += step) {
+      const x = (t - viewStart) / mpp;
+      if (x < 0 || x > W) continue;
       ctx.strokeStyle = "#2d3440"; ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.moveTo(x, TICK_Y); ctx.lineTo(x, TICK_Y + 4); ctx.stroke();
       ctx.fillStyle = "#484f58"; ctx.font = "10px sans-serif";
@@ -262,15 +243,15 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, viewCenter, scenari
       ctx.fillText(minToHHMM(t), x, TICK_Y + 5);
     }
 
-    // Now line
-    const nm = nowMin(), nx = ax(nm);
+    // Now line (fixed on axis)
+    const nx = (nowMin() - viewStart) / mpp;
     if (nx >= 0 && nx <= W) {
       ctx.strokeStyle = "#f85149"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(nx, TT - 2); ctx.lineTo(nx, TT + TH + 2); ctx.stroke();
       ctx.fillStyle = "#f85149"; ctx.beginPath(); ctx.arc(nx, TT - 2, 3, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
-  }, [phases, gaps, planDur, planOffset, scenario, isDragging, getSleepSegments, sleepFrom, sleepTo]);
+  }, [phases, planDur, planOffset, scenario, isDragging, sleepFrom, sleepTo]);
 
   // ResizeObserver: setzt Dimensionen sobald wrap wirklich eine Breite hat,
   // dann draw(). Löst das Problem dass canvas.width=0 beim ersten Render.
@@ -306,8 +287,8 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, viewCenter, scenari
   const mpp = () => {
     const c = canvasRef.current;
     if (!c) return 1;
-    const w = c.getBoundingClientRect().width;
-    return w > 0 ? WINDOW / w : 1;
+    const w = c.getBoundingClientRect().width; // CSS width
+    return w > 0 ? (planDur / BLOCK_RATIO) / w : 1; // min per pixel
   };
 
   return (
@@ -338,7 +319,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, viewCenter, scenari
 
 export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanModalProps) {
   const [settings, setSettings] = useState<CrumbSettings>(() => loadSettings());
-  const { sleepFrom, sleepTo, abendZiel, morgenZiel, snapMin } = settings;
+  const { sleepFrom, sleepTo, abendZiel, morgenZiel, snapMin, showFreieZeit, minFreieZeit } = settings;
 
   const [multiplier, setMultiplier] = useState(1);
   const [scenario, setScenario] = useState<Scenario>("jetzt");
@@ -650,23 +631,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 )}
               </div>
 
-              {(() => {
-                // Center view on longest gap, falling back to block center
-                const bestGap = gaps.length
-                  ? gaps.reduce((a, b) => b.end - b.start > a.end - a.start ? b : a, gaps[0])
-                  : null;
-                const viewCenter = bestGap
-                  ? planOffset + (bestGap.start + bestGap.end) / 2
-                  : planOffset + planDur / 2;
-                return (
-                  <TimelineCanvas
-                    phases={phases} gaps={gaps} planDur={planDur}
-                    planOffset={planOffset} viewCenter={viewCenter} scenario={scenario}
-                    sleepFrom={sleepFrom} sleepTo={sleepTo}
-                    onOffsetChange={handleOffsetChange} snapMin={snapMin}
-                  />
-                );
-              })()}
+              <TimelineCanvas
+                phases={phases} gaps={gaps} planDur={planDur}
+                planOffset={planOffset} scenario={scenario}
+                sleepFrom={sleepFrom} sleepTo={sleepTo}
+                onOffsetChange={handleOffsetChange} snapMin={snapMin}
+              />
 
               {warning && (
                 <div className={`flex items-center gap-1.5 mt-1.5 text-[11px] ${warning.level === "error" ? "text-[#f85149]" : "text-[#e3b341]"}`}>
@@ -682,25 +652,42 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 <p className="text-[10px] text-[#484f58] text-center mt-1.5">{manualHint}</p>
               )}
 
-              {/* Snap — changes persist to settings */}
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-[10px] text-[#484f58]">snap</span>
-                <div className="flex gap-1">
-                  {[0, 5, 15, 30].map((v) => (
-                    <button key={v}
-                      onClick={() => setSettings(saveSettings({ snapMin: v }))}
-                      className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                        snapMin === v
-                          ? "text-[#f0a500] border-[rgba(240,165,0,0.5)] bg-[rgba(240,165,0,0.08)]"
-                          : "text-[#484f58] border-[#30363d] bg-[#21262d]"
-                      }`}>
-                      {v === 0 ? "aus" : `${v} min`}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
+
+          {/* Freie Zeit Liste — nur wenn in Settings aktiviert */}
+          {showFreieZeit && gaps.filter(g => g.end - g.start >= minFreieZeit).length > 0 && (
+            <div className="px-4 pb-2">
+              <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-2">Freie Zeit</p>
+              <div className="flex flex-col gap-1.5">
+                {gaps
+                  .filter(g => g.end - g.start >= minFreieZeit)
+                  .map((g, i) => {
+                    const absStart = planStart + g.start;
+                    const absEnd = planStart + g.end;
+                    const dur = g.end - g.start;
+                    const night = inSleepWindow(absStart, sleepFrom, sleepTo) ||
+                                  inSleepWindow(absStart + dur / 2, sleepFrom, sleepTo);
+                    const durText = dur < 60 ? `${dur} min` : `${Math.floor(dur/60)}h${dur%60>0?' '+dur%60+'m':''}`;
+                    return (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                        night
+                          ? "bg-[rgba(96,130,210,0.06)] border-[rgba(96,130,210,0.2)]"
+                          : "bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)]"
+                      }`}>
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${night ? "bg-[#60a5fa]" : "bg-[#22c55e]"}`} />
+                        <span className="text-[12px] text-[#e6edf3]">
+                          {minToHHMM(absStart)} – {minToHHMM(absEnd)}{night ? " ☽" : ""}
+                        </span>
+                        <span className={`text-[11px] ml-auto flex-shrink-0 ${night ? "text-[#60a5fa]" : "text-[#22c55e]"}`}>
+                          {durText}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
