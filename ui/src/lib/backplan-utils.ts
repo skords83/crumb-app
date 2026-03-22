@@ -54,14 +54,19 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
   sections.forEach((section: any) => {
     deps[section.name] = [];
     (section.ingredients || []).forEach((ing: any) => {
-      const ingName = normalizePhaseName(ing.name || '');
-      phaseNames.forEach(otherName => {
-        if (otherName === section.name) return;
-        const normOther = normalizePhaseName(otherName);
-        // Match wenn normierter Phasename in normierter Zutat vorkommt (oder umgekehrt)
-        if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName))) {
-          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
-        }
+      // Check both name and temperature — some scrapers store phase refs in temperature field
+      const candidates = [ing.name || '', ing.temperature || ''];
+      candidates.forEach(candidate => {
+        const ingName = normalizePhaseName(candidate);
+        phaseNames.forEach(otherName => {
+          if (otherName === section.name) return;
+          const normOther = normalizePhaseName(otherName);
+          if (normOther.length < 4) return;
+          // Word-boundary: avoid "vorteig" matching inside "roggensauerteig"
+          const wb = new RegExp('(?:^|\\s)' + normOther.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)');
+          if (wb.test(ingName) || ingName === normOther)
+            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        });
       });
     });
   });
@@ -144,12 +149,17 @@ export function calcTotalDuration(sections: any[]): number {
   sections.forEach((section: any) => {
     deps[section.name] = [];
     (section.ingredients || []).forEach((ing: any) => {
-      const ingName = normalizePhaseName(ing.name || '');
-      phaseNames.forEach((otherName: string) => {
-        if (otherName === section.name) return;
-        const normOther = normalizePhaseName(otherName);
-        if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
-          if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+      const candidates = [ing.name || '', ing.temperature || ''];
+      candidates.forEach(candidate => {
+        const ingName = normalizePhaseName(candidate);
+        phaseNames.forEach((otherName: string) => {
+          if (otherName === section.name) return;
+          const normOther = normalizePhaseName(otherName);
+          if (normOther.length < 4) return;
+          const wb = new RegExp('(?:^|\\s)' + normOther.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)');
+          if (wb.test(ingName) || ingName === normOther)
+            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        });
       });
     });
   });
@@ -205,12 +215,17 @@ export function calcTotalDurationRange(sections: any[]): { min: number; max: num
     sections.forEach((section: any) => {
       deps[section.name] = [];
       (section.ingredients || []).forEach((ing: any) => {
-        const ingName = normalizePhaseName(ing.name || '');
-        phaseNames.forEach((otherName: string) => {
-          if (otherName === section.name) return;
-          const normOther = normalizePhaseName(otherName);
-          if (normOther.length > 3 && (ingName.includes(normOther) || normOther.includes(ingName)))
-            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+        const candidates = [ing.name || '', ing.temperature || ''];
+        candidates.forEach(candidate => {
+          const ingName = normalizePhaseName(candidate);
+          phaseNames.forEach((otherName: string) => {
+            if (otherName === section.name) return;
+            const normOther = normalizePhaseName(otherName);
+            if (normOther.length < 4) return;
+            const wb = new RegExp('(?:^|\\s)' + normOther.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)');
+            if (wb.test(ingName) || ingName === normOther)
+              if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
+          });
         });
       });
     });
