@@ -231,7 +231,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     const W = canvas.width / dpr;
     ctx.save();
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, W, 68);
+    ctx.clearRect(0, 0, W, 80);
 
     // Proportional layout: block = BLOCK_RATIO of width, equal padding each side
     const pad = (W * (1 - BLOCK_RATIO)) / 2;
@@ -249,7 +249,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     ctx.beginPath(); ctx.roundRect(0, TT, W, TH, 5); ctx.fill();
 
     // Sleep zone — shown at full opacity in nacht mode, dimmed otherwise
-    const sleepAlpha = scenario === "nacht" ? 1 : 0.4;
+    const sleepAlpha = scenario === "nacht" ? 1 : 0.6;
     const dayBase = Math.floor(planOffset / 1440) * 1440;
     const sleepSegs = [
       { from: dayBase + sleepFrom, to: sleepFrom < sleepTo ? dayBase + sleepTo : dayBase + sleepTo + 1440 },
@@ -349,9 +349,9 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
       const w = wrap.clientWidth;
       if (w === 0) return;
       canvas.width = w * dpr;
-      canvas.height = 68 * dpr;
+      canvas.height = 80 * dpr;
       canvas.style.width = w + "px";
-      canvas.style.height = "68px";
+      canvas.style.height = "80px";
       draw();
     };
 
@@ -376,25 +376,23 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
   };
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", height: 68 }}>
-      <canvas
-        ref={canvasRef}
-        style={{ position: "absolute", inset: 0, cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
-        onPointerDown={(e) => {
-          setIsDragging(true);
-          dragState.current = { startX: e.clientX, startOffset: planOffset };
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={(e) => {
-          if (!isDragging) return;
-          onOffsetChange(dragState.current.startOffset + (e.clientX - dragState.current.startX) * mpp());
-        }}
-        onPointerUp={(e) => {
-          setIsDragging(false);
-          const raw = dragState.current.startOffset + (e.clientX - dragState.current.startX) * mpp();
-          onOffsetChange(snapTo(raw, snapMin));
-        }}
-      />
+    <div ref={wrapRef} style={{ position: "relative", height: 80, cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
+      onPointerDown={(e) => {
+        setIsDragging(true);
+        dragState.current = { startX: e.clientX, startOffset: planOffset };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!isDragging) return;
+        onOffsetChange(dragState.current.startOffset + (e.clientX - dragState.current.startX) * mpp());
+      }}
+      onPointerUp={(e) => {
+        setIsDragging(false);
+        const raw = dragState.current.startOffset + (e.clientX - dragState.current.startX) * mpp();
+        onOffsetChange(snapTo(raw, snapMin));
+      }}
+    >
+      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
     </div>
   );
 }
@@ -737,7 +735,15 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                 </div>
               )}
               {manualHint && !warning && (
-                <p className="text-[10px] text-[#484f58] text-center mt-1.5">{manualHint}</p>
+                <div className="flex items-center justify-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] text-[#484f58]">Manuell angepasst —</span>
+                  <button
+                    onClick={() => { activateScenario(scenario === "manuell" ? "jetzt" : scenario); }}
+                    className="text-[10px] text-[#f0a500] hover:text-[#f5c060] underline underline-offset-2 transition-colors"
+                  >
+                    Zurücksetzen
+                  </button>
+                </div>
               )}
 
             </div>
@@ -754,24 +760,18 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                     const absStart = planStart + g.start;
                     const absEnd = planStart + g.end;
                     const dur = g.end - g.start;
-                    // Count minutes inside sleep window to determine if majority is at night
-                    let nightMins = 0;
-                    for (let t = 0; t < dur; t += 5) {
-                      if (inSleepWindow(absStart + t, sleepFrom, sleepTo)) nightMins += 5;
-                    }
-                    const night = nightMins > dur / 2;
+                    // Only show as "night" (blue) if the gap starts during the sleep window
+                    // — a long gap that spans overnight is still primarily "free time"
+                    const gapAbsStart = ((absStart % 1440) + 1440) % 1440;
+                    const night = inSleepWindow(gapAbsStart, sleepFrom, sleepTo);
                     const durText = dur < 60 ? `${dur} min` : `${Math.floor(dur/60)}h${dur%60>0?' '+dur%60+'m':''}`;
                     return (
-                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
-                        night
-                          ? "bg-[rgba(96,130,210,0.06)] border-[rgba(96,130,210,0.2)]"
-                          : "bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)]"
-                      }`}>
-                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${night ? "bg-[#60a5fa]" : "bg-[#22c55e]"}`} />
+                      <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)]">
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#22c55e]" />
                         <span className="text-[12px] text-[#e6edf3]">
                           {minToHHMM(absStart)} – {minToHHMM(absEnd)}{night ? " ☽" : ""}
                         </span>
-                        <span className={`text-[11px] ml-auto flex-shrink-0 ${night ? "text-[#60a5fa]" : "text-[#22c55e]"}`}>
+                        <span className="text-[11px] ml-auto flex-shrink-0 text-[#22c55e]">
                           {durText}
                         </span>
                       </div>
