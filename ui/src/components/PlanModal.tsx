@@ -538,7 +538,8 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const handleConfirm = () => {
     if (!canConfirm) return;
     const endDate = absMinToDate(planStart + planDur);
-    const target = toLocalISOString(endDate);
+    // Use proper UTC ISO string so DB stores it correctly
+    const target = endDate.toISOString();
     const timeline = calculateBackplan(target, recipe?.dough_sections ?? []);
     // Pass timeline as both args so page.tsx skips the legacy /plan-night endpoint
     // and saves planned_at correctly
