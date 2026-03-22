@@ -208,25 +208,9 @@ export default function BackplanPage() {
       );
     }
     return {
-      timeline: recipe.planned_timeline
-        ? (() => {
-            // Alle Steps aus dough_sections flach als Lookup aufbauen
-            const stepLookup: Record<string, { duration_min?: number; duration_max?: number }> = {};
-            (recipe.dough_sections || []).forEach((sec: any) => {
-              (sec.steps || []).forEach((st: any) => {
-                const key = `${sec.name}||${st.instruction}`;
-                stepLookup[key] = {
-                  duration_min: st.duration_min != null ? parseInt(st.duration_min) : undefined,
-                  duration_max: st.duration_max != null ? parseInt(st.duration_max) : undefined,
-                };
-              });
-            });
-            return recipe.planned_timeline.map((s: any) => {
-              const extra = stepLookup[`${s.phase}||${s.instruction}`] ?? {};
-              return { ...s, ...extra, start: new Date(s.start), end: new Date(s.end) };
-            });
-          })()
-        : calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
+      // Always recalculate from planned_at — never use cached planned_timeline
+      // This avoids timezone and stale-data issues
+      timeline: calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
       newPlannedAt: parseLocalDate(recipe.planned_at),
       shifted: false,
     };
@@ -236,9 +220,7 @@ export default function BackplanPage() {
   // Original-Timeline (unveränderlich) — für zeitbasierte isDone-Erkennung
   const originalTimeline = useMemo(() => {
     if (!recipe) return [];
-    return recipe.planned_timeline
-      ? recipe.planned_timeline.map((s: any) => ({ ...s, end: new Date(s.end) }))
-      : calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
+    return calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe?.id, recipe?.planned_at]);
 
