@@ -89,6 +89,7 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
     const dur = (sectionMap[name]?.steps || []).reduce(
       (sum: number, s: any) => sum + effectiveDuration(s), 0
     );
+    startOffsets[name] = end + dur;
     return startOffsets[name];
   }
 
