@@ -542,6 +542,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const timeline = calculateBackplan(target, recipe?.dough_sections ?? []);
     // Pass timeline as both args so page.tsx skips the legacy /plan-night endpoint
     // and saves planned_at correctly
+    console.log("timeline length:", timeline.length, "sections:", recipe?.dough_sections?.length);
     onConfirm(target, multiplier, timeline, timeline);
   };
 
