@@ -150,7 +150,7 @@ export default function BackplanPage() {
     const recipe = plannedRecipes.find(r => r.id === recipeId);
     if (!recipe) return;
     const { newPlannedAt } = calculateDynamicTimeline(
-      recipe.planned_at,
+      parseLocalDate(recipe.planned_at),
       recipe.dough_sections,
       newStepCompletedAt,
       recipeId
@@ -165,7 +165,7 @@ export default function BackplanPage() {
       });
       // planned_at lokal aktualisieren damit useMemo neu triggert
       setPlannedRecipes(prev => prev.map(r =>
-        r.id === recipeId ? { ...r, planned_at: newPlannedAt.toISOString() } : r
+        r.id === recipeId ? { ...r, planned_at: `${newPlannedAt.getFullYear()}-${String(newPlannedAt.getMonth()+1).padStart(2,'0')}-${String(newPlannedAt.getDate()).padStart(2,'0')}T${String(newPlannedAt.getHours()).padStart(2,'0')}:${String(newPlannedAt.getMinutes()).padStart(2,'0')}` } : r
       ));
     } catch { /* optimistic update bleibt, API-Fehler ignorieren */ }
   };
