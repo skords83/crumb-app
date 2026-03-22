@@ -28,9 +28,19 @@ function effectiveDuration(step: any): number {
   return parseInt(step.duration) || 0;
 }
 
+// Parst einen Datums-String als Lokalzeit — ignoriert Z und +XX:XX Suffixe.
+// Verhindert UTC-Versatz wenn die DB „2026-03-23T14:00" oder „…Z" liefert.
+function parseLocalDate(dateStr: string): Date {
+  const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+  const [datePart, timePart] = stripped.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes);
+}
+
 export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
   if (!sections || sections.length === 0) return [];
-  const target = new Date(typeof targetDate === 'string' ? targetDate : targetDate.getTime());
+  const target = typeof targetDate === 'string' ? parseLocalDate(targetDate) : targetDate;
   const timeline: BackplanStep[] = [];
   const phaseNames = sections.map((s: any) => s.name as string);
 
@@ -280,7 +290,10 @@ export function calculateDynamicTimeline(
 ): DynamicTimelineResult {
   // Basis-Timeline (rückwärts berechnet, unveränderter Plan)
   const base = calculateBackplan(originalPlannedAt, sections);
-  if (base.length === 0) return { timeline: base, newPlannedAt: new Date(originalPlannedAt), shifted: false };
+  if (base.length === 0) {
+    const fallback = typeof originalPlannedAt === 'string' ? parseLocalDate(originalPlannedAt) : originalPlannedAt;
+    return { timeline: base, newPlannedAt: fallback, shifted: false };
+  }
 
   // Kopie zum Anpassen
   const result: BackplanStep[] = base.map(s => ({ ...s, start: new Date(s.start), end: new Date(s.end) }));
