@@ -112,9 +112,10 @@ function extractIngredientsFromChunk(chunk) {
     while ((cell = cellRe.exec(row[1])) !== null) cells.push(htmlToText(cell[1]));
     const filteredCells = cells.filter(c => c.trim().length > 0);
     if (filteredCells.length < 2) continue;
-    const hasAmount = /^\d/.test(filteredCells[0].trim());
-    const amount = hasAmount ? filteredCells[0].trim() : '';
-    let name = hasAmount ? filteredCells[1].trim() : filteredCells[0].trim();
+    const firstCell = filteredCells[0].trim();
+    const hasAmount = /^\d/.test(firstCell) || /^(gesamter?s?|nach Belieben)/i.test(firstCell);
+    const amount = hasAmount ? firstCell : '';
+    let name = hasAmount ? filteredCells[1].trim() : firstCell;
     const temperature = (hasAmount ? filteredCells[2] : filteredCells[1])
       ? (hasAmount ? filteredCells[2] : filteredCells[1]).replace('°C', '').trim() : '';
     let note = '';
@@ -198,6 +199,7 @@ const KNOWN_PHASES = {
   'Poolish':         { is_parallel: true  },
   'Levain':          { is_parallel: true  },
   'Mischung':        { is_parallel: true  },
+  'Füllung':         { is_parallel: true  },
   'Autolyse':        { is_parallel: false },
   'Hauptteig':       { is_parallel: false },
 };
