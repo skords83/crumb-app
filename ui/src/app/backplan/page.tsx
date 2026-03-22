@@ -6,6 +6,62 @@ import Link from 'next/link';
 import { BackplanSkeleton } from "@/components/LoadingSkeletons";
 import { calculateBackplan, calculateDynamicTimeline, type BackplanStep } from '@/lib/backplan-utils';
 
+// ── ZEIT-HELPER ──────────────────────────────────────────────
+// Alle Zeiten werden als "lokale Uhrzeit ohne Offset" behandelt.
+// planned_at kommt aus der DB ggf. mit Z oder +02:00 — beides wird ignoriert.
+
+/** DB-/JSON-String → Date als Lokalzeit (Suffix wird abgestreift) */
+const parseLocalDate = (dateStr: string): Date => {
+  if (!dateStr) return new Date();
+  const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+  const [datePart, timePart] = stripped.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes);
+};
+
+/** Date → "YYYY-MM-DDTHH:mm" ohne Zeitzonen-Suffix (zum Speichern / an API senden) */
+const formatLocalISO = (d: Date): string => {
+  const Y = d.getFullYear();
+  const M = String(d.getMonth() + 1).padStart(2, '0');
+  const D = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${Y}-${M}-${D}T${h}:${m}`;
+};
+
+/** Date → "HH:mm" */
+const formatTime = (date: Date): string =>
+  `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+/** Minuten → "Xh Ym" / "X Min" */
+const formatDuration = (mins: number): string => {
+  if (mins < 60) return `${mins} Min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
+/** Schritt-Dauer mit optionalem min–max-Bereich */
+const formatStepDuration = (step: any): string => {
+  const min = parseInt(step.duration_min);
+  const max = parseInt(step.duration_max);
+  if (!isNaN(min) && !isNaN(max)) return `${formatDuration(min)} – ${formatDuration(max)}`;
+  return formatDuration(step.duration);
+};
+
+/** Sekunden → "HH:mm:ss" oder "mm:ss" */
+const formatCountdown = (seconds: number): string => {
+  if (seconds <= 0) return "00:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+// ── HAUPTKOMPONENTE ──────────────────────────────────────────
+
 export default function BackplanPage() {
   const [plannedRecipes, setPlannedRecipes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,41 +83,32 @@ export default function BackplanPage() {
   const [finishModalRecipeId, setFinishModalRecipeId] = useState<number | null>(null);
   const [openDrawers, setOpenDrawers] = useState<Set<string>>(new Set());
   const activeCardRef = useRef<HTMLDivElement>(null);
-  // Sections whose done-steps are expanded (default: collapsed)
   const [expandedDoneSections, setExpandedDoneSections] = useState<Set<string>>(new Set());
-  const toggleDoneSection = (key: string) => {
-    setExpandedDoneSections(prev => {
+
+  const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) => {
+    setter(prev => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
   };
 
-  const toggleDrawer = (key: string) => {
-    setOpenDrawers(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  };
-
+  // ── Ticking clock ──
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  // ── LocalStorage-Persistenz ──
   useEffect(() => {
-    try {
-      localStorage.setItem('crumb_completed_steps', JSON.stringify([...completedSteps]));
-    } catch { /* ignore */ }
+    try { localStorage.setItem('crumb_completed_steps', JSON.stringify([...completedSteps])); } catch {}
   }, [completedSteps]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('crumb_step_completed_at', JSON.stringify(stepCompletedAt));
-    } catch { /* ignore */ }
+    try { localStorage.setItem('crumb_step_completed_at', JSON.stringify(stepCompletedAt)); } catch {}
   }, [stepCompletedAt]);
 
+  // ── Rezepte laden ──
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
@@ -77,78 +124,37 @@ export default function BackplanPage() {
       .catch(() => setIsLoading(false));
   }, []);
 
-  // activeCardRef scroll removed — active step stays in position (Variante B)
-
-  const parseLocalDate = (dateStr: string): Date => {
-    if (!dateStr) return new Date();
-    // Strip timezone suffix — planned_at is stored as local time,
-    // Z suffix added by DB/JSON serialization should be ignored
-    const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
-    const [datePart, timePart] = stripped.split('T');
-    const [year, month, day] = datePart.split('-').map(Number);
-    const [hours, minutes] = (timePart || "00:00").split(':').map(Number);
-    return new Date(year, month - 1, day, hours, minutes);
-  };
-
-  const extractTimeFromString = (dateStr: string): string => {
-    if (!dateStr) return "--:--";
-    // Use parseLocalDate to get correct local time, then format
-    const d = parseLocalDate(dateStr);
-    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-  };
-
-  const formatTime = (date: Date): string =>
-    `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-
-  const formatDuration = (mins: number): string => {
-    if (mins < 60) return `${mins} Min`;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  };
-
-  const formatStepDuration = (step: any): string => {
-    const min = parseInt(step.duration_min);
-    const max = parseInt(step.duration_max);
-    if (!isNaN(min) && !isNaN(max)) {
-      return `${formatDuration(min)} – ${formatDuration(max)}`;
-    }
-    return formatDuration(step.duration);
-  };
-
-  const formatCountdown = (seconds: number): string => {
-    if (seconds <= 0) return "00:00";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-
-
+  // ── Schritt toggeln (manuell erledigt / rückgängig) ──
   const toggleStep = (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
-    setCompletedSteps(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
-    // Wenn manuell rückgängig gemacht: completedAt entfernen
-    setStepCompletedAt(prev => { const next = { ...prev }; delete next[key]; return next; });
+    setCompletedSteps(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+    // Rückgängig → completedAt entfernen
+    setStepCompletedAt(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
-  // Schritt früher als geplant abschließen → Timeline neu berechnen + API updaten
-  const completeStepEarly = async (recipeId: number, stepIdx: number, currentTimeline: any[]) => {
+  // ── Schritt vorzeitig abschließen → Timeline dynamisch neu berechnen ──
+  const completeStepEarly = async (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
     const now = Date.now();
 
-    // State sofort aktualisieren (optimistic)
+    // Optimistic Update
     const newCompletedSteps = new Set(completedSteps);
     newCompletedSteps.add(key);
     const newStepCompletedAt = { ...stepCompletedAt, [key]: now };
     setCompletedSteps(newCompletedSteps);
     setStepCompletedAt(newStepCompletedAt);
 
-    // Dynamische Timeline berechnen
     const recipe = plannedRecipes.find(r => r.id === recipeId);
     if (!recipe) return;
+
     const { newPlannedAt } = calculateDynamicTimeline(
       parseLocalDate(recipe.planned_at),
       recipe.dough_sections,
@@ -156,30 +162,51 @@ export default function BackplanPage() {
       recipeId
     );
 
-    // API: planned_at + complete-step notification
+    // API: Neuen Zeitpunkt + Schritt-Completion senden
+    // formatLocalISO statt toISOString — kein UTC-Versatz!
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}/complete-step`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-        body: JSON.stringify({ stepIndex: stepIdx, completedAt: now, newPlannedAt: newPlannedAt.toISOString() }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
+        body: JSON.stringify({
+          stepIndex: stepIdx,
+          completedAt: now,
+          newPlannedAt: formatLocalISO(newPlannedAt),
+        }),
       });
       // planned_at lokal aktualisieren damit useMemo neu triggert
       setPlannedRecipes(prev => prev.map(r =>
-        r.id === recipeId ? { ...r, planned_at: `${newPlannedAt.getFullYear()}-${String(newPlannedAt.getMonth()+1).padStart(2,'0')}-${String(newPlannedAt.getDate()).padStart(2,'0')}T${String(newPlannedAt.getHours()).padStart(2,'0')}:${String(newPlannedAt.getMinutes()).padStart(2,'0')}` } : r
+        r.id === recipeId ? { ...r, planned_at: formatLocalISO(newPlannedAt) } : r
       ));
-    } catch { /* optimistic update bleibt, API-Fehler ignorieren */ }
+    } catch { /* Optimistic Update bleibt, API-Fehler ignorieren */ }
   };
 
+  // ── Backen abschließen ──
   const finishBaking = async (recipeId: number) => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+        },
         body: JSON.stringify({ planned_at: null }),
       });
       if (res.ok) {
-        setCompletedSteps(prev => { const next = new Set(prev); [...next].filter(k => k.startsWith(`${recipeId}-`)).forEach(k => next.delete(k)); return next; });
-        setStepCompletedAt(prev => { const next = { ...prev }; Object.keys(next).filter(k => k.startsWith(`${recipeId}-`)).forEach(k => delete next[k]); return next; });
+        // Schritte für dieses Rezept aufräumen
+        setCompletedSteps(prev => {
+          const next = new Set(prev);
+          [...next].filter(k => k.startsWith(`${recipeId}-`)).forEach(k => next.delete(k));
+          return next;
+        });
+        setStepCompletedAt(prev => {
+          const next = { ...prev };
+          Object.keys(next).filter(k => k.startsWith(`${recipeId}-`)).forEach(k => delete next[k]);
+          return next;
+        });
         const remaining = plannedRecipes.filter(r => r.id !== recipeId);
         setPlannedRecipes(remaining);
         setActiveRecipeIdx(0);
@@ -189,7 +216,7 @@ export default function BackplanPage() {
     } catch { alert("Fehler"); }
   };
 
-  // Memoized timeline for the active recipe
+  // ── Aktives Rezept + Timeline ──
   const recipe = plannedRecipes[activeRecipeIdx];
   const sections = recipe?.dough_sections || [];
 
@@ -208,8 +235,6 @@ export default function BackplanPage() {
       );
     }
     return {
-      // Always recalculate from planned_at — never use cached planned_timeline
-      // This avoids timezone and stale-data issues
       timeline: calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
       newPlannedAt: parseLocalDate(recipe.planned_at),
       shifted: false,
@@ -224,7 +249,7 @@ export default function BackplanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe?.id, recipe?.planned_at]);
 
-  // Progress map recalculates only once per minute (not every second)
+  // Fortschritt pro Rezept (einmal pro Minute aktualisiert)
   const currentMinute = Math.floor(currentTime.getTime() / 60000);
   const progressMap = useMemo(() => {
     const map: Record<number, number> = {};
@@ -240,6 +265,7 @@ export default function BackplanPage() {
 
   const getRecipeProgress = (r: any) => progressMap[r.id] ?? 0;
 
+  // ── Loading / Empty ──
   if (isLoading) return <BackplanSkeleton />;
 
   if (plannedRecipes.length === 0) return (
@@ -257,7 +283,7 @@ export default function BackplanPage() {
     </div>
   );
 
-  // Phasen nach Startzeit sortieren — was zuerst beginnt steht oben
+  // ── Berechnete Werte für aktives Rezept ──
   const sortedSections = [...sections].sort((a, b) => {
     const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
     const bStart = timeline.find((t: any) => t.phase === b.name)?.start.getTime() ?? Infinity;
@@ -266,36 +292,37 @@ export default function BackplanPage() {
 
   const totalDuration = timeline.reduce((s: number, t: any) => s + t.duration, 0);
 
-  // isDone helper — consistent met de rendering logik
+  // isDone: Schritt erledigt (manuell oder zeitlich abgelaufen laut Original-Timeline)
   const isStepDone = (globalIdx: number) => {
     const originalEnd = originalTimeline[globalIdx]?.end;
     return completedSteps.has(`${recipe.id}-${globalIdx}`)
       || (!!originalEnd && currentTime > originalEnd);
   };
 
-  // activeIndex: schritt der gerade läuft (start <= now < end in dynamischer timeline)
-  // Falls kein schritt exakt aktiv ist maar er wel een pending step is waarvan start in verleden ligt
-  // (door early completion verschoven), dan is die ook actief.
+  // Aktiver Schritt: läuft gerade (start <= now < end) oder erster offener nach Verschiebung
   const activeIndex = (() => {
-    // Eerst: exact actieve stap
     const exact = timeline.findIndex((s: any, i: number) =>
       !isStepDone(i) && currentTime >= s.start && currentTime < s.end
     );
     if (exact >= 0) return exact;
-    // Fallback: eerste niet-gedane stap waarvan start al verstreken is maar end ook
-    // (gap na early completion — schritt hätte schon angefangen)
+    // Fallback: erster nicht-erledigter Schritt dessen Startzeit bereits verstrichen ist
     return timeline.findIndex((s: any, i: number) =>
       !isStepDone(i) && currentTime >= s.start
     );
   })();
 
-  // nextIndex: erster nicht-erledigter Schritt in der Zukunft
+  // Nächster Schritt: erster nicht-erledigter in der Zukunft
   const nextIndex = timeline.findIndex((s: any, i: number) =>
     !isStepDone(i) && currentTime < s.start
   );
+
   const activeStep = activeIndex >= 0 ? timeline[activeIndex] : null;
   const remainingSeconds = activeStep ? Math.max(0, Math.floor((activeStep.end.getTime() - currentTime.getTime()) / 1000)) : 0;
   const stepProgress = activeStep ? Math.min(1, (currentTime.getTime() - activeStep.start.getTime()) / (activeStep.duration * 60000)) : 0;
+
+  const plannedTimeDisplay = formatTime(parseLocalDate(recipe.planned_at));
+
+  // ── RENDER ──
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-gray-900 pb-32 transition-colors duration-200">
@@ -308,7 +335,6 @@ export default function BackplanPage() {
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinishModalRecipeId(null)} />
             <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
-              {/* Bild-Header – oben per rounded-t-3xl, unten abgerundet wie RecipeCard */}
               <div className="relative h-48 overflow-hidden rounded-t-3xl rounded-b-2xl">
                 <img
                   src={modalRecipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=400'}
@@ -318,10 +344,11 @@ export default function BackplanPage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute bottom-3 left-4 right-4">
                   <p className="text-white font-extrabold text-[15px] leading-tight truncate">{modalRecipe.title}</p>
-                  <p className="text-white/70 text-[11px] font-bold mt-0.5">Fertig um {extractTimeFromString(modalRecipe.planned_at)} Uhr</p>
+                  <p className="text-white/70 text-[11px] font-bold mt-0.5">
+                    Fertig um {formatTime(parseLocalDate(modalRecipe.planned_at))} Uhr
+                  </p>
                 </div>
               </div>
-              {/* Content */}
               <div className="p-5">
                 <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mb-5 mt-1">Backplan abschließen und entfernen?</p>
                 <button
@@ -342,7 +369,7 @@ export default function BackplanPage() {
         );
       })()}
 
-      {/* ── REZEPT-SWITCHER ── */}
+      {/* ── REZEPT-SWITCHER (nur bei mehreren Plänen) ── */}
       {plannedRecipes.length > 1 && (
         <div className="bg-white dark:bg-gray-800 border-b border-[#F0EBE3] dark:border-gray-700">
           <div className="max-w-3xl mx-auto px-4 py-3">
@@ -367,10 +394,9 @@ export default function BackplanPage() {
                         {r.title}
                       </div>
                       <div className={`text-[10px] font-bold flex items-center gap-1 ${isActive ? 'text-white/70' : 'text-[#8B7355]'}`}>
-                        <Clock size={9} /> {extractTimeFromString(r.planned_at)} Uhr
+                        <Clock size={9} /> {formatTime(parseLocalDate(r.planned_at))} Uhr
                       </div>
                     </div>
-                    {/* Mini-Fortschrittsbalken */}
                     <div className={`w-1 h-8 rounded-full overflow-hidden flex-shrink-0 ${isActive ? 'bg-white/30' : 'bg-gray-200 dark:bg-gray-600'}`}>
                       <div className={`w-full rounded-full transition-all duration-500 ${isActive ? 'bg-white' : 'bg-[#8B7355]'}`}
                         style={{ height: `${progress * 100}%`, marginTop: `${(1 - progress) * 100}%` }} />
@@ -399,11 +425,11 @@ export default function BackplanPage() {
                   <Clock size={11} />
                   {shifted ? (
                     <>
-                      <span className="line-through text-gray-300 dark:text-gray-600">{extractTimeFromString(recipe.planned_at)}</span>
+                      <span className="line-through text-gray-300 dark:text-gray-600">{plannedTimeDisplay}</span>
                       <span className="text-green-500 ml-1">→ {formatTime(newPlannedAt)} Uhr</span>
                     </>
                   ) : (
-                    <>Fertig um {extractTimeFromString(recipe.planned_at)} Uhr</>
+                    <>Fertig um {plannedTimeDisplay} Uhr</>
                   )}
                 </p>
               </div>
@@ -438,12 +464,19 @@ export default function BackplanPage() {
               const prog = isActiveStep ? stepProgress : 0;
               return (
                 <div key={i} className="h-1 rounded-full transition-all duration-500"
-                  style={{ flex: `${widthPercent} 0 0%`, background: isDone ? '#8B7355' : isActiveStep ? `linear-gradient(90deg, #8B7355 ${prog * 100}%, #E8E2D8 ${prog * 100}%)` : '#E8E2D8' }} />
+                  style={{
+                    flex: `${widthPercent} 0 0%`,
+                    background: isDone
+                      ? '#8B7355'
+                      : isActiveStep
+                        ? `linear-gradient(90deg, #8B7355 ${prog * 100}%, #E8E2D8 ${prog * 100}%)`
+                        : '#E8E2D8'
+                  }} />
               );
             })}
           </div>
 
-          {/* TABS */}
+          {/* Tabs */}
           <div className="flex">
             {(['schritte', 'zeitplan'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
@@ -473,6 +506,7 @@ export default function BackplanPage() {
 
             return (
               <div key={sIdx} className="mb-7">
+                {/* Phasen-Header */}
                 <div className="flex items-center gap-3 mb-3 px-1">
                   <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 transition-colors ${hasActive ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>{sIdx + 1}</span>
                   <div className="flex-1 min-w-0">
@@ -481,7 +515,7 @@ export default function BackplanPage() {
                   </div>
                   {sectionIngredients.length > 0 && (
                     <button
-                      onClick={() => toggleDrawer(drawerKey)}
+                      onClick={() => toggleSet(setOpenDrawers, drawerKey)}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all flex-shrink-0 ${
                         isDrawerOpen
                           ? 'bg-[#8B7355] text-white border-[#8B7355]'
@@ -504,17 +538,16 @@ export default function BackplanPage() {
                     </div>
                     <div className="px-4 py-1">
                       {sectionIngredients.map((ing: any, ii: number) => (
-                        <div key={ii} className={`flex justify-between items-baseline py-2 text-[13px] ${ii < sectionIngredients.length - 1 ? 'border-b border-[#EDE5D8] dark:border-gray-700' : ''}`}>
-                          <span className="text-gray-600 dark:text-gray-300">{ing.name}</span>
-                          <span className="font-bold text-[#2D2D2D] dark:text-gray-100 tabular-nums ml-4 flex-shrink-0">
-                            {ing.amount}{ing.unit ? ` ${ing.unit}` : ''}
-                          </span>
+                        <div key={ii} className="flex items-center justify-between py-1.5 text-[13px] border-b border-[#F0EBE3] dark:border-gray-700 last:border-0">
+                          <span className="text-gray-700 dark:text-gray-300">{ing.name}</span>
+                          <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">{ing.amount} {ing.unit || ''}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
+                {/* Schritte: erledigt (kollapsierbar) + offen */}
                 {(() => {
                   const doneSteps = sectionSteps.filter(({ globalIdx }: any) => isStepDone(globalIdx));
                   const pendingSteps = sectionSteps.filter(({ globalIdx }: any) => !isStepDone(globalIdx));
@@ -522,10 +555,11 @@ export default function BackplanPage() {
                   const isDoneExpanded = expandedDoneSections.has(sectionDoneKey);
                   return (
                     <div className="flex flex-col gap-2 pl-10">
+                      {/* Erledigte Schritte */}
                       {doneSteps.length > 0 && (
                         <>
                           <button
-                            onClick={() => toggleDoneSection(sectionDoneKey)}
+                            onClick={() => toggleSet(setExpandedDoneSections, sectionDoneKey)}
                             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F9F6F2] dark:bg-gray-800/50 border border-[#EDE5D8] dark:border-gray-700 text-left transition-colors hover:bg-[#F5F0E8] dark:hover:bg-gray-700/50"
                           >
                             <Check size={13} className="text-[#8B7355] flex-shrink-0" />
@@ -558,6 +592,8 @@ export default function BackplanPage() {
                           ))}
                         </>
                       )}
+
+                      {/* Offene Schritte */}
                       {pendingSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
                         const isActiveStep = globalIdx === activeIndex;
                         const isNextStep = globalIdx === nextIndex;
@@ -579,7 +615,7 @@ export default function BackplanPage() {
                                 <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
                                 {isActiveStep && (
                                   <button
-                                    onClick={e => { e.stopPropagation(); completeStepEarly(recipe.id, globalIdx, timeline); }}
+                                    onClick={e => { e.stopPropagation(); completeStepEarly(recipe.id, globalIdx); }}
                                     className="ml-1 px-2 py-1 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors"
                                   >
                                     ✓ Fertig
@@ -592,6 +628,7 @@ export default function BackplanPage() {
                             </p>
                             {isActiveStep && (
                               <>
+                                {/* Timer-Box */}
                                 <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${step.type === 'Warten' ? 'bg-[#F5F0E8] dark:bg-gray-700' : step.type === 'Backen' ? 'bg-gradient-to-br from-red-500 to-red-700' : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'}`}>
                                   <div>
                                     <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${step.type === 'Warten' ? 'text-[#8B7355]' : 'text-white/70'}`}>{step.type === 'Warten' ? 'Restzeit' : 'Timer'}</div>
@@ -606,6 +643,7 @@ export default function BackplanPage() {
                                     </svg>
                                   </div>
                                 </div>
+                                {/* Bereit-zwischen-Anzeige bei Wartezeiten mit min/max */}
                                 {step.type === 'Warten' && step.duration_min != null && step.duration_max != null && (() => {
                                   const earliestEnd = new Date(step.start.getTime() + step.duration_min * 60000);
                                   const latestEnd = new Date(step.start.getTime() + step.duration_max * 60000);
@@ -618,6 +656,7 @@ export default function BackplanPage() {
                                     </div>
                                   );
                                 })()}
+                                {/* Fortschrittsbalken */}
                                 <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
                                   <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
                                 </div>
@@ -633,10 +672,13 @@ export default function BackplanPage() {
             );
           })}
 
+          {/* Rezept-Ende-Block */}
           <div className="pl-10 mb-6">
             <div className="rounded-2xl border border-[#E8E0D5] dark:border-gray-700 bg-[#F9F6F2] dark:bg-gray-900/40 p-4 flex items-center justify-between mb-4">
               <span className="text-[#8B7355] dark:text-[#C4A484] font-bold text-[14px]">{recipe.title} – fertig</span>
-              <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">{timeline.length > 0 ? formatTime(timeline[timeline.length - 1].end) : extractTimeFromString(recipe.planned_at)} Uhr</span>
+              <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">
+                {timeline.length > 0 ? formatTime(timeline[timeline.length - 1].end) : plannedTimeDisplay} Uhr
+              </span>
             </div>
             <Link href={`/recipes/${recipe.id}`}
               className="block w-full text-center py-4 rounded-2xl bg-[#8B7355] text-white font-extrabold text-[13px] uppercase tracking-widest shadow-lg shadow-[#8B7355]/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
@@ -648,7 +690,7 @@ export default function BackplanPage() {
 
       {/* ── TAB: ZEITPLAN ── */}
       {activeTab === 'zeitplan' && (
-        <GanttChart sections={sortedSections} timeline={timeline} currentTime={currentTime} formatTime={formatTime} formatDuration={formatDuration} formatStepDuration={formatStepDuration} />
+        <GanttChart sections={sortedSections} timeline={timeline} currentTime={currentTime} />
       )}
 
       {/* ── NÄCHSTER SCHRITT (fixed bottom) ── */}
@@ -673,6 +715,8 @@ export default function BackplanPage() {
   );
 }
 
+// ── GANTT-CHART ──────────────────────────────────────────────
+
 const PHASE_COLORS = [
   { bg: 'bg-amber-50 dark:bg-amber-900/20', bar: '#F59E0B', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-100 dark:border-amber-800' },
   { bg: 'bg-blue-50 dark:bg-blue-900/20', bar: '#3B82F6', text: 'text-blue-700 dark:text-blue-400', border: 'border-blue-100 dark:border-blue-800' },
@@ -681,28 +725,34 @@ const PHASE_COLORS = [
   { bg: 'bg-violet-50 dark:bg-violet-900/20', bar: '#8B5CF6', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-100 dark:border-violet-800' },
 ];
 
-function GanttChart({ sections, timeline, currentTime, formatTime, formatDuration, formatStepDuration }: any) {
+function GanttChart({ sections, timeline, currentTime }: { sections: any[]; timeline: any[]; currentTime: Date }) {
   if (timeline.length === 0) return <div className="p-8 text-center text-gray-400">Keine Schritte</div>;
+
   const sortedSections = [...sections].sort((a: any, b: any) => {
     const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
     const bStart = timeline.find((t: any) => t.phase === b.name)?.start.getTime() ?? Infinity;
     return aStart - bStart;
   });
+
   const totalStart = timeline[0].start;
   const totalEnd = timeline[timeline.length - 1].end;
   const totalMs = totalEnd.getTime() - totalStart.getTime();
   const pct = (d: Date) => Math.max(0, Math.min(100, ((d.getTime() - totalStart.getTime()) / totalMs) * 100));
+
+  // Stündliche Tick-Marks
   const ticks: Date[] = [];
   const tickStart = new Date(totalStart);
   tickStart.setMinutes(0, 0, 0);
   tickStart.setHours(tickStart.getHours() + 1);
   const t = new Date(tickStart);
   while (t <= totalEnd) { ticks.push(new Date(t)); t.setHours(t.getHours() + 1); }
+
   const nowPct = pct(currentTime);
   const isNowVisible = currentTime >= totalStart && currentTime <= totalEnd;
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-5 pb-10">
+      {/* Legende */}
       <div className="flex flex-wrap gap-2 mb-5">
         {sortedSections.map((section: any, i: number) => {
           const c = PHASE_COLORS[i % PHASE_COLORS.length];
@@ -713,6 +763,8 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
           );
         })}
       </div>
+
+      {/* Balkendiagramm */}
       <div className="space-y-3 mb-2">
         {sortedSections.map((section: any, sIdx: number) => {
           const c = PHASE_COLORS[sIdx % PHASE_COLORS.length];
@@ -740,11 +792,19 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
           );
         })}
       </div>
+
+      {/* Zeitachse */}
       <div className="relative h-5">
         <span className="absolute text-[10px] text-gray-400 dark:text-gray-500 font-bold left-0">{formatTime(totalStart)}</span>
-        {ticks.map((tk, ti) => { const p = pct(tk); if (p < 4 || p > 94) return null; return <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2" style={{ left: `${p}%` }}>{formatTime(tk)}</span>; })}
+        {ticks.map((tk, ti) => {
+          const p = pct(tk);
+          if (p < 4 || p > 94) return null;
+          return <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2" style={{ left: `${p}%` }}>{formatTime(tk)}</span>;
+        })}
         <span className="absolute text-[10px] text-green-500 font-bold right-0">{formatTime(totalEnd)}</span>
       </div>
+
+      {/* Detail-Liste pro Phase */}
       <div className="mt-8 space-y-4">
         {sortedSections.map((section: any, sIdx: number) => {
           const c = PHASE_COLORS[sIdx % PHASE_COLORS.length];
@@ -768,4 +828,4 @@ function GanttChart({ sections, timeline, currentTime, formatTime, formatDuratio
       </div>
     </div>
   );
-}// Do 12. Mär 19:42:46 CET 2026
+}
