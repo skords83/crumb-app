@@ -81,8 +81,10 @@ export default function BackplanPage() {
 
   const parseLocalDate = (dateStr: string): Date => {
     if (!dateStr) return new Date();
-    if (dateStr.includes('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)) return new Date(dateStr);
-    const [datePart, timePart] = dateStr.split('T');
+    // Strip timezone suffix — planned_at is stored as local time,
+    // Z suffix added by DB/JSON serialization should be ignored
+    const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+    const [datePart, timePart] = stripped.split('T');
     const [year, month, day] = datePart.split('-').map(Number);
     const [hours, minutes] = (timePart || "00:00").split(':').map(Number);
     return new Date(year, month - 1, day, hours, minutes);
@@ -90,11 +92,9 @@ export default function BackplanPage() {
 
   const extractTimeFromString = (dateStr: string): string => {
     if (!dateStr) return "--:--";
-    if (dateStr.includes('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)) {
-      return new Date(dateStr).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    }
-    const timePart = dateStr.split('T')[1];
-    return timePart ? timePart.substring(0, 5) : "--:--";
+    // Use parseLocalDate to get correct local time, then format
+    const d = parseLocalDate(dateStr);
+    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
   };
 
   const formatTime = (date: Date): string =>
