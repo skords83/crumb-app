@@ -9,6 +9,17 @@ import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 
+// ── ZEIT-HELPER ────────────────────────────────────────────
+/** DB-/JSON-String → Date als Lokalzeit (Z / +02:00 Suffix wird ignoriert) */
+const parseLocalDate = (dateStr: string): Date => {
+  if (!dateStr) return new Date();
+  const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+  const [datePart, timePart] = stripped.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes);
+};
+
 // ── BÄCKERPROZENTE ──────────────────────────────────────────
 const isFlour = (name: string) => {
   const lower = name.toLowerCase();
@@ -180,7 +191,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [isLoading, setIsLoading] = useState(true);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [targetTime, setTargetTime] = useState("");
-  const [calculatedTimeline, setCalculatedTimeline] = useState<any[]>([]);
   const [showBakersPercent, setShowBakersPercent] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -221,6 +231,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     const hydration = calcHydration(recipe.dough_sections);
     return { steps, duration, durationMin, durationMax, hydration };
   }, [recipe]);
+
+  // Timeline aus planned_at ableiten — parseLocalDate statt new Date() vermeidet UTC-Versatz
+  const calculatedTimeline = useMemo(() => {
+    if (!recipe?.planned_at || !recipe?.dough_sections) return [];
+    return calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
+  }, [recipe?.planned_at, recipe?.dough_sections]);
 
   const toggleFavorite = async () => {
     const next = !isFavorite;
@@ -437,7 +453,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               <div className="space-y-3">
                 {calculatedTimeline.map((item, i) => (
                   <div key={i} className="flex justify-between items-center text-xs border-b border-orange-100/50 dark:border-orange-800/50 pb-2">
-                    <span className="font-black text-orange-900 dark:text-orange-100 w-16">{formatTimeManual(new Date(item.start))}</span>
+                    <span className="font-black text-orange-900 dark:text-orange-100 w-16">{formatTimeManual(item.start)}</span>
                     <span className="flex-1 px-4 text-orange-800 dark:text-orange-200 font-medium">{item.instruction}</span>
                     <span className="text-orange-400 dark:text-orange-400 text-[9px] uppercase font-bold bg-white dark:bg-gray-800 px-2 py-0.5 rounded shadow-sm">{item.phase}</span>
                   </div>
@@ -583,10 +599,9 @@ onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
 }),
     });
             if (res.ok) {
-              setCalculatedTimeline(timeline);
               setTargetTime(plannedAt);
               setShowPlanModal(false);
-              // Recipe neu laden damit planned_at im Header aktuell ist
+              // Recipe neu laden damit planned_at aktuell ist → useMemo berechnet Timeline neu
               fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
               }).then(r => r.json()).then(data => { setRecipe(data); });
