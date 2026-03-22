@@ -201,7 +201,7 @@ export default function BackplanPage() {
     if (!recipe) return { timeline: [], newPlannedAt: new Date(), shifted: false };
     if (hasEarlyCompleted) {
       return calculateDynamicTimeline(
-        recipe.planned_at,
+        parseLocalDate(recipe.planned_at),
         recipe.dough_sections,
         stepCompletedAt,
         recipe.id
