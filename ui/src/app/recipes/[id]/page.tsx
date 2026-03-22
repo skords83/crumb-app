@@ -556,6 +556,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         recipe={recipe}
 onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
   try {
+    console.log("plannedTimeline:", plannedTimeline, Array.isArray(plannedTimeline), plannedTimeline?.length);
     let timelineToSave = plannedTimeline ?? null;
     if (!timelineToSave) {
       try {
