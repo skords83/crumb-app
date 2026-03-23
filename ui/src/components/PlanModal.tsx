@@ -63,14 +63,14 @@ function dayLabel(absMin: number): string {
   return days[d.getDay()];
 }
 
-/** Label für den Tag-Picker: "Heute", "Morgen", "Mi 26.03." etc. */
-function dayPickerLabel(offset: number): string {
-  if (offset === 0) return "Heute";
-  if (offset === 1) return "Morgen";
+function dayPickerInfo(offset: number): { label: string; date: string } {
   const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
   const d = new Date();
   d.setDate(d.getDate() + offset);
-  return `${days[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
+  const dateStr = `${d.getDate()}.${d.getMonth() + 1}.`;
+  if (offset === 0) return { label: "Heute", date: dateStr };
+  if (offset === 1) return { label: "Morgen", date: dateStr };
+  return { label: days[d.getDay()], date: dateStr };
 }
 
 function isPastAbsolute(absMin: number): boolean {
@@ -467,8 +467,10 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const base = day * 1440; // absolute offset for selected day
     if (s === "jetzt") {
       if (day === 0) return snapTo(now, snapMin, true);
-      // Anderer Tag: frühestmöglich = 06:00 (oder Snap danach)
-      return snapTo(base, snapMin, true);
+      // Zukünftiger Tag: morgenZiel als Fertigzeit → Start = morgenZiel - Dauer
+      // So beginnt der Plan morgens nach der Nachtruhe, nicht um Mitternacht
+      const start = base + morgenZiel - planDur;
+      return snapTo(Math.max(base, start), snapMin, true);
     }
     if (s === "abend") {
       let start = base + abendZiel - planDur;
@@ -476,7 +478,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       return snapTo(start, snapMin);
     }
     if (s === "morgen") {
-      // "Morgen früh" relativ zum gewählten Tag = nächster Morgen
+      // "Nächster Morgen" relativ zum gewählten Tag
       let start = base + 1440 + morgenZiel - planDur;
       if (day === 0 && start < now) start += 1440;
       return snapTo(start, snapMin);
@@ -577,7 +579,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   const iconColor = (id: Scenario) => scenario === id ? "#f0a500" : "#8b949e";
   const scenarioCards: { id: Scenario; label: string; sub: string; note: string }[] = [
-    { id: "jetzt",  label: dayOffset === 0 ? "Jetzt" : "Frühestmöglich", sub: dayOffset === 0 ? "so früh wie möglich" : `ab ${dayPickerLabel(dayOffset)} 00:00`, note: "" },
+    { id: "jetzt",  label: dayOffset === 0 ? "Jetzt" : "Frühestmöglich", sub: dayOffset === 0 ? "so früh wie möglich" : `fertig um ${minToHHMM(morgenZiel)}`, note: "" },
     { id: "abend",  label: "Abend",        sub: `fertig um ${minToHHMM(abendZiel)}`, note: abendNote },
     { id: "morgen", label: "Nächster Morgen", sub: `fertig um ${minToHHMM(morgenZiel)}`, note: morgenNote },
     { id: "nacht",  label: "Schlaf schonen", sub: "längste Pause ins Schlaffenster", note: nachtNote },
@@ -642,28 +644,29 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
           <div className="px-4 py-4">
             <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Wann soll's fertig sein?</p>
 
-            {/* Tag-Auswahl — horizontal scrollbar */}
-            <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 -mx-1 px-1">
-              {Array.from({ length: 8 }, (_, i) => {
+            {/* Tag-Auswahl — kompaktes 7-Tage-Grid */}
+            <div className="grid grid-cols-7 gap-1 mb-3">
+              {Array.from({ length: 7 }, (_, i) => {
                 const isActive = dayOffset === i;
+                const info = dayPickerInfo(i);
                 return (
                   <button
                     key={i}
                     onClick={() => {
                       setDayOffset(i);
-                      // Szenario neu berechnen für den gewählten Tag
                       const newStart = computeScenarioStart(scenario === "manuell" ? "jetzt" : scenario, i);
                       setPlanOffset(newStart);
                       if (scenario === "manuell") setScenario("jetzt");
                       setManualHint("");
                     }}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                    className={`flex flex-col items-center py-1.5 rounded-lg border transition-colors ${
                       isActive
-                        ? "bg-[rgba(240,165,0,0.12)] border-[#f0a500] text-[#f0a500]"
-                        : "bg-[#21262d] border-[#30363d] text-[#8b949e] hover:border-[#484f58]"
+                        ? "bg-[rgba(240,165,0,0.12)] border-[#f0a500]"
+                        : "bg-[#21262d] border-[#30363d] hover:border-[#484f58]"
                     }`}
                   >
-                    {dayPickerLabel(i)}
+                    <span className={`text-[10px] font-semibold leading-tight ${isActive ? "text-[#f0a500]" : "text-[#8b949e]"}`}>{info.label}</span>
+                    <span className={`text-[9px] leading-tight ${isActive ? "text-[#f0a500]/70" : "text-[#484f58]"}`}>{info.date}</span>
                   </button>
                 );
               })}
