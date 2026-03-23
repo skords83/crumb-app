@@ -66,49 +66,58 @@ export default function RecipeForm({
   };
 
   const addIngredient = (sIdx: number) => {
-    const newS = [...doughSections];
-    newS[sIdx].ingredients.push({ name: "", amount: "", unit: "g", temperature: "", note: "" });
-    setDoughSections(newS);
+    setDoughSections((prev: any[]) => prev.map((s, i) =>
+      i !== sIdx ? s : { ...s, ingredients: [...s.ingredients, { name: "", amount: "", unit: "g", temperature: "", note: "" }] }
+    ));
   };
 
   const updateIngredient = (sIdx: number, iIdx: number, field: string, value: string) => {
-    const newS = [...doughSections];
-    newS[sIdx].ingredients[iIdx][field] = value;
-    setDoughSections(newS);
+    setDoughSections((prev: any[]) => prev.map((s, i) =>
+      i !== sIdx ? s : {
+        ...s,
+        ingredients: s.ingredients.map((ing: any, j: number) =>
+          j !== iIdx ? ing : { ...ing, [field]: value }
+        )
+      }
+    ));
   };
 
   const addStepToSection = (sIdx: number, type: 'Aktion' | 'Warten') => {
-    const newS = [...doughSections];
-    if (!newS[sIdx].steps) newS[sIdx].steps = [];
-    newS[sIdx].steps.push({ 
-      instruction: "", 
-      type: type, 
-      duration: type === 'Aktion' ? 5 : 60 
-    });
-    setDoughSections(newS);
+    setDoughSections((prev: any[]) => prev.map((s, i) =>
+      i !== sIdx ? s : {
+        ...s,
+        steps: [...(s.steps || []), { instruction: "", type, duration: type === 'Aktion' ? 5 : 60 }]
+      }
+    ));
   };
 
   const updateStepInSection = (sIdx: number, stIdx: number, field: string, value: any) => {
-    const newS = [...doughSections];
-    newS[sIdx].steps[stIdx][field] = value;
-    setDoughSections(newS);
+    setDoughSections((prev: any[]) => prev.map((s, i) =>
+      i !== sIdx ? s : {
+        ...s,
+        steps: s.steps.map((st: any, j: number) =>
+          j !== stIdx ? st : { ...st, [field]: value }
+        )
+      }
+    ));
   };
 
   const removeStepFromSection = (sIdx: number, stIdx: number) => {
-    const newS = [...doughSections];
-    newS[sIdx].steps = newS[sIdx].steps.filter((_: any, i: number) => i !== stIdx);
-    setDoughSections(newS);
+    setDoughSections((prev: any[]) => prev.map((s, i) =>
+      i !== sIdx ? s : { ...s, steps: s.steps.filter((_: any, j: number) => j !== stIdx) }
+    ));
   };
 
   // Schritt innerhalb einer Phase verschieben
   const reorderStep = (sIdx: number, fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx) return;
-    const newS = [...doughSections];
-    const steps = [...newS[sIdx].steps];
-    const [moved] = steps.splice(fromIdx, 1);
-    steps.splice(toIdx, 0, moved);
-    newS[sIdx].steps = steps;
-    setDoughSections(newS);
+    setDoughSections((prev: any[]) => prev.map((s, i) => {
+      if (i !== sIdx) return s;
+      const steps = [...s.steps];
+      const [moved] = steps.splice(fromIdx, 1);
+      steps.splice(toIdx, 0, moved);
+      return { ...s, steps };
+    }));
   };
 
   const [isUploading, setIsUploading] = React.useState(false);
@@ -275,10 +284,9 @@ export default function RecipeForm({
                       value={PHASE_TYPES.find(t => t.label === section.name) ? section.name : "Custom"}
                       onChange={(e) => {
                         const selected = PHASE_TYPES.find(t => t.label === e.target.value);
-                        const newS = [...doughSections];
-                        newS[sIdx].name = e.target.value;
-                        if (selected) newS[sIdx].is_parallel = selected.isParallel;
-                        setDoughSections(newS);
+                        setDoughSections((prev: any[]) => prev.map((s, i) =>
+                          i !== sIdx ? s : { ...s, name: e.target.value, ...(selected ? { is_parallel: selected.isParallel } : {}) }
+                        ));
                       }}
                     >
                       <option value="Custom">Eigenen Typ wählen</option>
@@ -288,9 +296,9 @@ export default function RecipeForm({
                       className="text-2xl font-black text-gray-800 dark:text-gray-100 bg-transparent outline-none w-full tracking-tight"
                       value={section.name} 
                       onChange={(e) => {
-                        const newS = [...doughSections];
-                        newS[sIdx].name = e.target.value;
-                        setDoughSections(newS);
+                        setDoughSections((prev: any[]) => prev.map((s, i) =>
+                          i !== sIdx ? s : { ...s, name: e.target.value }
+                        ));
                       }}
                     />
                   </div>
@@ -320,9 +328,9 @@ export default function RecipeForm({
                               onChange={(e) => updateIngredient(sIdx, iIdx, 'amount', e.target.value)}
                             />
                             <button type="button" onClick={() => {
-                              const newS = [...doughSections];
-                              newS[sIdx].ingredients.splice(iIdx, 1);
-                              setDoughSections(newS);
+                              setDoughSections((prev: any[]) => prev.map((s, i) =>
+                                i !== sIdx ? s : { ...s, ingredients: s.ingredients.filter((_: any, j: number) => j !== iIdx) }
+                              ));
                             }} className="text-gray-300 dark:text-gray-500 hover:text-red-400"><Trash2 size={14} /></button>
                           </div>
                           <div className="flex gap-2">

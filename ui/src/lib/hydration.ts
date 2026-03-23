@@ -16,15 +16,11 @@ export const calcHydration = (sections: any[]): number | null => {
       const name = (ing.name || '').toLowerCase();
       const amount = parseFloat(String(ing.amount || '0').replace(',', '.'));
       if (isNaN(amount) || amount === 0) return;
-      if (PREFERM_SKIP_RE.test(name)) {
-        console.log('SKIP:', name, amount);
-        return;
-      }
-      if (FLOUR_KEYWORDS.some(k => name.includes(k))) { console.log('MEHL:', name, amount); flour += amount; }
-      if (WATER_KEYWORDS.some(k => name.includes(k))) { console.log('WASSER:', name, amount); water += amount; }
+      if (PREFERM_SKIP_RE.test(name)) return;
+      if (FLOUR_KEYWORDS.some(k => name.includes(k))) flour += amount;
+      if (WATER_KEYWORDS.some(k => name.includes(k))) water += amount;
     });
   });
-  console.log('flour:', flour, 'water:', water);
   if (flour === 0) return null;
   return Math.round((water / flour) * 100);
 };

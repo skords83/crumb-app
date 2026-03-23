@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, BookOpen, Search, ArrowUpDown, X } from 'lucide-react';
+import { Plus, BookOpen, Search, ArrowUpDown, X, RefreshCw } from 'lucide-react';
 import PlanModal from "@/components/PlanModal";
 import RecipeCard from "@/components/RecipeCard";
 import { RecipeGridSkeleton } from "@/components/LoadingSkeletons";
@@ -29,16 +29,15 @@ const PRIMARY_CATEGORIES = [
   { id: 'cracker',   label: 'Knäcke & Cracker' },
 ];
 
-
-
 function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [recipes, setRecipes] = useState<any[]>([]);
-  const [allRecipes, setAllRecipes] = useState<any[]>([]); // ungefiltert, nur für "Heute fertig" + Counts
+  const [allRecipes, setAllRecipes] = useState<any[]>([]); // Ungefilterte Kopie für Counts
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -50,7 +49,6 @@ function HomePageContent() {
   // URL-Parameter als Source of Truth
   const searchQuery = searchParams.get('q') ?? '';
   const activeCategory = searchParams.get('category') ?? 'alle';
-
   const activeSort = searchParams.get('sort') ?? 'newest';
 
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
@@ -91,19 +89,13 @@ function HomePageContent() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Alle Rezepte einmalig laden (ungefiltert, für Counts)
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
-    })
-      .then(res => res.json())
-      .then(data => setAllRecipes(Array.isArray(data) ? data : []))
-      .catch(err => console.error("Ladefehler (alle):", err));
-  }, []);
+  // Prüfen ob gerade ungefiltert geladen wird (= Daten auch für Counts nutzbar)
+  const isUnfiltered = !searchQuery && activeCategory === 'alle' && (activeSort === 'newest' || activeSort === 'random');
 
-  // Gefilterte Rezepte vom Backend laden wenn URL-Parameter sich ändern
+  // Rezepte vom Backend laden wenn URL-Parameter sich ändern
   useEffect(() => {
     setIsLoading(true);
+    setLoadError(false);
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
     if (activeCategory && activeCategory !== 'alle') params.set('category', activeCategory);
@@ -119,13 +111,28 @@ function HomePageContent() {
         let list = Array.isArray(data) ? data : [];
         if (activeSort === 'random') list = [...list].sort(() => Math.random() - 0.5);
         setRecipes(list);
+        // Wenn ungefiltert: gleich als Counts-Basis übernehmen (spart zweiten Request)
+        if (isUnfiltered) setAllRecipes(list);
         setIsLoading(false);
       })
       .catch(err => {
         console.error("Ladefehler:", err);
+        setLoadError(true);
         setIsLoading(false);
       });
   }, [searchQuery, activeCategory, activeSort]);
+
+  // Counts: nur einmalig nachladen wenn der erste Request gefiltert war
+  useEffect(() => {
+    if (allRecipes.length > 0) return; // schon vorhanden
+    if (isUnfiltered) return; // wird vom Haupt-Request befüllt
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
+    })
+      .then(res => res.json())
+      .then(data => setAllRecipes(Array.isArray(data) ? data : []))
+      .catch(() => {}); // Counts sind nice-to-have, kein Fehler nötig
+  }, [allRecipes.length, isUnfiltered]);
 
   // Optimistisches Favoriten-Toggle mit Rollback
   const toggleFavorite = async (id: number, status: boolean) => {
@@ -151,17 +158,6 @@ function HomePageContent() {
     }
   };
 
-  const getRecipeDuration = (recipe: any) => {
-    let totalMinutes = 0;
-    recipe.dough_sections?.forEach((s: any) => {
-      s.steps?.forEach((st: any) => {
-        const d = parseInt(String(st.duration));
-        if (!isNaN(d)) totalMinutes += d;
-      });
-    });
-    return totalMinutes;
-  };
-
   // Alle Backend-Rezepte werden bereits gefiltert zurückgegeben
   const filteredRecipes = recipes;
 
@@ -179,8 +175,6 @@ function HomePageContent() {
     }
     return counts;
   }, [allRecipes]);
-
-
 
   // IntersectionObserver für Infinite Scroll – callback ref
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -304,6 +298,18 @@ function HomePageContent() {
         {/* Rezepte-Grid */}
         {isLoading ? (
           <RecipeGridSkeleton count={6} />
+        ) : loadError ? (
+          <div className="bg-white dark:bg-gray-800 rounded-[3rem] p-20 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
+            <RefreshCw className="text-gray-300 dark:text-gray-600 mx-auto mb-6" size={48} />
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Laden fehlgeschlagen</h2>
+            <p className="text-gray-400 dark:text-gray-500 mt-2 mb-6">Prüfe deine Verbindung und versuch es nochmal.</p>
+            <button
+              onClick={() => updateParams({})}
+              className="inline-flex items-center gap-2 bg-[#8B7355] text-white px-6 py-3 rounded-2xl font-bold text-sm hover:bg-[#766248] transition-colors"
+            >
+              <RefreshCw size={16} /> Nochmal versuchen
+            </button>
+          </div>
         ) : filteredRecipes.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-[3rem] p-20 text-center border border-gray-100 dark:border-gray-700 shadow-sm">
             <BookOpen className="text-gray-200 dark:text-gray-700 mx-auto mb-6" size={48} />

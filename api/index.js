@@ -55,7 +55,7 @@ const upload = multer({ storage });
 // DATENBANK POOL & INIT
 // ============================================================
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-pool.on('connect', client => { client.query("SET timezone = 'UTC'"); });
+// Keine erzwungene UTC-Timezone — planned_at wird als Lokalzeit-String gespeichert
 
 // Öffentliche Base-URL für generierte Datei-URLs.
 // Traefik terminiert TLS → req.protocol ist intern immer "http".
@@ -93,7 +93,7 @@ const initDB = async () => {
       dough_sections JSONB,
       steps JSONB,
       is_favorite BOOLEAN DEFAULT false,
-      planned_at TIMESTAMP WITH TIME ZONE,
+      planned_at TIMESTAMP WITHOUT TIME ZONE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );`;
 
@@ -104,6 +104,22 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS source_url TEXT,
       ADD COLUMN IF NOT EXISTS original_source_url TEXT;`;
 
+  // planned_at: TIMESTAMP WITH TIME ZONE → WITHOUT TIME ZONE
+  // Konvertiert bestehende UTC-Werte nach Serverzeit (Europe/Berlin).
+  // AT TIME ZONE konvertiert korrekt, danach ist die Spalte offset-frei.
+  const migratePlannedAtType = `
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'recipes' AND column_name = 'planned_at'
+          AND data_type = 'timestamp with time zone'
+      ) THEN
+        ALTER TABLE recipes
+          ALTER COLUMN planned_at TYPE TIMESTAMP WITHOUT TIME ZONE
+          USING planned_at AT TIME ZONE 'Europe/Berlin';
+      END IF;
+    END $$;`;
+
   let retries = 10;
   while (retries > 0) {
     try {
@@ -111,6 +127,7 @@ const initDB = async () => {
       await pool.query(createRecipesTable);
       await pool.query(createIndex);
       await pool.query(migrateRecipesTable);
+      await pool.query(migratePlannedAtType);
       console.log("✅ Datenbank bereit");
       return;
     } catch (err) {
@@ -567,7 +584,7 @@ app.patch('/api/recipes/:id', async (req, res) => {
 
       result = await pool.query(
         "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
-        [planned_at ? new Date(planned_at).toISOString() : null, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
+        [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
       );
     } else if (is_favorite !== undefined) {
       result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
@@ -591,7 +608,7 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
   try {
     const result = await pool.query(
       'UPDATE recipes SET planned_at=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
-      [new Date(newPlannedAt).toISOString(), id, req.user.userId]
+      [newPlannedAt, id, req.user.userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Nicht gefunden' });
 
@@ -683,7 +700,7 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
       try {
         await pool.query(
           'UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4',
-          [new Date(planResult.endTime).toISOString(), JSON.stringify(planResult.plan), id, req.user.userId]
+          [planResult.endTime, JSON.stringify(planResult.plan), id, req.user.userId]
         );
       } catch (saveErr) {
         console.error('plan-night: Timeline speichern fehlgeschlagen:', saveErr.message);
@@ -715,7 +732,7 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
 
     const result = await pool.query(
       'UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      [new Date(plannedAt).toISOString(), id, req.user.userId]
+      [plannedAt, id, req.user.userId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Rezept nicht gefunden' });

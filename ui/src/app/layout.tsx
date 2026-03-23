@@ -59,7 +59,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${outfit.variable} font-sans antialiased transition-colors duration-200`} suppressHydrationWarning={true}>
+      <body className={`${outfit.variable} font-sans transition-colors duration-200`} suppressHydrationWarning={true}>
         <ServiceWorkerRegistration />
         <AuthProvider>
           <ProtectedRoute>

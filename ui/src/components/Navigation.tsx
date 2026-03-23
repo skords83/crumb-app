@@ -11,9 +11,6 @@ import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } f
 
 export default function Navigation() {
   const pathname = usePathname();
-  const isAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(pathname);
-  if (isAuthPage) return null;
-
   const { logout, user } = useAuth();
   const { canInstall, install } = usePWAInstall();
   const [hasActivePlan, setHasActivePlan] = useState(false);
@@ -31,6 +28,8 @@ export default function Navigation() {
   const [snapMin, setSnapMin] = useState(SETTINGS_DEFAULTS.snapMin);
   const [showFreieZeit, setShowFreieZeit] = useState(SETTINGS_DEFAULTS.showFreieZeit);
   const [minFreieZeit, setMinFreieZeit] = useState(SETTINGS_DEFAULTS.minFreieZeit);
+
+  const isAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(pathname);
 
   useEffect(() => {
     setMounted(true);
@@ -61,7 +60,6 @@ export default function Navigation() {
 
   const savePlanSetting = (field: string, value: string | number) => {
     if (typeof value === 'string') {
-      // time string HH:MM → minutes
       const min = hhmmToMin(value);
       saveSettings({ [field]: min });
     } else {
@@ -70,6 +68,7 @@ export default function Navigation() {
   };
 
   useEffect(() => {
+    if (isAuthPage) return;
     const checkActivePlans = async () => {
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
@@ -77,12 +76,14 @@ export default function Navigation() {
         });
         const data = await res.json();
         setHasActivePlan(Array.isArray(data) && data.some((r: any) => r.planned_at !== null));
-      } catch (err) { console.error("Nav-Check Fehler:", err); }
+      } catch { /* stille Fehlerbehandlung — Nav-Check ist nicht kritisch */ }
     };
     checkActivePlans();
     const interval = setInterval(checkActivePlans, 30000);
     return () => clearInterval(interval);
-  }, [pathname]);
+  }, [pathname, isAuthPage]);
+
+  if (isAuthPage) return null;
 
   const navItems = [
     { name: 'Rezepte', href: '/', icon: LayoutGrid },

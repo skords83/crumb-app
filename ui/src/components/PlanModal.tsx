@@ -214,14 +214,6 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
   const [isDragging, setIsDragging] = useState(false);
   const dragState = useRef({ startX: 0, startOffset: 0 });
 
-  const getSleepSegments = useCallback((planStart: number) => {
-    const dayBase = Math.floor(planStart / 1440) * 1440;
-    let from = dayBase + sleepFrom;
-    let to = sleepTo < sleepFrom ? dayBase + sleepTo + 1440 : dayBase + sleepTo;
-    if (to < planStart) { from += 1440; to += 1440; }
-    return [{ from, to }];
-  }, [sleepFrom, sleepTo]);
-
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -540,9 +532,6 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     const endDate = absMinToDate(planStart + planDur);
     const target = toLocalISOString(endDate);
     const timeline = calculateBackplan(target, recipe?.dough_sections ?? []);
-    // Pass timeline as both args so page.tsx skips the legacy /plan-night endpoint
-    // and saves planned_at correctly
-    console.log("timeline length:", timeline.length, "sections:", recipe?.dough_sections?.length);
     onConfirm(target, multiplier, timeline, timeline);
   };
 
