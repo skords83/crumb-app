@@ -55,15 +55,22 @@ function inSleepWindow(absMin: number, sleepFrom: number, sleepTo: number): bool
 }
 
 function dayLabel(absMin: number): string {
-  // absMin: absolute minutes from today's midnight
-  // Returns "heute", "morgen", or weekday name
   const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-  const today = new Date();
   if (absMin < 1440) return "heute";
   if (absMin < 2880) return "morgen";
-  const d = new Date(today);
+  const d = new Date();
   d.setDate(d.getDate() + Math.floor(absMin / 1440));
   return days[d.getDay()];
+}
+
+/** Label für den Tag-Picker: "Heute", "Morgen", "Mi 26.03." etc. */
+function dayPickerLabel(offset: number): string {
+  if (offset === 0) return "Heute";
+  if (offset === 1) return "Morgen";
+  const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${days[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
 }
 
 function isPastAbsolute(absMin: number): boolean {
@@ -398,6 +405,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const [multiplier, setMultiplier] = useState(1);
   const [scenario, setScenario] = useState<Scenario>("jetzt");
   const [planOffset, setPlanOffset] = useState(0);
+  const [dayOffset, setDayOffset] = useState(0); // 0 = heute, 1 = morgen, 2+ = weitere Tage
   const [manualHint, setManualHint] = useState("");
   const [pickerTarget, setPickerTarget] = useState<"from" | "to" | null>(null);
   const [pickerH, setPickerH] = useState(22);
@@ -412,6 +420,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       setMultiplier(1);
       setManualHint("");
       setPickerTarget(null);
+      setDayOffset(0);
       setPlanOffset(snapTo(nowMin(), s.snapMin, true));
       setScenario("jetzt");
     }
@@ -453,37 +462,36 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     return ((sleepTo + 1440 - sleepFrom) % 1440) >= 30;
   }, [longestGap, sleepFrom, sleepTo]);
 
-  const computeScenarioStart = useCallback((s: Scenario): number => {
+  const computeScenarioStart = useCallback((s: Scenario, day = dayOffset): number => {
     const now = nowMin();
-    if (s === "jetzt") return snapTo(now, snapMin, true);
+    const base = day * 1440; // absolute offset for selected day
+    if (s === "jetzt") {
+      if (day === 0) return snapTo(now, snapMin, true);
+      // Anderer Tag: frühestmöglich = 06:00 (oder Snap danach)
+      return snapTo(base, snapMin, true);
+    }
     if (s === "abend") {
-      let start = abendZiel - planDur;
-      if (start <= now) start += 1440;
+      let start = base + abendZiel - planDur;
+      if (day === 0 && start <= now) start += 1440;
       return snapTo(start, snapMin);
     }
     if (s === "morgen") {
-      // Always target next morning — add 1440 to ensure it's tomorrow
-      let start = morgenZiel - planDur + 1440;
-      // If that's still in the past somehow (very long recipe), add another day
-      if (start < now) start += 1440;
+      // "Morgen früh" relativ zum gewählten Tag = nächster Morgen
+      let start = base + 1440 + morgenZiel - planDur;
+      if (day === 0 && start < now) start += 1440;
       return snapTo(start, snapMin);
     }
     if (s === "nacht" && longestGap) {
       const gapMid = (longestGap.start + longestGap.end) / 2;
       const sleepDur = ((sleepTo + 1440 - sleepFrom) % 1440);
-      // sleepMid in absolute minutes from midnight
       const sleepMid = (sleepFrom + sleepDur / 2) % 1440;
-      // planStart such that planStart + gapMid = sleepMid
-      // Try tonight first, then tomorrow night
-      const base = snapTo(sleepMid - gapMid, snapMin);
-      // Candidates: tonight, tomorrow night
-      const candidates = [base, base + 1440, base + 2880];
-      // Pick the first candidate that is in the future
+      const baseStart = snapTo(base + sleepMid - gapMid, snapMin);
+      const candidates = [baseStart, baseStart + 1440, baseStart + 2880];
       const chosen = candidates.find(c => c > now) ?? candidates[candidates.length - 1];
       return chosen;
     }
     return planOffset;
-  }, [abendZiel, morgenZiel, planDur, longestGap, sleepFrom, sleepTo, snapMin, planOffset]);
+  }, [dayOffset, abendZiel, morgenZiel, planDur, longestGap, sleepFrom, sleepTo, snapMin, planOffset]);
 
   const activateScenario = useCallback((s: Scenario) => {
     if (s === "nacht" && !isNachtAvailable) return;
@@ -558,6 +566,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   const handleOffsetChange = (newAbsStart: number) => {
     setPlanOffset(newAbsStart);
+    setDayOffset(Math.max(0, Math.floor(newAbsStart / 1440)));
     setScenario("manuell");
     setManualHint("Manuell angepasst — Szenario wählen zum Zurücksetzen");
   };
@@ -568,9 +577,9 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   const iconColor = (id: Scenario) => scenario === id ? "#f0a500" : "#8b949e";
   const scenarioCards: { id: Scenario; label: string; sub: string; note: string }[] = [
-    { id: "jetzt",  label: "Jetzt",        sub: "so früh wie möglich",           note: "" },
+    { id: "jetzt",  label: dayOffset === 0 ? "Jetzt" : "Frühestmöglich", sub: dayOffset === 0 ? "so früh wie möglich" : `ab ${dayPickerLabel(dayOffset)} 00:00`, note: "" },
     { id: "abend",  label: "Abend",        sub: `fertig um ${minToHHMM(abendZiel)}`, note: abendNote },
-    { id: "morgen", label: "Morgen früh",  sub: `fertig um ${minToHHMM(morgenZiel)}`, note: morgenNote },
+    { id: "morgen", label: "Nächster Morgen", sub: `fertig um ${minToHHMM(morgenZiel)}`, note: morgenNote },
     { id: "nacht",  label: "Schlaf schonen", sub: "längste Pause ins Schlaffenster", note: nachtNote },
   ];
 
@@ -633,6 +642,33 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
           <div className="px-4 py-4">
             <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Wann soll's fertig sein?</p>
 
+            {/* Tag-Auswahl — horizontal scrollbar */}
+            <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 -mx-1 px-1">
+              {Array.from({ length: 8 }, (_, i) => {
+                const isActive = dayOffset === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setDayOffset(i);
+                      // Szenario neu berechnen für den gewählten Tag
+                      const newStart = computeScenarioStart(scenario === "manuell" ? "jetzt" : scenario, i);
+                      setPlanOffset(newStart);
+                      if (scenario === "manuell") setScenario("jetzt");
+                      setManualHint("");
+                    }}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                      isActive
+                        ? "bg-[rgba(240,165,0,0.12)] border-[#f0a500] text-[#f0a500]"
+                        : "bg-[#21262d] border-[#30363d] text-[#8b949e] hover:border-[#484f58]"
+                    }`}
+                  >
+                    {dayPickerLabel(i)}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Scenario grid */}
             <div className="grid grid-cols-2 gap-2 mb-3">
               {scenarioCards.map((sc) => {
@@ -671,16 +707,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
               <div className="flex items-center gap-2">
                 <div className="flex flex-col items-start">
                   <span className="text-base font-semibold text-[#f0a500] leading-tight">{minToHHMM(planStart)}</span>
-                  {dayLabel(planStart) !== "heute" && (
-                    <span className="text-[10px] text-[#8b949e] leading-tight">{dayLabel(planStart)}</span>
-                  )}
+                  <span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart)}</span>
                 </div>
                 <span className="text-sm text-[#484f58]">→</span>
                 <div className="flex flex-col items-start">
                   <span className="text-base font-semibold text-[#f0a500] leading-tight">{minToHHMM(planStart + planDur)}</span>
-                  {dayLabel(planStart + planDur) !== dayLabel(planStart) && (
-                    <span className="text-[10px] text-[#8b949e] leading-tight">{dayLabel(planStart + planDur)}</span>
-                  )}
+                  <span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart + planDur)}</span>
                 </div>
               </div>
               <span className="text-xs text-[#484f58]">{totalHours}h {totalMins}m</span>
