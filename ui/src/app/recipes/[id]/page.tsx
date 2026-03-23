@@ -4,21 +4,10 @@ import React, { useEffect, useState, useMemo, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Icons from 'lucide-react';
-import { calculateBackplan, formatTimeManual, calcTotalDuration, calcTotalDurationRange } from '@/lib/backplan-utils';
+import { calculateBackplan, formatTimeManual, calcTotalDuration, calcTotalDurationRange, parseLocalDate } from '@/lib/backplan-utils';
 import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
-
-// ── ZEIT-HELPER ────────────────────────────────────────────
-/** DB-/JSON-String → Date als Lokalzeit (Z / +02:00 Suffix wird ignoriert) */
-const parseLocalDate = (dateStr: string): Date => {
-  if (!dateStr) return new Date();
-  const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
-  const [datePart, timePart] = stripped.split('T');
-  const [year, month, day] = datePart.split('-').map(Number);
-  const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
-  return new Date(year, month - 1, day, hours, minutes);
-};
 
 // ── BÄCKERPROZENTE ──────────────────────────────────────────
 const isFlour = (name: string) => {

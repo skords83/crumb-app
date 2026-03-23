@@ -28,11 +28,16 @@ function effectiveDuration(step: any): number {
   return parseInt(step.duration) || 0;
 }
 
-// Parst einen Datums-String als Lokalzeit — ignoriert Z und +XX:XX Suffixe.
-// Verhindert UTC-Versatz wenn die DB „2026-03-23T14:00" oder „…Z" liefert.
-function parseLocalDate(dateStr: string): Date {
-  const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
-  const [datePart, timePart] = stripped.split('T');
+// Parst einen Datums-String korrekt in die lokale Zeitzone.
+// - MIT Z-Suffix oder Offset (z.B. "…Z", "…+01:00"): new Date() parst UTC,
+//   Browser konvertiert automatisch in Lokalzeit → korrekt.
+// - OHNE Suffix (z.B. "2026-03-23T14:00"): manuell als Lokalzeit parsen,
+//   da new Date() bei Strings ohne Suffix browser-abhängig ist.
+export function parseLocalDate(dateStr: string): Date {
+  if (/Z$/.test(dateStr) || /[+-]\d{2}:\d{2}$/.test(dateStr)) {
+    return new Date(dateStr);
+  }
+  const [datePart, timePart] = dateStr.split('T');
   const [year, month, day] = datePart.split('-').map(Number);
   const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
   return new Date(year, month - 1, day, hours, minutes);

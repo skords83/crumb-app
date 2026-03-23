@@ -4,21 +4,9 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Clock, ChevronLeft, ChevronRight, Check, Sun, AlignLeft, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import { BackplanSkeleton } from "@/components/LoadingSkeletons";
-import { calculateBackplan, calculateDynamicTimeline, type BackplanStep } from '@/lib/backplan-utils';
+import { calculateBackplan, calculateDynamicTimeline, parseLocalDate, type BackplanStep } from '@/lib/backplan-utils';
 
 // ── ZEIT-HELPER ──────────────────────────────────────────────
-// Alle Zeiten werden als "lokale Uhrzeit ohne Offset" behandelt.
-// planned_at kommt aus der DB ggf. mit Z oder +02:00 — beides wird ignoriert.
-
-/** DB-/JSON-String → Date als Lokalzeit (Suffix wird abgestreift) */
-const parseLocalDate = (dateStr: string): Date => {
-  if (!dateStr) return new Date();
-  const stripped = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
-  const [datePart, timePart] = stripped.split('T');
-  const [year, month, day] = datePart.split('-').map(Number);
-  const [hours, minutes] = (timePart || '00:00').split(':').map(Number);
-  return new Date(year, month - 1, day, hours, minutes);
-};
 
 /** Date → "YYYY-MM-DDTHH:mm" ohne Zeitzonen-Suffix (zum Speichern / an API senden) */
 const formatLocalISO = (d: Date): string => {
