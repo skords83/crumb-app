@@ -247,8 +247,8 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     ctx.fillStyle = "#21262d";
     ctx.beginPath(); ctx.roundRect(0, TT, W, TH, 5); ctx.fill();
 
-    // Sleep zone — shown at full opacity in nacht mode, dimmed otherwise
-    const sleepAlpha = scenario === "nacht" ? 1 : 0.6;
+    // Sleep zone — immer sichtbar, in nacht-Modus kräftiger
+    const sleepAlpha = scenario === "nacht" ? 1 : 0.8;
     const dayBase = Math.floor(planOffset / 1440) * 1440;
     const sleepSegs = [
       { from: dayBase + sleepFrom, to: sleepFrom < sleepTo ? dayBase + sleepTo : dayBase + sleepTo + 1440 },
@@ -262,17 +262,20 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
       const x1 = (seg.from - viewStart) / mpp, x2 = (seg.to - viewStart) / mpp;
       const cx1 = Math.max(0, x1), cx2 = Math.min(W, x2);
       if (cx2 <= cx1) continue;
-      ctx.fillStyle = "rgba(96,130,210,0.12)"; ctx.fillRect(cx1, TT, cx2 - cx1, TH);
+      ctx.fillStyle = "rgba(96,130,210,0.18)"; ctx.fillRect(cx1, TT, cx2 - cx1, TH);
       ctx.save(); ctx.beginPath(); ctx.rect(cx1, TT, cx2 - cx1, TH); ctx.clip();
-      ctx.strokeStyle = "rgba(96,130,210,0.16)"; ctx.lineWidth = 1;
-      for (let s = cx1 - TH; s < cx2 + TH; s += 7) {
+      ctx.strokeStyle = "rgba(96,130,210,0.25)"; ctx.lineWidth = 1;
+      for (let s = cx1 - TH; s < cx2 + TH; s += 6) {
         ctx.beginPath(); ctx.moveTo(s, TT); ctx.lineTo(s + TH, TT + TH); ctx.stroke();
       }
       ctx.restore();
-      const lx = (cx1 + cx2) / 2;
-      ctx.fillStyle = "rgba(96,130,210,0.45)"; ctx.font = "11px sans-serif";
-      ctx.textBaseline = "middle"; ctx.textAlign = "center";
-      ctx.fillText("☽", lx, TT + TH / 2);
+      // Mond-Symbol bei ausreichend breiten Segmenten
+      if (cx2 - cx1 > 20) {
+        const lx = (cx1 + cx2) / 2;
+        ctx.fillStyle = "rgba(96,130,210,0.55)"; ctx.font = "11px sans-serif";
+        ctx.textBaseline = "middle"; ctx.textAlign = "center";
+        ctx.fillText("☽", lx, TT + TH / 2);
+      }
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -281,16 +284,50 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     ctx.fillStyle = "rgba(22,27,34,0.85)";
     ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.fill();
 
-    // Action phases inside block — proportional within block width
+    // Phases inside block — proportional within block width
     ctx.save();
     ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.clip();
+
+    // 1) Rest-Phasen als subtile Balken (Teig-Farbe, sehr transparent)
+    for (const p of phases) {
+      if (p.type !== "rest") continue;
+      const x = blockX + (p.start / planDur) * blockW;
+      const pw = Math.max(2, (p.dur / planDur) * blockW);
+      ctx.fillStyle = TEIG_COLORS[p.teig] || "#f0a500";
+      ctx.globalAlpha = 0.12;
+      ctx.fillRect(x, TT + 2, pw, TH - 4);
+    }
+    ctx.globalAlpha = 1;
+
+    // 2) Gaps (freie Zeit) als grüne Bereiche
+    for (const g of gaps) {
+      if (g.end - g.start < 10) continue; // Zu kurz, nicht sichtbar
+      const x = blockX + (g.start / planDur) * blockW;
+      const gw = (g.end - g.start) / planDur * blockW;
+      ctx.fillStyle = "rgba(34,197,94,0.10)";
+      ctx.fillRect(x, TT + 1, gw, TH - 2);
+      // Subtile grüne Ränder links und rechts
+      ctx.fillStyle = "rgba(34,197,94,0.25)";
+      ctx.fillRect(x, TT + 1, 0.5, TH - 2);
+      ctx.fillRect(x + gw - 0.5, TT + 1, 0.5, TH - 2);
+    }
+
+    // 3) Action-Phasen als kräftige Balken (mit Mindestbreite + heller Rand)
     for (const p of phases) {
       if (p.type === "rest") continue;
       const x = blockX + (p.start / planDur) * blockW;
-      const pw = Math.max(6, (p.dur / planDur) * blockW);
+      const rawW = (p.dur / planDur) * blockW;
+      const pw = Math.max(4, rawW);
       ctx.fillStyle = TEIG_COLORS[p.teig] || "#f0a500";
       ctx.globalAlpha = 0.9;
       ctx.fillRect(x, TT + 3, pw, TH - 6);
+      // Bei sehr schmalen Blöcken einen helleren Rand für Sichtbarkeit
+      if (rawW < 6) {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = TEIG_COLORS[p.teig] || "#f0a500";
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(x, TT + 3, pw, TH - 6);
+      }
       ctx.globalAlpha = 1;
     }
     ctx.restore();
@@ -334,7 +371,7 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
       ctx.fillStyle = "#f85149"; ctx.beginPath(); ctx.arc(nx, TT - 2, 3, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
-  }, [phases, planDur, planOffset, scenario, isDragging, sleepFrom, sleepTo]);
+  }, [phases, gaps, planDur, planOffset, scenario, isDragging, sleepFrom, sleepTo]);
 
   // ResizeObserver: setzt Dimensionen sobald wrap wirklich eine Breite hat,
   // dann draw(). Löst das Problem dass canvas.width=0 beim ersten Render.
@@ -526,8 +563,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   // ─── card notes ───────────────────────────────────────────────────────────
 
-  const abendNote = abendZiel - planDur <= nowMin() ? "→ morgen Abend" : "";
+  const abendNote = (() => {
+    if (dayOffset > 0) return ""; // Zukünftiger Tag — kein "morgen" nötig
+    return abendZiel - planDur <= nowMin() ? "→ morgen Abend" : "";
+  })();
   const morgenNote = (() => {
+    if (dayOffset > 0) return ""; // Zukünftiger Tag — "nächster Morgen" ist immer klar
     const s = morgenZiel - planDur;
     return (s <= nowMin() ? s + 1440 : s) >= 2 * 1440 ? "→ übermorgen früh" : "";
   })();
