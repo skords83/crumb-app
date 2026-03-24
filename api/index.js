@@ -219,21 +219,151 @@ const calculateTimeline = (plannedAt, sections) => {
   return timeline;
 };
 
+// ── Aktions-Cluster bilden ──────────────────────────────────
+// Aufeinanderfolgende Aktions-Schritte (ohne Warten/Backen dazwischen)
+// werden zu einem Cluster zusammengefasst. Backen ist immer ein
+// eigener Cluster. Warten unterbricht einen Cluster.
+function buildActionClusters(timeline) {
+  const clusters = [];
+  let current = null;
+
+  for (const step of timeline) {
+    if (step.type === 'Warten' || step.type === 'Kühl' || step.type === 'Ruhen') {
+      if (current) { clusters.push(current); current = null; }
+      continue;
+    }
+
+    if (step.type === 'Backen') {
+      if (current) { clusters.push(current); current = null; }
+      clusters.push({
+        start: step.start,
+        end: step.end,
+        steps: [step],
+        totalDuration: step.duration,
+        isBaking: true,
+      });
+      continue;
+    }
+
+    // Aktion: zum Cluster hinzufügen oder neuen starten
+    if (!current) {
+      current = { start: step.start, end: step.end, steps: [step], totalDuration: step.duration, isBaking: false };
+    } else {
+      current.steps.push(step);
+      current.end = step.end;
+      current.totalDuration += step.duration;
+    }
+  }
+  if (current) clusters.push(current);
+  return clusters;
+}
+
+// ── Vorheiz-Notifications erzeugen ─────────────────────────
+// Für jeden Backen-Cluster: 45 Min vorher eine Vorheiz-Erinnerung.
+// Temperatur wird aus der Backen-Anweisung extrahiert wenn möglich.
+const PREHEAT_VORLAUF = 45; // Minuten vor Backstart
+
+function extractTemp(instruction) {
+  // Matcht "250 °C", "220°C", "250°", "250 Grad"
+  const match = instruction.match(/(\d{2,3})\s*°\s*C?|(\d{2,3})\s*[Gg]rad/);
+  return match ? (match[1] || match[2]) : null;
+}
+
+function buildPreheatNotifications(clusters, recipeTitle, recipeId) {
+  const notifications = [];
+  for (const cluster of clusters) {
+    if (!cluster.isBaking) continue;
+    const step = cluster.steps[0];
+    const preheatTime = new Date(cluster.start.getTime() - PREHEAT_VORLAUF * 60000);
+    const temp = extractTemp(step.instruction);
+    const notifId = `${recipeId}-preheat-${cluster.start.getTime()}`;
+    const preheatTimeStr = preheatTime.toLocaleTimeString('de-DE', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
+    });
+    const backTimeStr = cluster.start.toLocaleTimeString('de-DE', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
+    });
+
+    notifications.push({
+      notifId,
+      notifyAt: preheatTime,
+      deadline: cluster.start, // Nicht nach Backstart senden
+      title: temp
+        ? `🔥 Ofen vorheizen auf ${temp}°C`
+        : `🔥 Ofen vorheizen`,
+      message: `${recipeTitle} · Backen startet um ${backTimeStr} Uhr`,
+    });
+  }
+  return notifications;
+}
+
+// Cluster-Notification formatieren
+function formatClusterNotification(cluster, recipeTitle) {
+  const startTime = cluster.start.toLocaleTimeString('de-DE', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
+  });
+
+  if (cluster.isBaking) {
+    const step = cluster.steps[0];
+    return {
+      title: `🔥 Backen: ${step.instruction.substring(0, 50)}`,
+      message: `${recipeTitle} · ${step.phase} · Um ${startTime} Uhr · ${step.duration} Min`,
+    };
+  }
+
+  if (cluster.steps.length === 1) {
+    const step = cluster.steps[0];
+    return {
+      title: `🔔 ${step.instruction.substring(0, 55)}`,
+      message: `${recipeTitle} · ${step.phase} · Um ${startTime} Uhr`,
+    };
+  }
+
+  // Mehrere Aktionen im Cluster
+  const stepNames = cluster.steps.map(s => {
+    const short = s.instruction.substring(0, 25);
+    return short.length < s.instruction.length ? short.replace(/\s+\S*$/, '') + '…' : short;
+  });
+  const summary = stepNames.length <= 3
+    ? stepNames.join(' → ')
+    : `${stepNames.slice(0, 2).join(' → ')} → +${stepNames.length - 2} weitere`;
+
+  return {
+    title: `🔔 ${cluster.steps.length} Schritte ab ${startTime}`,
+    message: `${recipeTitle} · ${summary} · ca. ${cluster.totalDuration} Min aktive Zeit`,
+  };
+}
+
 const checkAndNotify = async () => {
   try {
-    const result = await pool.query(`SELECT r.*, u.email as user_email FROM recipes r JOIN users u ON r.user_id = u.id WHERE r.planned_at IS NOT NULL`);
+    const result = await pool.query(
+      `SELECT r.*, u.email as user_email FROM recipes r JOIN users u ON r.user_id = u.id WHERE r.planned_at IS NOT NULL`
+    );
     const now = new Date();
     for (const recipe of result.rows) {
       if (!recipe.dough_sections) continue;
       const timeline = calculateTimeline(recipe.planned_at, recipe.dough_sections);
-      for (const step of timeline) {
-        if (step.type === 'Warten') continue;
-        const notifId = `${recipe.id}-${step.start.getTime()}`;
+      const clusters = buildActionClusters(timeline);
+
+      // 1) Vorheiz-Notifications (45 Min vor Backen)
+      const preheatNotifs = buildPreheatNotifications(clusters, recipe.title, recipe.id);
+      for (const pn of preheatNotifs) {
+        if (sentNotifications.has(pn.notifId)) continue;
+        if (now >= pn.notifyAt && now < pn.deadline) {
+          await sendNtfyNotification(pn.title, pn.message);
+          sentNotifications.add(pn.notifId);
+        }
+      }
+
+      // 2) Cluster-Notifications (NTFY_VORLAUF Min vor Cluster-Start)
+      for (const cluster of clusters) {
+        const notifId = `${recipe.id}-cluster-${cluster.start.getTime()}`;
         if (sentNotifications.has(notifId)) continue;
-        const notifyAt = new Date(step.start.getTime() - NTFY_VORLAUF * 60000);
-        if (now >= notifyAt && now < step.start) {
-          const startTime = step.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
-          await sendNtfyNotification(`🔔 ${step.instruction.substring(0, 60)}`, `${recipe.title} · ${step.phase} · Um ${startTime} Uhr`);
+
+        const notifyAt = new Date(cluster.start.getTime() - NTFY_VORLAUF * 60000);
+        if (now >= notifyAt && now < cluster.start) {
+          const { title, message } = formatClusterNotification(cluster, recipe.title);
+          await sendNtfyNotification(title, message);
           sentNotifications.add(notifId);
         }
       }
@@ -615,32 +745,38 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
     const recipe = result.rows[0];
 
     // Alle alten Notifications für dieses Rezept aus dem Cache löschen
-    // → nächste checkAndNotify-Runde bewertet alle Schritte mit neuen Zeiten
+    // → nächste checkAndNotify-Runde bewertet alle Cluster mit neuen Zeiten
     clearSentNotificationsForRecipe(id);
 
-    // Sofortige Notification wenn nächster Aktion-Schritt < NTFY_VORLAUF Minuten entfernt
+    // Sofortige Notifications bei early completion
     if (recipe.dough_sections) {
       const timeline = calculateTimeline(newPlannedAt, recipe.dough_sections);
+      const clusters = buildActionClusters(timeline);
       const now = new Date();
-      const nextAction = timeline.find(step =>
-        step.type !== 'Warten' &&
-        step.start > new Date(completedAt) &&
-        step.start > now
+      const completedTime = new Date(completedAt);
+
+      // Vorheiz-Notifications prüfen (könnten durch Zeitverschiebung jetzt fällig sein)
+      const preheatNotifs = buildPreheatNotifications(clusters, recipe.title, id);
+      for (const pn of preheatNotifs) {
+        if (sentNotifications.has(pn.notifId)) continue;
+        if (now >= pn.notifyAt && now < pn.deadline) {
+          await sendNtfyNotification(pn.title, pn.message);
+          sentNotifications.add(pn.notifId);
+        }
+      }
+
+      // Nächster Aktions-Cluster prüfen
+      const nextCluster = clusters.find(c =>
+        c.start > completedTime && c.start > now
       );
 
-      if (nextAction) {
-        const minutesUntil = (nextAction.start.getTime() - now.getTime()) / 60000;
-        const notifId = `${id}-${nextAction.start.getTime()}`;
+      if (nextCluster) {
+        const minutesUntil = (nextCluster.start.getTime() - now.getTime()) / 60000;
+        const notifId = `${id}-cluster-${nextCluster.start.getTime()}`;
 
-        if (minutesUntil >= 1 && minutesUntil < NTFY_VORLAUF) {
-          // Zu wenig Vorlauf für normale Notification → sofort senden
-          const startTime = nextAction.start.toLocaleTimeString('de-DE', {
-            hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
-          });
-          await sendNtfyNotification(
-            `⏰ Gleich: ${nextAction.instruction.substring(0, 50)}`,
-            `${recipe.title} · ${nextAction.phase} · Um ${startTime} Uhr`
-          );
+        if (minutesUntil >= 1 && minutesUntil < NTFY_VORLAUF && !sentNotifications.has(notifId)) {
+          const { title, message } = formatClusterNotification(nextCluster, recipe.title);
+          await sendNtfyNotification(`⏰ ${title}`, message);
           sentNotifications.add(notifId);
         }
         // < 1 Min: keine Notification, User steht in der Küche
