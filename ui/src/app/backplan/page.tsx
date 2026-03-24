@@ -22,6 +22,26 @@ const formatLocalISO = (d: Date): string => {
 const formatTime = (date: Date): string =>
   `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 
+/** Date → "HH:mm" wenn heute, "Mo 24.3. HH:mm" wenn anderer Tag */
+const DAYS_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const isToday = (date: Date): boolean => {
+  const now = new Date();
+  return date.getDate() === now.getDate()
+    && date.getMonth() === now.getMonth()
+    && date.getFullYear() === now.getFullYear();
+};
+const formatSmartTime = (date: Date): string => {
+  const time = formatTime(date);
+  if (isToday(date)) return time;
+  return `${DAYS_SHORT[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}. ${time}`;
+};
+/** Kompakte Variante für Phasen-Zeitleisten: "HH:mm" oder "Mo HH:mm" */
+const formatShortTime = (date: Date): string => {
+  const time = formatTime(date);
+  if (isToday(date)) return time;
+  return `${DAYS_SHORT[date.getDay()]} ${time}`;
+};
+
 /** Minuten → "Xh Ym" / "X Min" */
 const formatDuration = (mins: number): string => {
   if (mins < 60) return `${mins} Min`;
@@ -308,7 +328,7 @@ export default function BackplanPage() {
   const remainingSeconds = activeStep ? Math.max(0, Math.floor((activeStep.end.getTime() - currentTime.getTime()) / 1000)) : 0;
   const stepProgress = activeStep ? Math.min(1, (currentTime.getTime() - activeStep.start.getTime()) / (activeStep.duration * 60000)) : 0;
 
-  const plannedTimeDisplay = formatTime(parseLocalDate(recipe.planned_at));
+  const plannedTimeDisplay = formatSmartTime(parseLocalDate(recipe.planned_at));
 
   // ── RENDER ──
 
@@ -333,7 +353,7 @@ export default function BackplanPage() {
                 <div className="absolute bottom-3 left-4 right-4">
                   <p className="text-white font-extrabold text-[15px] leading-tight truncate">{modalRecipe.title}</p>
                   <p className="text-white/70 text-[11px] font-bold mt-0.5">
-                    Fertig um {formatTime(parseLocalDate(modalRecipe.planned_at))} Uhr
+                    Fertig um {formatSmartTime(parseLocalDate(modalRecipe.planned_at))} Uhr
                   </p>
                 </div>
               </div>
@@ -382,7 +402,7 @@ export default function BackplanPage() {
                         {r.title}
                       </div>
                       <div className={`text-[10px] font-bold flex items-center gap-1 ${isActive ? 'text-white/70' : 'text-[#8B7355]'}`}>
-                        <Clock size={9} /> {formatTime(parseLocalDate(r.planned_at))} Uhr
+                        <Clock size={9} /> {formatSmartTime(parseLocalDate(r.planned_at))} Uhr
                       </div>
                     </div>
                     <div className={`w-1 h-8 rounded-full overflow-hidden flex-shrink-0 ${isActive ? 'bg-white/30' : 'bg-gray-200 dark:bg-gray-600'}`}>
@@ -414,7 +434,7 @@ export default function BackplanPage() {
                   {shifted ? (
                     <>
                       <span className="line-through text-gray-300 dark:text-gray-600">{plannedTimeDisplay}</span>
-                      <span className="text-green-500 ml-1">→ {formatTime(newPlannedAt)} Uhr</span>
+                      <span className="text-green-500 ml-1">→ {formatSmartTime(newPlannedAt)} Uhr</span>
                     </>
                   ) : (
                     <>Fertig um {plannedTimeDisplay} Uhr</>
@@ -499,7 +519,7 @@ export default function BackplanPage() {
                   <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 transition-colors ${hasActive ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>{sIdx + 1}</span>
                   <div className="flex-1 min-w-0">
                     <span className="text-[13px] font-extrabold text-gray-800 dark:text-gray-100 uppercase tracking-wider">{section.name}</span>
-                    <span className="ml-2 text-[11px] text-gray-400 dark:text-gray-500">{formatTime(sectionStart)} – {formatTime(sectionEnd)}</span>
+                    <span className="ml-2 text-[11px] text-gray-400 dark:text-gray-500">{formatShortTime(sectionStart)} – {formatShortTime(sectionEnd)}</span>
                   </div>
                   {sectionIngredients.length > 0 && (
                     <button
@@ -665,7 +685,7 @@ export default function BackplanPage() {
             <div className="rounded-2xl border border-[#E8E0D5] dark:border-gray-700 bg-[#F9F6F2] dark:bg-gray-900/40 p-4 flex items-center justify-between mb-4">
               <span className="text-[#8B7355] dark:text-[#C4A484] font-bold text-[14px]">{recipe.title} – fertig</span>
               <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">
-                {timeline.length > 0 ? formatTime(timeline[timeline.length - 1].end) : plannedTimeDisplay} Uhr
+                {timeline.length > 0 ? formatSmartTime(timeline[timeline.length - 1].end) : plannedTimeDisplay} Uhr
               </span>
             </div>
             <Link href={`/recipes/${recipe.id}`}
@@ -691,7 +711,7 @@ export default function BackplanPage() {
                 {nextStep.type === 'Aktion' ? '👐' : '⏳'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-[#8B7355] uppercase tracking-widest">Nächster Schritt um {formatTime(nextStep.start)}</div>
+                <div className="text-[10px] font-bold text-[#8B7355] uppercase tracking-widest">Nächster Schritt um {formatShortTime(nextStep.start)}</div>
                 <div className="text-[13px] font-semibold text-[#2D2D2D] dark:text-gray-100 truncate">{nextStep.instruction}</div>
               </div>
               <span className="text-[11px] font-bold text-gray-300 dark:text-gray-500 flex-shrink-0">{formatStepDuration(nextStep)}</span>
