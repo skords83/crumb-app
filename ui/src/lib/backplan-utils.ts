@@ -43,18 +43,11 @@ export function parseLocalDate(dateStr: string): Date {
   return new Date(year, month - 1, day, hours, minutes);
 }
 
-export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
-  if (!sections || sections.length === 0) return [];
-  const target = typeof targetDate === 'string' ? parseLocalDate(targetDate) : targetDate;
-  const timeline: BackplanStep[] = [];
-  const phaseNames = sections.map((s: any) => s.name as string);
+// ── Gemeinsame Dependency-Graph-Helfer ──────────────────────────────────────
+// Wird von calculateBackplan, calculateDynamicTimeline, calcTotalDuration etc. genutzt.
 
-  // Dependency Graph aufbauen
-  // Matcht auch wenn der Phasename nummeriert ist ("1. Stufe Anfrischsauer")
-  // und die Zutat nur den Kern-Begriff enthält ("reifer Anfrischsauer").
-  // Strategie: Phasename normalisieren → Ziffern/Stufenpräfixe entfernen,
-  // dann prüfen ob der normalisierte Kern in der Zutat vorkommt.
-  const normalizePhaseName = (name: string): string =>
+function buildNormalizePhaseName(): (name: string) => string {
+  return (name: string): string =>
     name
       .toLowerCase()
       .replace(/^\d+\.\s*/, '')           // "1. " am Anfang
@@ -64,7 +57,10 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
       .replace(/\bfertig[a-z]*\b/g, '')   // "fertiger" etc.
       .replace(/\s+/g, ' ')
       .trim();
+}
 
+function buildDependencyGraph(sections: any[], phaseNames: string[]): Record<string, string[]> {
+  const normalizePhaseName = buildNormalizePhaseName();
   const deps: Record<string, string[]> = {};
   sections.forEach((section: any) => {
     deps[section.name] = [];
@@ -83,6 +79,18 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
       });
     });
   });
+  return deps;
+}
+
+// ── calculateBackplan ───────────────────────────────────────────────────────
+
+export function calculateBackplan(targetDate: Date | string, sections: any[]): BackplanStep[] {
+  if (!sections || sections.length === 0) return [];
+  const target = typeof targetDate === 'string' ? parseLocalDate(targetDate) : targetDate;
+  const timeline: BackplanStep[] = [];
+  const phaseNames = sections.map((s: any) => s.name as string);
+
+  const deps = buildDependencyGraph(sections, phaseNames);
 
   const sectionMap: Record<string, any> = Object.fromEntries(sections.map((s: any) => [s.name, s]));
   const endOffsets: Record<string, number> = {};
@@ -93,7 +101,8 @@ export function calculateBackplan(targetDate: Date | string, sections: any[]): B
     if (visited.has(name)) return 0;
     visited.add(name);
     const dependents = phaseNames.filter(n => deps[n]?.includes(name));
-    endOffsets[name] = dependents.length === 0 ? 0
+    endOffsets[name] = dependents.length === 0
+      ? 0
       : Math.min(...dependents.map(d => calcStartOffset(d, new Set(visited))));
     return endOffsets[name];
   }
@@ -144,39 +153,12 @@ export function formatTimeManual(date: Date): string {
   return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
-// Berechnet Gesamtdauer via Dependency Graph – verwendbar in PlanModal, RecipeCard, RecipeDetail
+// ── calcTotalDuration ───────────────────────────────────────────────────────
+
 export function calcTotalDuration(sections: any[]): number {
   if (!sections?.length) return 0;
   const phaseNames = sections.map((s: any) => s.name as string);
-  const normalizePhaseName = (name: string): string =>
-    name
-      .toLowerCase()
-      .replace(/^\d+\.\s*/, '')
-      .replace(/\bstufe\s+\d+\b/g, '')
-      .replace(/\breifer?\b/g, '')
-      .replace(/\bfrischer?\b/g, '')
-      .replace(/\bfertig[a-z]*\b/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const deps: Record<string, string[]> = {};
-  sections.forEach((section: any) => {
-    deps[section.name] = [];
-    (section.ingredients || []).forEach((ing: any) => {
-      const candidates = [ing.name || '', ing.temperature || ''];
-      candidates.forEach(candidate => {
-        const ingName = normalizePhaseName(candidate);
-        phaseNames.forEach((otherName: string) => {
-          if (otherName === section.name) return;
-          const normOther = normalizePhaseName(otherName);
-          if (normOther.length < 4) return;
-          const wb = new RegExp('(?:^|\\s)' + normOther.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)');
-          if (wb.test(ingName) || ingName === normOther)
-            if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
-        });
-      });
-    });
-  });
+  const deps = buildDependencyGraph(sections, phaseNames);
   const sectionMap = Object.fromEntries(sections.map((s: any) => [s.name, s]));
   const endO: Record<string, number> = {};
   const startO: Record<string, number> = {};
@@ -204,8 +186,9 @@ export function calcTotalDuration(sections: any[]): number {
   phaseNames.forEach((n: string) => calcStart(n));
   return phaseNames.length ? Math.max(...phaseNames.map((n: string) => startO[n] || 0)) : 0;
 }
-// Gibt { min, max } zurück wenn mindestens ein Step ein Zeitfenster hat,
-// sonst { min: total, max: total } für feste Dauer
+
+// ── calcTotalDurationRange ──────────────────────────────────────────────────
+
 export function calcTotalDurationRange(sections: any[]): { min: number; max: number } {
   if (!sections?.length) return { min: 0, max: 0 };
   let hasRange = false;
@@ -218,31 +201,9 @@ export function calcTotalDurationRange(sections: any[]): { min: number; max: num
     const total = calcTotalDuration(sections);
     return { min: total, max: total };
   }
-  // Min-Summe und Max-Summe separat berechnen (vereinfacht: gleiche Dependency-Logik)
   const calcVariant = (useMax: boolean): number => {
     const phaseNames = sections.map((s: any) => s.name as string);
-    const normalizePhaseName = (name: string): string =>
-      name.toLowerCase().replace(/^\d+\.\s*/, '').replace(/\bstufe\s+\d+\b/g, '')
-        .replace(/\breifer?\b/g, '').replace(/\bfrischer?\b/g, '')
-        .replace(/\bfertig[a-z]*\b/g, '').replace(/\s+/g, ' ').trim();
-    const deps: Record<string, string[]> = {};
-    sections.forEach((section: any) => {
-      deps[section.name] = [];
-      (section.ingredients || []).forEach((ing: any) => {
-        const candidates = [ing.name || '', ing.temperature || ''];
-        candidates.forEach(candidate => {
-          const ingName = normalizePhaseName(candidate);
-          phaseNames.forEach((otherName: string) => {
-            if (otherName === section.name) return;
-            const normOther = normalizePhaseName(otherName);
-            if (normOther.length < 4) return;
-            const wb = new RegExp('(?:^|\\s)' + normOther.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)');
-            if (wb.test(ingName) || ingName === normOther)
-              if (!deps[section.name].includes(otherName)) deps[section.name].push(otherName);
-          });
-        });
-      });
-    });
+    const deps = buildDependencyGraph(sections, phaseNames);
     const sectionMap = Object.fromEntries(sections.map((s: any) => [s.name, s]));
     const endO: Record<string, number> = {};
     const startO: Record<string, number> = {};
@@ -273,75 +234,210 @@ export function calcTotalDurationRange(sections: any[]): { min: number; max: num
 }
 
 
-// Neuberechnung wenn Schritte früher abgehakt wurden.
-// stepCompletedAt: { "recipeId-stepIndex": timestampMs }
-// Abgeschlossene Schritte dienen als Ankerpunkte; alle Folge-
-// schritte werden vorwärts ab dem tatsächlichen Abschluss-
-// zeitpunkt neu berechnet. Parallele Phasen werden unabhängig
-// behandelt — nur Schritte nach dem Ankerpunkt verschieben sich.
-// ============================================================
+// ═══════════════════════════════════════════════════════════════
+// calculateDynamicTimeline — Neuberechnung wenn Schritte
+// früher abgehakt wurden.
+//
+// Pass 1: Phase-intern (Schritte innerhalb gleicher Phase vorziehen)
+// Pass 2: Phasenübergreifend (wenn ALLE Abhängigkeiten einer Phase
+//          completed sind, wird die Folgephase vorgezogen)
+// ═══════════════════════════════════════════════════════════════
 
 export interface DynamicTimelineResult {
   timeline: BackplanStep[];
-  newPlannedAt: Date;          // neuer voraussichtlicher Fertigzeitpunkt
-  shifted: boolean;            // hat sich etwas gegenüber der Originalplanung verschoben?
+  newPlannedAt: Date;
+  shifted: boolean;
 }
 
 export function calculateDynamicTimeline(
   originalPlannedAt: Date | string,
   sections: any[],
-  stepCompletedAt: Record<string, number>, // key: "recipeId-stepIdx" oder "stepIdx"
+  stepCompletedAt: Record<string, number>,
   recipeId: number | string
 ): DynamicTimelineResult {
-  // Basis-Timeline (rückwärts berechnet, unveränderter Plan)
   const base = calculateBackplan(originalPlannedAt, sections);
   if (base.length === 0) {
-    const fallback = typeof originalPlannedAt === 'string' ? parseLocalDate(originalPlannedAt) : originalPlannedAt;
+    const fallback = typeof originalPlannedAt === 'string'
+      ? parseLocalDate(originalPlannedAt) : originalPlannedAt;
     return { timeline: base, newPlannedAt: fallback, shifted: false };
   }
 
-  // Kopie zum Anpassen
-  const result: BackplanStep[] = base.map(s => ({ ...s, start: new Date(s.start), end: new Date(s.end) }));
+  const result: BackplanStep[] = base.map(s => ({
+    ...s, start: new Date(s.start), end: new Date(s.end)
+  }));
 
-  // Für jede Phase unabhängig: prüfen ob ein Schritt früher abgehakt wurde
-  // und alle Folgeschritte dieser Phase nach vorne verschieben.
-  const phaseNames = [...new Set(result.map(s => s.phase))];
+  // ── Dependency Graph ──
+  const phaseNames = sections.map((s: any) => s.name as string);
+  const deps = buildDependencyGraph(sections, phaseNames);
 
-  phaseNames.forEach(phase => {
+  // ── Hilfsfunktionen ──
+  const uniquePhases = [...new Set(result.map(s => s.phase))];
+
+  const phaseGlobalIndices = (phase: string): number[] =>
+    result.map((s, i) => s.phase === phase ? i : -1).filter(i => i >= 0);
+
+  const isPhaseEarlyCompleted = (phase: string): boolean => {
+    const indices = phaseGlobalIndices(phase);
+    return indices.length > 0 &&
+      indices.every(i => !!stepCompletedAt[`${recipeId}-${i}`]);
+  };
+
+  const getPhaseCompletedAt = (phase: string): number | null => {
+    const indices = phaseGlobalIndices(phase);
+    const times = indices
+      .map(i => stepCompletedAt[`${recipeId}-${i}`])
+      .filter(Boolean);
+    return times.length === indices.length ? Math.max(...times) : null;
+  };
+
+  // ── Pass 1: Phase-interne Verschiebung ──
+  uniquePhases.forEach(phase => {
     const phaseSteps = result
       .map((s, i) => ({ step: s, idx: i }))
       .filter(({ step }) => step.phase === phase);
 
     let shiftMs = 0;
-
-    phaseSteps.forEach(({ step, idx }, localIdx) => {
+    phaseSteps.forEach(({ step, idx }) => {
       const key = `${recipeId}-${idx}`;
       const completedAt = stepCompletedAt[key];
-
       if (completedAt) {
-        // Schritt wurde früher abgehakt — berechne wie viel früher
         const originalEnd = base[idx].end.getTime();
-        const actualEnd = completedAt;
-        const gain = originalEnd - actualEnd; // positiv = früher fertig
-        shiftMs = Math.max(shiftMs, gain);    // größten Gewinn dieser Phase merken
-
-        // Schritt selbst: end = completedAt
-        step.end = new Date(actualEnd);
+        const gain = originalEnd - completedAt;
+        shiftMs = Math.max(shiftMs, gain);
+        step.end = new Date(completedAt);
       } else if (shiftMs > 0) {
-        // Folgeschritt: um shiftMs nach vorne verschieben
         step.start = new Date(step.start.getTime() - shiftMs);
-        step.end   = new Date(step.end.getTime()   - shiftMs);
+        step.end = new Date(step.end.getTime() - shiftMs);
       }
     });
   });
 
-  // Neu sortieren (Parallelität kann Reihenfolge ändern)
+  // ── Pass 2: Phasenübergreifende Verschiebung (NEU) ──
+  // Iteriert bis stabil (für Kaskaden: Vorteig → Hauptteig → Backen)
+  let changed = true;
+  let iterations = 0;
+  while (changed && iterations < 10) {
+    changed = false;
+    iterations++;
+
+    uniquePhases.forEach(phase => {
+      const phaseDeps = deps[phase] || [];
+      if (phaseDeps.length === 0) return;
+
+      // Alle Abhängigkeiten müssen komplett abgeschlossen sein
+      const allDepsCompleted = phaseDeps.every(dep => isPhaseEarlyCompleted(dep));
+      if (!allDepsCompleted) return;
+
+      // Frühester möglicher Start = spätester Abschluss aller Abhängigkeiten
+      const depCompletionTimes = phaseDeps
+        .map(dep => getPhaseCompletedAt(dep))
+        .filter((t): t is number => t !== null);
+      if (depCompletionTimes.length === 0) return;
+
+      const latestDepCompletion = Math.max(...depCompletionTimes);
+
+      const phaseStepEntries = result
+        .map((s, i) => ({ step: s, idx: i }))
+        .filter(({ step }) => step.phase === phase);
+      if (phaseStepEntries.length === 0) return;
+
+      // Finde den ersten nicht-abgeschlossenen Schritt
+      const firstPending = phaseStepEntries.find(
+        ({ idx }) => !stepCompletedAt[`${recipeId}-${idx}`]
+      );
+      if (!firstPending) return;
+
+      const currentPhaseStart = firstPending.step.start.getTime();
+
+      // Nur verschieben wenn die Phase tatsächlich früher starten kann
+      if (latestDepCompletion >= currentPhaseStart) return;
+
+      const crossPhaseShift = currentPhaseStart - latestDepCompletion;
+      if (crossPhaseShift <= 0) return;
+
+      changed = true;
+
+      // Alle nicht-abgeschlossenen Schritte dieser Phase vorziehen
+      phaseStepEntries.forEach(({ step, idx }) => {
+        if (!stepCompletedAt[`${recipeId}-${idx}`]) {
+          step.start = new Date(step.start.getTime() - crossPhaseShift);
+          step.end = new Date(step.end.getTime() - crossPhaseShift);
+        }
+      });
+    });
+  }
+
+  // Neu sortieren
   result.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  // Neuer Fertigzeitpunkt = Ende des letzten Schritts
   const newPlannedAt = new Date(Math.max(...result.map(s => s.end.getTime())));
-  const originalEnd  = new Date(Math.max(...base.map(s => s.end.getTime())));
-  const shifted      = newPlannedAt.getTime() < originalEnd.getTime();
+  const originalEnd = new Date(Math.max(...base.map(s => s.end.getTime())));
+  const shifted = newPlannedAt.getTime() < originalEnd.getTime();
 
   return { timeline: result, newPlannedAt, shifted };
+}
+
+// ── Hilfsfunktion für die UI: Erkennt ob parallele Phasen noch offen sind ──
+// Wird von backplan/page.tsx genutzt um das Modal anzuzeigen.
+
+export interface PendingParallelInfo {
+  completedPhase: string;
+  pendingPhases: string[];
+  stepIndices: Record<string, number[]>; // phase → globale Indizes der offenen Steps
+}
+
+export function findPendingParallelPhases(
+  recipeId: number | string,
+  stepIdx: number,
+  newStepCompletedAt: Record<string, number>,
+  sections: any[],
+  timeline: BackplanStep[]
+): PendingParallelInfo | null {
+  const completedStep = timeline[stepIdx];
+  if (!completedStep) return null;
+  const completedPhase = completedStep.phase;
+
+  // Sind ALLE Schritte dieser Phase jetzt completed?
+  const phaseIndices = timeline
+    .map((s, i) => s.phase === completedPhase ? i : -1)
+    .filter(i => i >= 0);
+  const allPhaseCompleted = phaseIndices.every(
+    i => !!newStepCompletedAt[`${recipeId}-${i}`]
+  );
+  if (!allPhaseCompleted) return null;
+
+  // Dependency Graph
+  const phaseNames = sections.map((s: any) => s.name as string);
+  const deps = buildDependencyGraph(sections, phaseNames);
+
+  // Finde Phasen die von completedPhase abhängen
+  const dependentPhases = phaseNames.filter(p => (deps[p] || []).includes(completedPhase));
+  if (dependentPhases.length === 0) return null;
+
+  // Für jede Folgephase: welche ANDEREN Abhängigkeiten sind noch nicht completed?
+  const pendingPhases: string[] = [];
+  const stepIndicesMap: Record<string, number[]> = {};
+
+  dependentPhases.forEach(depPhase => {
+    const otherDeps = (deps[depPhase] || []).filter(d => d !== completedPhase);
+    otherDeps.forEach(otherDep => {
+      const otherIndices = timeline
+        .map((s, i) => s.phase === otherDep ? i : -1)
+        .filter(i => i >= 0);
+
+      const hasOpenSteps = otherIndices.some(
+        i => !newStepCompletedAt[`${recipeId}-${i}`]
+      );
+
+      if (hasOpenSteps && !pendingPhases.includes(otherDep)) {
+        pendingPhases.push(otherDep);
+        stepIndicesMap[otherDep] = otherIndices.filter(
+          i => !newStepCompletedAt[`${recipeId}-${i}`]
+        );
+      }
+    });
+  });
+
+  if (pendingPhases.length === 0) return null;
+  return { completedPhase, pendingPhases, stepIndices: stepIndicesMap };
 }

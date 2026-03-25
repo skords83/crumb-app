@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Clock, ChevronLeft, ChevronRight, Check, Sun, AlignLeft, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 import { BackplanSkeleton } from "@/components/LoadingSkeletons";
-import { calculateBackplan, calculateDynamicTimeline, parseLocalDate, type BackplanStep } from '@/lib/backplan-utils';
+import { calculateBackplan, calculateDynamicTimeline, parseLocalDate, findPendingParallelPhases, type BackplanStep, type PendingParallelInfo } from '@/lib/backplan-utils';
 
 // ── ZEIT-HELPER ──────────────────────────────────────────────
 
@@ -92,6 +92,13 @@ export default function BackplanPage() {
   const [openDrawers, setOpenDrawers] = useState<Set<string>>(new Set());
   const activeCardRef = useRef<HTMLDivElement>(null);
   const [expandedDoneSections, setExpandedDoneSections] = useState<Set<string>>(new Set());
+  const [parallelPhaseModal, setParallelPhaseModal] = useState<{
+    recipeId: number;
+    completedPhase: string;
+    pendingPhases: string[];
+    stepIndices: Record<string, number[]>;
+    currentCompletedAt: Record<string, number>;
+  } | null>(null);
 
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) => {
     setter(prev => {
@@ -152,17 +159,31 @@ export default function BackplanPage() {
   const completeStepEarly = async (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
     const now = Date.now();
-
+ 
     // Optimistic Update
     const newCompletedSteps = new Set(completedSteps);
     newCompletedSteps.add(key);
     const newStepCompletedAt = { ...stepCompletedAt, [key]: now };
     setCompletedSteps(newCompletedSteps);
     setStepCompletedAt(newStepCompletedAt);
-
+ 
     const recipe = plannedRecipes.find(r => r.id === recipeId);
     if (!recipe) return;
-
+ 
+    // NEU: Prüfen ob parallele Phasen auch abgeschlossen werden sollen
+    const pending = findPendingParallelPhases(
+      recipeId, stepIdx, newStepCompletedAt, recipe.dough_sections, timeline
+    );
+    if (pending && pending.pendingPhases.length > 0) {
+      setParallelPhaseModal({
+        recipeId,
+        completedPhase: pending.completedPhase,
+        pendingPhases: pending.pendingPhases,
+        stepIndices: pending.stepIndices,
+        currentCompletedAt: newStepCompletedAt,
+      });
+    }
+ 
     const { newPlannedAt } = calculateDynamicTimeline(
       parseLocalDate(recipe.planned_at),
       recipe.dough_sections,
@@ -192,6 +213,56 @@ export default function BackplanPage() {
     } catch { /* Optimistic Update bleibt, API-Fehler ignorieren */ }
   };
 
+// ── Parallele Phasen abschließen (Modal-Handler) ──
+  const handleCompleteParallelPhases = async () => {
+    if (!parallelPhaseModal) return;
+    const { recipeId, stepIndices, currentCompletedAt } = parallelPhaseModal;
+    const now = Date.now();
+ 
+    const newCompletedSteps = new Set(completedSteps);
+    const newStepCompletedAt = { ...currentCompletedAt };
+ 
+    Object.values(stepIndices).flat().forEach(idx => {
+      const key = `${recipeId}-${idx}`;
+      newCompletedSteps.add(key);
+      newStepCompletedAt[key] = now;
+    });
+ 
+    setCompletedSteps(newCompletedSteps);
+    setStepCompletedAt(newStepCompletedAt);
+    setParallelPhaseModal(null);
+ 
+    const recipe = plannedRecipes.find(r => r.id === recipeId);
+    if (!recipe) return;
+ 
+    const { newPlannedAt } = calculateDynamicTimeline(
+      parseLocalDate(recipe.planned_at),
+      recipe.dough_sections,
+      newStepCompletedAt,
+      recipeId
+    );
+ 
+    try {
+      for (const idx of Object.values(stepIndices).flat()) {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}/complete-step`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
+          },
+          body: JSON.stringify({
+            stepIndex: idx,
+            completedAt: now,
+            newPlannedAt: formatLocalISO(newPlannedAt),
+          }),
+        });
+      }
+      setPlannedRecipes(prev => prev.map(r =>
+        r.id === recipeId ? { ...r, planned_at: formatLocalISO(newPlannedAt) } : r
+      ));
+    } catch { /* Optimistic Update bleibt */ }
+  };
+ 
   // ── Backen abschließen ──
   const finishBaking = async (recipeId: number) => {
     try {
@@ -377,6 +448,62 @@ export default function BackplanPage() {
         );
       })()}
 
+            {/* ── PARALLELE PHASE MODAL ── */}
+      {parallelPhaseModal && (() => {
+        const { completedPhase, pendingPhases, stepIndices } = parallelPhaseModal;
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setParallelPhaseModal(null)} />
+            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+              <div className="bg-gradient-to-br from-[#8B7355] to-[#6B5740] p-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg">✓</div>
+                  <div>
+                    <p className="text-white font-extrabold text-[15px]">{completedPhase} fertig!</p>
+                    <p className="text-white/70 text-[11px] font-bold mt-0.5">
+                      Parallele Phase{pendingPhases.length > 1 ? 'n' : ''} noch offen
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-[13px] text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">
+                  {pendingPhases.length === 1 ? (
+                    <>Der <strong className="text-[#8B7355]">{pendingPhases[0]}</strong> läuft noch parallel. Auch abschließen, um den nächsten Schritt vorzuziehen?</>
+                  ) : (
+                    <>Folgende Phasen laufen noch parallel: {pendingPhases.map((p, i) => (
+                      <span key={p}><strong className="text-[#8B7355]">{p}</strong>{i < pendingPhases.length - 1 ? ', ' : ''}</span>
+                    ))}. Alle abschließen, um den nächsten Schritt vorzuziehen?</>
+                  )}
+                </p>
+                <div className="mb-5 space-y-2">
+                  {pendingPhases.map(phase => (
+                    <div key={phase} className="bg-[#F9F6F2] dark:bg-gray-700/50 rounded-xl px-3 py-2 border border-[#EDE5D8] dark:border-gray-600">
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#8B7355]">{phase}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-2">
+                        {stepIndices[phase]?.length || 0} offene Schritt{(stepIndices[phase]?.length || 0) !== 1 ? 'e' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={handleCompleteParallelPhases}
+                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[13px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-3"
+                >
+                  Ja, {pendingPhases.length === 1 ? pendingPhases[0] : 'alle'} auch abschließen
+                </button>
+                <button
+                  onClick={() => setParallelPhaseModal(null)}
+                  className="w-full py-2.5 text-gray-400 dark:text-gray-500 font-bold text-[12px] transition-colors hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  Nein, weiterlaufen lassen
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+ 
       {/* ── REZEPT-SWITCHER (nur bei mehreren Plänen) ── */}
       {plannedRecipes.length > 1 && (
         <div className="bg-white dark:bg-gray-800 border-b border-[#F0EBE3] dark:border-gray-700">
