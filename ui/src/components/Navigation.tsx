@@ -1,19 +1,198 @@
 // src/components/Navigation.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search, BedDouble, AlarmClock } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search, BedDouble, AlarmClock, Flame } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
+import { calculateBackplan, parseLocalDate } from '@/lib/backplan-utils';
+
+// ── Smart-Status Typen ──────────────────────────────────────
+type PlanPhase = 'idle' | 'planned' | 'upcoming' | 'active' | 'baking';
+
+interface SmartStatus {
+  phase: PlanPhase;
+  label: string;
+  sublabel?: string;
+  recipeName?: string;
+  pulse: boolean;
+}
+
+// ── Hilfsfunktionen für Smart-Status ────────────────────────
+function formatSmartTime(date: Date): string {
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+}
+
+function formatCountdownShort(ms: number): string {
+  const totalMin = Math.max(0, Math.floor(ms / 60000));
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+function formatSmartDay(date: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+  if (diffDays === 0) return 'heute';
+  if (diffDays === 1) return 'morgen';
+  const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  return days[date.getDay()];
+}
+
+function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
+  if (!plannedRecipes || plannedRecipes.length === 0) {
+    return { phase: 'idle', label: '', pulse: false };
+  }
+
+  // Für jedes Rezept: Timeline berechnen und nächsten relevanten Step finden
+  let bestStatus: SmartStatus = { phase: 'planned', label: '', pulse: false };
+  let closestActionMs = Infinity;
+
+  for (const recipe of plannedRecipes) {
+    if (!recipe.planned_at || !recipe.dough_sections?.length) continue;
+
+    const timeline = calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
+    if (timeline.length === 0) continue;
+
+    const firstStep = timeline[0];
+    const lastStep = timeline[timeline.length - 1];
+    const nowMs = now.getTime();
+
+    // Finde den aktuell aktiven Step (jetzt zwischen start und end)
+    const activeStep = timeline.find(s => nowMs >= s.start.getTime() && nowMs < s.end.getTime());
+
+    // Finde den nächsten Aktions-/Back-Step in der Zukunft
+    const nextActionStep = timeline.find(s =>
+      s.start.getTime() > nowMs && (s.type === 'Aktion' || s.type === 'Backen' || s.type === 'Kneten')
+    );
+
+    // FALL 1: Ein Backen-Step läuft gerade → höchste Priorität
+    if (activeStep && activeStep.type === 'Backen') {
+      const remainMs = activeStep.end.getTime() - nowMs;
+      return {
+        phase: 'baking',
+        label: `Backen · noch ${formatCountdownShort(remainMs)}`,
+        recipeName: recipe.title,
+        pulse: true,
+      };
+    }
+
+    // FALL 2: Ein Aktions-Step läuft gerade (Kneten etc.)
+    if (activeStep && (activeStep.type === 'Aktion' || activeStep.type === 'Kneten')) {
+      return {
+        phase: 'active',
+        label: `Jetzt: ${activeStep.instruction.length > 30 ? activeStep.instruction.slice(0, 30) + '…' : activeStep.instruction}`,
+        recipeName: recipe.title,
+        pulse: true,
+      };
+    }
+
+    // FALL 3: Nächster Aktions-Step in den nächsten 2h → "upcoming"
+    if (nextActionStep) {
+      const msUntil = nextActionStep.start.getTime() - nowMs;
+      if (msUntil < 2 * 60 * 60 * 1000 && msUntil < closestActionMs) {
+        closestActionMs = msUntil;
+        const stepLabel = nextActionStep.type === 'Backen'
+          ? 'Backen'
+          : nextActionStep.instruction.length > 25
+            ? nextActionStep.instruction.slice(0, 25) + '…'
+            : nextActionStep.instruction;
+        bestStatus = {
+          phase: 'upcoming',
+          label: `${stepLabel} in ${formatCountdownShort(msUntil)}`,
+          recipeName: recipe.title,
+          pulse: false,
+        };
+      }
+    }
+
+    // FALL 4: Nächster Aktions-Step 2–12h entfernt → "planned" mit Zeitangabe
+    if (bestStatus.phase !== 'upcoming' && nextActionStep) {
+      const msUntil = nextActionStep.start.getTime() - nowMs;
+      if (msUntil >= 2 * 60 * 60 * 1000 && msUntil < 12 * 60 * 60 * 1000) {
+        if (bestStatus.phase === 'planned' && !bestStatus.label) {
+          bestStatus = {
+            phase: 'planned',
+            label: `${recipe.title} · ${formatSmartDay(nextActionStep.start)} ${formatSmartTime(nextActionStep.start)}`,
+            pulse: false,
+          };
+        }
+      }
+    }
+
+    // FALL 5: Alles > 12h entfernt → Nur dezente Anzeige wenn bisher nichts Besseres
+    if (bestStatus.phase === 'planned' && !bestStatus.label) {
+      // Nächsten Step überhaupt finden (auch Warten)
+      const nextAny = timeline.find(s => s.start.getTime() > nowMs);
+      if (nextAny) {
+        const dayStr = formatSmartDay(nextAny.start);
+        bestStatus = {
+          phase: 'planned',
+          label: `Nächstes: ${recipe.title} · ${dayStr} ${formatSmartTime(nextAny.start)}`,
+          pulse: false,
+        };
+      } else if (nowMs < lastStep.end.getTime()) {
+        // Alle Steps laufen schon (Wartezeiten) — check ob noch ein Aktions-Step kommt
+        bestStatus = {
+          phase: 'planned',
+          label: `${recipe.title} · fertig ${formatSmartTime(lastStep.end)}`,
+          pulse: false,
+        };
+      }
+    }
+  }
+
+  return bestStatus;
+}
+
+// ── Phase → Style-Mapping ───────────────────────────────────
+function getStatusStyle(phase: PlanPhase) {
+  switch (phase) {
+    case 'baking':
+      return {
+        bg: 'bg-red-500/30 border-red-400/40',
+        dot: 'bg-red-400',
+        text: 'text-white',
+      };
+    case 'active':
+      return {
+        bg: 'bg-orange-500/30 border-orange-400/40',
+        dot: 'bg-orange-400',
+        text: 'text-white',
+      };
+    case 'upcoming':
+      return {
+        bg: 'bg-amber-500/20 border-amber-400/30',
+        dot: 'bg-amber-400',
+        text: 'text-white',
+      };
+    case 'planned':
+    default:
+      return {
+        bg: 'bg-white/10 border-white/15',
+        dot: 'bg-white/50',
+        text: 'text-white/80',
+      };
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
+// NAVIGATION COMPONENT
+// ═════════════════════════════════════════════════════════════
 
 export default function Navigation() {
   const pathname = usePathname();
   const { logout, user } = useAuth();
   const { canInstall, install } = usePWAInstall();
   const [hasActivePlan, setHasActivePlan] = useState(false);
+  const [plannedRecipes, setPlannedRecipes] = useState<any[]>([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -67,6 +246,7 @@ export default function Navigation() {
     }
   };
 
+  // ── Geplante Rezepte laden (mit dough_sections für Timeline) ──
   useEffect(() => {
     if (isAuthPage) return;
     const checkActivePlans = async () => {
@@ -75,13 +255,31 @@ export default function Navigation() {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
         });
         const data = await res.json();
-        setHasActivePlan(Array.isArray(data) && data.some((r: any) => r.planned_at !== null));
+        if (Array.isArray(data)) {
+          const planned = data.filter((r: any) => r.planned_at !== null);
+          setPlannedRecipes(planned);
+          setHasActivePlan(planned.length > 0);
+        }
       } catch { /* stille Fehlerbehandlung — Nav-Check ist nicht kritisch */ }
     };
     checkActivePlans();
     const interval = setInterval(checkActivePlans, 30000);
     return () => clearInterval(interval);
   }, [pathname, isAuthPage]);
+
+  // ── Minuten-Ticker für Live-Updates ──
+  useEffect(() => {
+    if (!hasActivePlan) return;
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000); // alle 30s
+    return () => clearInterval(timer);
+  }, [hasActivePlan]);
+
+  // ── Smart-Status berechnen ──
+  const smartStatus = useMemo(
+    () => computeSmartStatus(plannedRecipes, currentTime),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [plannedRecipes, Math.floor(currentTime.getTime() / 30000)]
+  );
 
   if (isAuthPage) return null;
 
@@ -92,6 +290,19 @@ export default function Navigation() {
   ];
   const allNavItems = [...navItems];
   if (hasActivePlan) allNavItems.push({ name: 'Backplan', href: '/backplan', icon: Clock });
+
+  // ── Smart-Status Badge (Desktop) ──
+  const statusStyle = getStatusStyle(smartStatus.phase);
+  const StatusBadge = hasActivePlan && smartStatus.phase !== 'idle' && smartStatus.label ? (
+    <Link href="/backplan" className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wide border transition-all hover:scale-[1.02] active:scale-[0.98] ${statusStyle.bg} ${statusStyle.text} ${smartStatus.pulse ? 'animate-pulse' : ''}`}>
+      {smartStatus.phase === 'baking' ? (
+        <Flame size={13} className="text-red-300" />
+      ) : (
+        <div className={`w-2 h-2 rounded-full ${statusStyle.dot}`} />
+      )}
+      <span className="max-w-[220px] truncate">{smartStatus.label}</span>
+    </Link>
+  ) : null;
 
   return (
     <>
@@ -110,12 +321,7 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center gap-4">
-            {hasActivePlan && (
-              <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/20">
-                <div className="w-2 h-2 bg-orange-400 rounded-full" />
-                Backvorgang läuft
-              </div>
-            )}
+            {StatusBadge}
             {canInstall && (
               <button onClick={install} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold">
                 <Download size={14} /> App installieren
