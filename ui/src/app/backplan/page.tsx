@@ -882,13 +882,15 @@ function GanttChart({ sections, timeline, currentTime }: { sections: any[]; time
   const totalMs = totalEnd.getTime() - totalStart.getTime();
   const pct = (d: Date) => Math.max(0, Math.min(100, ((d.getTime() - totalStart.getTime()) / totalMs) * 100));
 
-  // Stündliche Tick-Marks
+  // Adaptive Tick-Marks: Intervall abhängig von Gesamtdauer
+  const totalHours = totalMs / (1000 * 60 * 60);
+  const tickIntervalHours = totalHours <= 4 ? 1 : totalHours <= 12 ? 2 : totalHours <= 24 ? 3 : totalHours <= 48 ? 6 : 12;
   const ticks: Date[] = [];
   const tickStart = new Date(totalStart);
   tickStart.setMinutes(0, 0, 0);
-  tickStart.setHours(tickStart.getHours() + 1);
+  tickStart.setHours(tickStart.getHours() + tickIntervalHours);
   const t = new Date(tickStart);
-  while (t <= totalEnd) { ticks.push(new Date(t)); t.setHours(t.getHours() + 1); }
+  while (t <= totalEnd) { ticks.push(new Date(t)); t.setHours(t.getHours() + tickIntervalHours); }
 
   const nowPct = pct(currentTime);
   const isNowVisible = currentTime >= totalStart && currentTime <= totalEnd;
@@ -942,9 +944,9 @@ function GanttChart({ sections, timeline, currentTime }: { sections: any[]; time
         {ticks.map((tk, ti) => {
           const p = pct(tk);
           if (p < 4 || p > 94) return null;
-          return <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2" style={{ left: `${p}%` }}>{formatTime(tk)}</span>;
+          return <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2 whitespace-nowrap" style={{ left: `${p}%` }}>{totalHours > 24 ? formatShortTime(tk) : formatTime(tk)}</span>;
         })}
-        <span className="absolute text-[10px] text-green-500 font-bold right-0">{formatTime(totalEnd)}</span>
+        <span className="absolute text-[10px] text-green-500 font-bold right-0">{totalHours > 24 ? formatShortTime(totalEnd) : formatTime(totalEnd)}</span>
       </div>
 
       {/* Detail-Liste pro Phase */}
