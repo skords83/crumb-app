@@ -335,7 +335,10 @@ export default function BackplanPage() {
     const now = new Date();
     plannedRecipes.forEach(r => {
       const tl = calculateBackplan(parseLocalDate(r.planned_at), r.dough_sections);
-      const done = tl.filter((s, i) => completedSteps.has(`${r.id}-${i}`) || now > s.end).length;
+      const done = tl.filter((s, i) =>
+        completedSteps.has(`${r.id}-${i}`)
+        || (now > s.end && (s.type === 'Warten' || s.duration === 0))
+      ).length;
       map[r.id] = tl.length > 0 ? done / tl.length : 0;
     });
     return map;
@@ -371,11 +374,16 @@ export default function BackplanPage() {
 
   const totalDuration = timeline.reduce((s: number, t: any) => s + t.duration, 0);
 
-  // isDone: Schritt erledigt (manuell oder zeitlich abgelaufen laut Original-Timeline)
+  // isDone: Schritt erledigt (manuell bestätigt, oder bei Warten-Schritten zeitlich abgelaufen)
+  // Aktionsschritte mit duration > 0 müssen manuell bestätigt werden,
+  // damit der Backplan nicht automatisch weiterspringt.
   const isStepDone = (globalIdx: number) => {
+    if (completedSteps.has(`${recipe.id}-${globalIdx}`)) return true;
     const originalEnd = originalTimeline[globalIdx]?.end;
-    return completedSteps.has(`${recipe.id}-${globalIdx}`)
-      || (!!originalEnd && currentTime > originalEnd);
+    if (!originalEnd || currentTime <= originalEnd) return false;
+    const step = originalTimeline[globalIdx];
+    // Warten-Schritte und 0-Minuten-Aktionen dürfen automatisch ablaufen
+    return step?.type === 'Warten' || step?.duration === 0;
   };
 
   // Aktiver Schritt: läuft gerade (start <= now < end) oder erster offener nach Verschiebung
