@@ -45,12 +45,22 @@ function formatSmartDay(date: Date): string {
   return days[date.getDay()];
 }
 
+// Step-Typ → lesbares Label
+function stepTypeLabel(type: string): string {
+  switch (type) {
+    case 'Backen': return 'Backen';
+    case 'Kneten': return 'Kneten';
+    case 'Aktion': return 'Kneten';
+    case 'Warten': return 'Ruhezeit';
+    default: return type;
+  }
+}
+
 function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
   if (!plannedRecipes || plannedRecipes.length === 0) {
     return { phase: 'idle', label: '', pulse: false };
   }
 
-  // Für jedes Rezept: Timeline berechnen und nächsten relevanten Step finden
   let bestStatus: SmartStatus = { phase: 'planned', label: '', pulse: false };
   let closestActionMs = Infinity;
 
@@ -60,7 +70,6 @@ function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
     const timeline = calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
     if (timeline.length === 0) continue;
 
-    const firstStep = timeline[0];
     const lastStep = timeline[timeline.length - 1];
     const nowMs = now.getTime();
 
@@ -77,7 +86,8 @@ function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
       const remainMs = activeStep.end.getTime() - nowMs;
       return {
         phase: 'baking',
-        label: `Backen · noch ${formatCountdownShort(remainMs)}`,
+        label: recipe.title,
+        sublabel: `Backen · noch ${formatCountdownShort(remainMs)}`,
         recipeName: recipe.title,
         pulse: true,
       };
@@ -87,7 +97,8 @@ function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
     if (activeStep && (activeStep.type === 'Aktion' || activeStep.type === 'Kneten')) {
       return {
         phase: 'active',
-        label: `Jetzt: ${activeStep.instruction.length > 30 ? activeStep.instruction.slice(0, 30) + '…' : activeStep.instruction}`,
+        label: recipe.title,
+        sublabel: `Jetzt: ${stepTypeLabel(activeStep.type)}`,
         recipeName: recipe.title,
         pulse: true,
       };
@@ -98,14 +109,10 @@ function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
       const msUntil = nextActionStep.start.getTime() - nowMs;
       if (msUntil < 2 * 60 * 60 * 1000 && msUntil < closestActionMs) {
         closestActionMs = msUntil;
-        const stepLabel = nextActionStep.type === 'Backen'
-          ? 'Backen'
-          : nextActionStep.instruction.length > 25
-            ? nextActionStep.instruction.slice(0, 25) + '…'
-            : nextActionStep.instruction;
         bestStatus = {
           phase: 'upcoming',
-          label: `${stepLabel} in ${formatCountdownShort(msUntil)}`,
+          label: recipe.title,
+          sublabel: `${stepTypeLabel(nextActionStep.type)} in ${formatCountdownShort(msUntil)}`,
           recipeName: recipe.title,
           pulse: false,
         };
@@ -119,33 +126,21 @@ function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
         if (bestStatus.phase === 'planned' && !bestStatus.label) {
           bestStatus = {
             phase: 'planned',
-            label: `${recipe.title} · ${formatSmartDay(nextActionStep.start)} ${formatSmartTime(nextActionStep.start)}`,
+            label: recipe.title,
+            sublabel: `${formatSmartDay(nextActionStep.start)} ${formatSmartTime(nextActionStep.start)} · ${stepTypeLabel(nextActionStep.type)}`,
             pulse: false,
           };
         }
       }
     }
 
-    // FALL 5: Alles > 12h entfernt → Nur dezente Anzeige wenn bisher nichts Besseres
-    if (bestStatus.phase === 'planned' && !bestStatus.label) {
-      // Nächsten Step überhaupt finden (auch Warten)
-      const nextAny = timeline.find(s => s.start.getTime() > nowMs);
-      if (nextAny) {
-        const dayStr = formatSmartDay(nextAny.start);
-        bestStatus = {
-          phase: 'planned',
-          label: `Nächstes: ${recipe.title} · ${dayStr} ${formatSmartTime(nextAny.start)}`,
-          pulse: false,
-        };
-      } else if (nowMs < lastStep.end.getTime()) {
-        // Alle Steps laufen schon (Wartezeiten) — check ob noch ein Aktions-Step kommt
-        bestStatus = {
-          phase: 'planned',
-          label: `${recipe.title} · fertig ${formatSmartTime(lastStep.end)}`,
-          pulse: false,
-        };
-      }
-    }
+    // FALL 5: Alles > 12h entfernt → kein Badge (idle)
+    // Wir zeigen bewusst nichts wenn der nächste Step > 12h weg ist
+  }
+
+  // Wenn nur > 12h entfernt geplant ist → idle (kein Badge)
+  if (bestStatus.phase === 'planned' && !bestStatus.label) {
+    return { phase: 'idle', label: '', pulse: false };
   }
 
   return bestStatus;
@@ -294,13 +289,18 @@ export default function Navigation() {
   // ── Smart-Status Badge (Desktop) ──
   const statusStyle = getStatusStyle(smartStatus.phase);
   const StatusBadge = hasActivePlan && smartStatus.phase !== 'idle' && smartStatus.label ? (
-    <Link href="/backplan" className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wide border transition-all hover:scale-[1.02] active:scale-[0.98] ${statusStyle.bg} ${statusStyle.text} ${smartStatus.pulse ? 'animate-pulse' : ''}`}>
+    <Link href="/backplan" className={`flex items-center gap-2.5 px-4 py-1.5 rounded-full border transition-all hover:scale-[1.02] active:scale-[0.98] ${statusStyle.bg} ${smartStatus.pulse ? 'animate-pulse' : ''}`}>
       {smartStatus.phase === 'baking' ? (
-        <Flame size={13} className="text-red-300" />
+        <Flame size={14} className="text-red-300 flex-shrink-0" />
       ) : (
-        <div className={`w-2 h-2 rounded-full ${statusStyle.dot}`} />
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusStyle.dot}`} />
       )}
-      <span className="max-w-[220px] truncate">{smartStatus.label}</span>
+      <div className="flex flex-col leading-tight">
+        <span className="text-[12px] font-extrabold text-white truncate max-w-[160px]">{smartStatus.label}</span>
+        {smartStatus.sublabel && (
+          <span className="text-[10px] text-white/60 font-medium">{smartStatus.sublabel}</span>
+        )}
+      </div>
     </Link>
   ) : null;
 
