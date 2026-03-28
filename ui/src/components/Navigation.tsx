@@ -45,15 +45,23 @@ function formatSmartDay(date: Date): string {
   return days[date.getDay()];
 }
 
-// Step-Typ → lesbares Label
+// Step-Typ → lesbares Label (für upcoming/planned — Vorschau was kommt)
 function stepTypeLabel(type: string): string {
   switch (type) {
     case 'Backen': return 'Backen';
     case 'Kneten': return 'Kneten';
-    case 'Aktion': return 'Kneten';
+    case 'Aktion': return 'Nächste Aktion';
     case 'Warten': return 'Ruhezeit';
     default: return type;
   }
+}
+
+// Instruction kürzen für Badge-Anzeige
+function shortInstruction(instruction: string, maxLen: number = 28): string {
+  if (!instruction) return 'Aktion';
+  const trimmed = instruction.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return trimmed.slice(0, maxLen).trimEnd() + '…';
 }
 
 function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
@@ -98,7 +106,7 @@ function computeSmartStatus(plannedRecipes: any[], now: Date): SmartStatus {
       return {
         phase: 'active',
         label: recipe.title,
-        sublabel: `Jetzt: ${stepTypeLabel(activeStep.type)}`,
+        sublabel: `Jetzt: ${shortInstruction(activeStep.instruction)}`,
         recipeName: recipe.title,
         pulse: true,
       };
