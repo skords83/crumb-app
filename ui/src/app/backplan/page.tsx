@@ -150,11 +150,25 @@ export default function BackplanPage() {
   }, []);
 
   // ── Schritt toggeln (manuell erledigt / rückgängig) ──
+  // FIX: Beim Abhaken werden alle vorherigen Schritte derselben Phase automatisch mit-markiert
   const toggleStep = (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
     setCompletedSteps(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+        // Vorherige Schritte derselben Phase mit-markieren
+        const stepPhase = timeline[stepIdx]?.phase;
+        if (stepPhase) {
+          timeline.forEach((s: any, i: number) => {
+            if (s.phase === stepPhase && i < stepIdx) {
+              next.add(`${recipeId}-${i}`);
+            }
+          });
+        }
+      }
       return next;
     });
     // Rückgängig → completedAt entfernen
@@ -166,13 +180,22 @@ export default function BackplanPage() {
   };
 
   // ── Schritt vorzeitig abschließen → Timeline dynamisch neu berechnen ──
+  // FIX: Vorherige Schritte derselben Phase werden automatisch mit-markiert
   const completeStepEarly = async (recipeId: number, stepIdx: number) => {
     const key = `${recipeId}-${stepIdx}`;
     const now = Date.now();
  
-    // Optimistic Update
+    // Optimistic Update — vorherige Schritte derselben Phase mit-markieren
     const newCompletedSteps = new Set(completedSteps);
     newCompletedSteps.add(key);
+    const stepPhase = timeline[stepIdx]?.phase;
+    if (stepPhase) {
+      timeline.forEach((s: any, i: number) => {
+        if (s.phase === stepPhase && i < stepIdx) {
+          newCompletedSteps.add(`${recipeId}-${i}`);
+        }
+      });
+    }
     const newStepCompletedAt = { ...stepCompletedAt, [key]: now };
     setCompletedSteps(newCompletedSteps);
     setStepCompletedAt(newStepCompletedAt);
@@ -384,16 +407,26 @@ export default function BackplanPage() {
 
   const totalDuration = timeline.reduce((s: number, t: any) => s + t.duration, 0);
 
-  // isDone: Schritt erledigt (manuell bestätigt, oder bei Warten-Schritten zeitlich abgelaufen)
-  // Aktionsschritte mit duration > 0 müssen manuell bestätigt werden,
-  // damit der Backplan nicht automatisch weiterspringt.
+  // isDone: Schritt erledigt (manuell bestätigt, zeitlich abgelaufen bei Warten-Schritten,
+  // oder implizit weil ein späterer Schritt derselben Phase bereits erledigt ist)
+  // FIX: Implizite Erledigung durch späteren Schritt derselben Phase
   const isStepDone = (globalIdx: number) => {
+    // 1. Explizit manuell markiert
     if (completedSteps.has(`${recipe.id}-${globalIdx}`)) return true;
+    // 2. Zeitlich abgelaufen (nur Warten-Schritte und 0-Min-Aktionen)
     const originalEnd = originalTimeline[globalIdx]?.end;
-    if (!originalEnd || currentTime <= originalEnd) return false;
-    const step = originalTimeline[globalIdx];
-    // Warten-Schritte und 0-Minuten-Aktionen dürfen automatisch ablaufen
-    return step?.type === 'Warten' || step?.duration === 0;
+    if (originalEnd && currentTime > originalEnd) {
+      const step = originalTimeline[globalIdx];
+      if (step?.type === 'Warten' || step?.duration === 0) return true;
+    }
+    // 3. Implizit erledigt: ein späterer Schritt derselben Phase ist bereits abgehakt
+    const phase = timeline[globalIdx]?.phase;
+    if (phase) {
+      for (let i = globalIdx + 1; i < timeline.length; i++) {
+        if (timeline[i]?.phase === phase && completedSteps.has(`${recipe.id}-${i}`)) return true;
+      }
+    }
+    return false;
   };
 
   // Aktiver Schritt: läuft gerade (start <= now < end) oder erster offener nach Verschiebung
