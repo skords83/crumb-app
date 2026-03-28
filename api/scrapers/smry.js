@@ -5,6 +5,49 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { sumAllDurations, extractFirstDuration, isBakingStep, splitCompoundStep } = require('./utils');
 
+// ── KNOWN_PHASES: Parallele (Vorteig-ähnliche) vs. Sequenzielle (Hauptteig) Phasen ──
+const KNOWN_PHASES = {
+  'Kochstück':           { is_parallel: true },
+  'Brühstück':           { is_parallel: true },
+  'Quellstück':          { is_parallel: true },
+  'Roggensauerteig':     { is_parallel: true },
+  'Weizensauerteig':     { is_parallel: true },
+  'Dinkelsauerteig':     { is_parallel: true },
+  'Sauerteig':           { is_parallel: true },
+  'Vorteig':             { is_parallel: true },
+  'Poolish':             { is_parallel: true },
+  'Levain':              { is_parallel: true },
+  'Mischung':            { is_parallel: true },
+  'Füllung':             { is_parallel: true },
+  'Pâte Fermentée':      { is_parallel: true },
+  'Autolyseteig':        { is_parallel: false },
+  'Hauptteig':           { is_parallel: false },
+  'Süßer Starter':       { is_parallel: true },
+  'Sauerteig-Anstellgut': { is_parallel: true },
+};
+
+// ── PHASE_PATTERNS: Regex-Muster für Phasen-Erkennung ──
+const PHASE_PATTERNS = [
+  { re: /^[A-Z\s]*Sauerteig\s*$/i,     is_parallel: true },
+  { re: /^[A-Z\s]*Starter\s*$/i,       is_parallel: true },
+  { re: /Vorteig|Poolish|Levain/i,     is_parallel: true },
+  { re: /stück$/i,                     is_parallel: true },  // Quellstück, Brühstück, etc.
+  { re: /teig$/i,                      is_parallel: false }, // Hauptteig, Autolyseteig, etc.
+];
+
+// ── NON_PHASE_H4: Überschriften, die NICHT als Phasen erkannt werden sollen ──
+const NON_PHASE_H4 = [
+  'zum bestreuen',
+  'dekoration',
+  'würzsenf',
+  'salz-hefe-ansatz',
+  'matcha-mürbeteig',
+  'später einkneten',
+  'mehl',
+  'wasser',
+  'ausserdem',
+];
+
 // ── HILFSFUNKTIONEN ──────────────────────────────────────────
 function htmlToText(str) {
   return (str || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\u202f/g, ' ').replace(/\s+/g, ' ').trim();
@@ -112,20 +155,29 @@ function extractIngredientsFromChunk(chunk) {
     while ((cell = cellRe.exec(row[1])) !== null) cells.push(htmlToText(cell[1]));
     const filteredCells = cells.filter(c => c.trim().length > 0);
     if (filteredCells.length < 2) continue;
+    
     const firstCell = filteredCells[0].trim();
-    const hasAmount = /^\d/.test(firstCell) || /^(gesamter?s?|nach Belieben)/i.test(firstCell);
+    // FIX 3: Erkennt "gesamter", "gesamte", "gesamtes", "nach Belieben" und Zahlen
+    const hasAmount = /^\d/.test(firstCell) || /^(gesamter?s?|nach\s+Belieben)/i.test(firstCell);
     const amount = hasAmount ? firstCell : '';
     let name = hasAmount ? filteredCells[1].trim() : firstCell;
+    
+    // Temperatur aus 3. Zelle (falls Menge vorhanden) oder 2. Zelle
     const temperature = (hasAmount ? filteredCells[2] : filteredCells[1])
       ? (hasAmount ? filteredCells[2] : filteredCells[1]).replace('°C', '').trim() : '';
+    
+    // Notizen in Klammern extrahieren und aus Name entfernen
     let note = '';
     const noteMatch = name.match(/\(([^)]+)\)/);
     if (noteMatch) { note = noteMatch[1]; name = name.replace(/\([^)]+\)/g, '').trim(); }
+    
     name = name.replace(/\s+/g, ' ').trim();
     if (!name || name.length < 2 || name.length > 120) continue;
+    
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    
     ingredients.push({ name, amount: hasAmount ? amount : '', unit: '', temperature, note });
   }
   return ingredients;
@@ -187,34 +239,7 @@ function extractAllSteps(str) {
   return steps;
 }
 
-// ── PHASE-DEFINITIONEN ───────────────────────────────────────
-const KNOWN_PHASES = {
-  'Kochstück':       { is_parallel: true  },
-  'Brühstück':       { is_parallel: true  },
-  'Quellstück':      { is_parallel: true  },
-  'Roggensauerteig': { is_parallel: true  },
-  'Weizensauerteig': { is_parallel: true  },
-  'Sauerteig':       { is_parallel: true  },
-  'Vorteig':         { is_parallel: true  },
-  'Poolish':         { is_parallel: true  },
-  'Levain':          { is_parallel: true  },
-  'Mischung':        { is_parallel: true  },
-  'Füllung':         { is_parallel: true  },
-  'Autolyse':        { is_parallel: false },
-  'Hauptteig':       { is_parallel: false },
-};
-const PHASE_PATTERNS = [
-  { re: /hauptteig$/i,  is_parallel: false },
-  { re: /teig$/i,       is_parallel: true  },
-  { re: /stück$/i,      is_parallel: true  },
-  { re: /sauerteig/i,   is_parallel: true  },
-  { re: /sauer$/i,      is_parallel: true  },   // Grundsauer, Weizensauer, etc.
-  { re: /poolish/i,     is_parallel: true  },
-  { re: /levain/i,      is_parallel: true  },
-  { re: /autolyse/i,    is_parallel: false },
-  { re: /vorteig/i,     is_parallel: true  },
-];
-const NON_PHASE_H4 = ['zubehör', 'zutatenübersicht', 'planungsbeispiel', 'häufig', 'ähnliche', 'kommentar', 'fragen'];
+
 
 // ── HAUPT-FUNKTION ───────────────────────────────────────────
 const parseHtmlImport = async (html, filename, hostUrl) => {
@@ -285,6 +310,14 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
     }
   }
   recipeData.image_url = imageUrl ? imageUrl.replace(/^http:\/\//i, 'https://') : imageUrl;
+
+  // FIX 0 Continued: Normalisiere original_source_url – ensure https:// (Defence-in-Depth)
+  if (recipeData.original_source_url && !recipeData.original_source_url.startsWith('http')) {
+    recipeData.original_source_url = 'https://' + recipeData.original_source_url;
+  }
+  if (recipeData.original_source_url) {
+    recipeData.original_source_url = recipeData.original_source_url.replace(/^http:\/\//i, 'https://');
+  }
 
   // BESCHREIBUNG
   let description = $('meta[property="og:description"]').attr('content') || '';
@@ -409,14 +442,19 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
           if (rep) { expandedSteps.push(...rep); }
           else { splitCompoundStep(s.instruction).forEach(step => expandedSteps.push(step)); }
         });
-      dough_sections.push({ name: phase.name, ingredients: phaseIngredients, steps: expandedSteps });
+      dough_sections.push({ name: phase.name, is_parallel: phase.is_parallel, ingredients: phaseIngredients, steps: expandedSteps });
     }
   }
 
   recipeData.steps          = allSteps.map(s => ({ instruction: s.instruction, duration: extractDuration(s.instruction) || 5, type: detectStepType(s.instruction) }));
   recipeData.dough_sections = dough_sections;
   recipeData.ingredients    = dough_sections.flatMap(s => s.ingredients);
-  console.log(`✅ ${dough_sections.length} Phasen, ${recipeData.steps.length} Schritte, ${recipeData.ingredients.length} Zutaten gesamt`);
+  
+  // Logging: Phasen-Details + gesamter/gesamtes Erkennung
+  const phaseDetails = dough_sections.map(s => `${s.name} (${s.is_parallel ? 'Parallel' : 'Sequenziell'}, ${s.ingredients.length} Zutaten, ${s.steps.length} Schritte)`).join(' | ');
+  const quantityMatches = recipeData.ingredients.filter(ing => /^(gesamter?s?|nach\s+Belieben)/i.test(ing.amount)).length;
+  console.log(`✅ ${dough_sections.length} Phasen: [${phaseDetails}]`);
+  console.log(`   ${recipeData.steps.length} Schritte, ${recipeData.ingredients.length} Zutaten (${quantityMatches} mit gesamter/gesamtes/nach Belieben)`);
 
   // Post-Processing: Warten-Steps mit Zeitfenster anreichern
   const { extractDurationRange } = require('./utils');
