@@ -120,6 +120,10 @@ const initDB = async () => {
       END IF;
     END $$;`;
 
+  const addPlannedMultiplier = `
+  ALTER TABLE recipes
+    ADD COLUMN IF NOT EXISTS planned_multiplier NUMERIC DEFAULT 1;`;
+
   let retries = 10;
   while (retries > 0) {
     try {
@@ -843,7 +847,7 @@ app.delete('/api/recipes/:id', async (req, res) => {
 
 app.patch('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  const { is_favorite, planned_at, planned_timeline } = req.body;
+  const { is_favorite, planned_at, planned_timeline, planned_multiplier } = req.body;
   try {
     let result;
     if (planned_at !== undefined) {
@@ -880,8 +884,8 @@ app.patch('/api/recipes/:id', async (req, res) => {
       }
 
       result = await pool.query(
-        "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
-        [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
+        "UPDATE recipes SET planned_at=$1, planned_timeline=$2, planned_multiplier=$3 WHERE id=$4 AND user_id=$5 RETURNING *",
+        [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, planned_multiplier ?? 1, id, req.user.userId]
       );
     } else if (is_favorite !== undefined) {
       result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);

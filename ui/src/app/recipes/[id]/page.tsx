@@ -583,9 +583,10 @@ onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
         'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
       },
       body: JSON.stringify({ 
-  planned_at: plannedAt,
-  planned_timeline: timelineToSave 
-}),
+        planned_at: plannedAt,
+        planned_timeline: timelineToSave,
+        planned_multiplier: multiplier,
+      }),
     });
             if (res.ok) {
               setTargetTime(plannedAt);

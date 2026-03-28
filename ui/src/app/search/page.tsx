@@ -480,13 +480,13 @@ function SearchPageContent() {
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={selectedRecipe}
-        onConfirm={async (plannedAt) => {
+        onConfirm={async (plannedAt, multiplier) => {
           if (!selectedRecipe) return;
           try {
             await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${selectedRecipe.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-              body: JSON.stringify({ planned_at: plannedAt }),
+              body: JSON.stringify({ planned_at: plannedAt, planned_multiplier: multiplier }),
             });
             setShowPlanModal(false);
           } catch (err) { console.error(err); }

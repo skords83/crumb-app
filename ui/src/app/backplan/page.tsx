@@ -68,6 +68,16 @@ const formatCountdown = (seconds: number): string => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
+/** Zutatenmenge mit Multiplier skalieren */
+const scaleAmount = (rawAmount: string | number, multiplier: number): string => {
+  if (!multiplier || multiplier === 1) return String(rawAmount);
+  const parsed = parseFloat(String(rawAmount || '0').replace(',', '.'));
+  if (isNaN(parsed) || parsed === 0) return String(rawAmount);
+  const scaled = parsed * multiplier;
+  const result = Math.round(scaled * 10) / 10;
+  return result % 1 === 0 ? String(result) : String(result).replace('.', ',');
+};
+
 // ── HAUPTKOMPONENTE ──────────────────────────────────────────
 
 export default function BackplanPage() {
@@ -677,13 +687,22 @@ export default function BackplanPage() {
                 {isDrawerOpen && sectionIngredients.length > 0 && (
                   <div className="ml-10 mb-3 rounded-xl border border-[#EDE5D8] dark:border-gray-700 bg-[#FAF7F3] dark:bg-gray-800/60 overflow-hidden">
                     <div className="px-4 py-2 border-b border-[#EDE5D8] dark:border-gray-700">
-                      <span className="text-[10px] font-extrabold text-[#8B7355] uppercase tracking-widest">Zutaten – {section.name}</span>
+                      <span className="text-[10px] font-extrabold text-[#8B7355] uppercase tracking-widest">
+                        Zutaten – {section.name}
+                        {(recipe.planned_multiplier ?? 1) !== 1 && (
+                          <span className="ml-2 text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-md">
+                            {recipe.planned_multiplier}×
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div className="px-4 py-1">
                       {sectionIngredients.map((ing: any, ii: number) => (
                         <div key={ii} className="flex items-center justify-between py-1.5 text-[13px] border-b border-[#F0EBE3] dark:border-gray-700 last:border-0">
                           <span className="text-gray-700 dark:text-gray-300">{ing.name}</span>
-                          <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">{ing.amount} {ing.unit || ''}</span>
+                          <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                            {scaleAmount(ing.amount, recipe.planned_multiplier ?? 1)} {ing.unit || ''}
+                          </span>
                         </div>
                       ))}
                     </div>
