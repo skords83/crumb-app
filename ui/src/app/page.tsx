@@ -353,7 +353,7 @@ function HomePageContent() {
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={selectedRecipe}
-        onConfirm={async (plannedAt, multiplier) => {
+        onConfirm={async (plannedAt, multiplier, _timeline, _plannedTimeline) => {
           if (!selectedRecipe) return;
           try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${selectedRecipe.id}`, {
