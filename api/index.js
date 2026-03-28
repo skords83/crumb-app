@@ -120,10 +120,6 @@ const initDB = async () => {
       END IF;
     END $$;`;
 
-  const addPlannedMultiplier = `
-  ALTER TABLE recipes
-    ADD COLUMN IF NOT EXISTS planned_multiplier NUMERIC DEFAULT 1;`;
-
   let retries = 10;
   while (retries > 0) {
     try {
@@ -210,17 +206,16 @@ const sendStatusNotification = async (recipeId, title, message) => {
       message,
       tags: ['hourglass_flowing_sand'],
       priority: 2,  // Low priority — kein Sound, nur Badge-Update
+      sequence_id: sequenceId,  // ntfy ersetzt vorherige Notification mit gleicher sequence_id
     });
     const headers = { 'Content-Type': 'application/json' };
     if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
     
-    // POST to topic/sequenceId — ersetzt die vorherige Notification
-    await axios.post(`${baseUrl}/${topic}/${sequenceId}`, payload, { headers });
+    // POST an base URL — genau wie normale Notifications, sequence_id im Body
+    await axios.post(baseUrl, payload, { headers });
     console.log(`📊 Status-Notification aktualisiert: ${shortTitle}`);
   } catch (err) {
-    // Fallback: sequence_id URL nicht unterstützt → normaler POST
-    // Aber nur als Debug loggen, nicht spammen
-    console.debug(`📊 Status-Notification (kein Update): ${err.message}`);
+    console.error(`📊 Status-Notification Fehler: ${err.message}`);
   }
 };
 
@@ -377,6 +372,33 @@ function buildPreheatNotifications(clusters, recipeTitle, recipeId) {
 }
 
 /**
+ * Kurzbeschreibung eines Clusters für Notifications.
+ * Nutzt den Phasennamen + Anzahl Schritte statt roher Instruction-Texte,
+ * die oft mit Zutatenlisten anfangen und abgeschnitten unleserlich sind.
+ * 
+ * Beispiele:
+ *   "Hauptteig" (1 Schritt)
+ *   "Hauptteig (3 Schritte)"
+ *   "Vorteig → Hauptteig"  (Schritte aus 2 Phasen)
+ */
+function describeCluster(cluster) {
+  if (cluster.isBaking) return 'Backen';
+
+  // Einzigartige Phasennamen im Cluster
+  const phases = [...new Set(cluster.steps.map(s => s.phase))];
+
+  if (phases.length === 1) {
+    // Eine Phase — optional Schritt-Anzahl wenn > 1
+    return cluster.steps.length > 1
+      ? `${phases[0]} (${cluster.steps.length} Schritte)`
+      : phases[0];
+  }
+
+  // Mehrere Phasen im selben Cluster
+  return phases.slice(0, 2).join(' → ') + (phases.length > 2 ? ` +${phases.length - 2}` : '');
+}
+
+/**
  * Cluster-Notification formatieren MIT Ausblick auf den Rest des Tages.
  * 
  * @param {object} cluster - Der aktuelle Cluster
@@ -403,7 +425,7 @@ function formatClusterNotification(cluster, recipeTitle, allClusters = [], clust
     
     const nextDesc = nextCluster.isBaking
       ? '🔥 Backen'
-      : nextCluster.steps[0].instruction.substring(0, 35);
+      : describeCluster(nextCluster);
     
     outlook = `\n⏭ Danach ${pauseStr} Pause → ${nextDesc} um ${nextTime}`;
   } else if (allClusters.length > 0 && clusterIndex === allClusters.length - 1) {
@@ -510,9 +532,7 @@ const checkAndNotify = async () => {
           }
           
           // Nächste Aktion beschreiben
-          const nextDesc = nextCluster.isBaking
-            ? 'Backen'
-            : nextCluster.steps[0].instruction.substring(0, 40);
+          const nextDesc = describeCluster(nextCluster);
           
           // Letzter Cluster / Fertigzeit
           const lastCluster = clusters[clusters.length - 1];
@@ -847,7 +867,7 @@ app.delete('/api/recipes/:id', async (req, res) => {
 
 app.patch('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  const { is_favorite, planned_at, planned_timeline, planned_multiplier } = req.body;
+  const { is_favorite, planned_at, planned_timeline } = req.body;
   try {
     let result;
     if (planned_at !== undefined) {
@@ -884,8 +904,8 @@ app.patch('/api/recipes/:id', async (req, res) => {
       }
 
       result = await pool.query(
-        "UPDATE recipes SET planned_at=$1, planned_timeline=$2, planned_multiplier=$3 WHERE id=$4 AND user_id=$5 RETURNING *",
-        [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, planned_multiplier ?? 1, id, req.user.userId]
+        "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
+        [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
       );
     } else if (is_favorite !== undefined) {
       result = await pool.query("UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *", [is_favorite, id, req.user.userId]);
