@@ -254,15 +254,11 @@ export default function Navigation() {
     if (isAuthPage) return;
     const checkActivePlans = async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/bake-sessions/active`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
         });
         const data = await res.json();
-        if (Array.isArray(data)) {
-          const planned = data.filter((r: any) => r.planned_at !== null);
-          setPlannedRecipes(planned);
-          setHasActivePlan(planned.length > 0);
-        }
+        setHasActivePlan(Array.isArray(data) && data.length > 0);
       } catch { /* stille Fehlerbehandlung — Nav-Check ist nicht kritisch */ }
     };
     checkActivePlans();

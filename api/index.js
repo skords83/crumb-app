@@ -12,6 +12,8 @@ const { planWithNightWindow } = require('./scrapers/nightWindowPlanner');
 const { v4: uuidv4 } = require('uuid');
 const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 const { categorizeRecipe } = require('./categorize');
+const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
+const { checkSoftDone, getPendingGates, calculateProjectedEnd, flattenSteps } = require('./bake-engine');
 
 const app = express();
 
@@ -55,6 +57,8 @@ const upload = multer({ storage });
 // DATENBANK POOL & INIT
 // ============================================================
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Keine erzwungene UTC-Timezone
+setBakeSessionsPool(pool);
 
 // Öffentliche Base-URL für generierte Datei-URLs.
 // Traefik terminiert TLS → req.protocol ist intern immer "http".
@@ -131,7 +135,25 @@ const initDB = async () => {
       await pool.query(createRecipesTable);
       await pool.query(createIndex);
       await pool.query(migrateRecipesTable);
-      await pool.query(migratePlannedAtType);
+await pool.query(migratePlannedAtType);
+      // ── Bake Sessions Tabelle ──
+      await pool.query(`CREATE TABLE IF NOT EXISTS bake_sessions (
+        id SERIAL PRIMARY KEY,
+        recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        planned_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        started_at TIMESTAMP WITHOUT TIME ZONE,
+        finished_at TIMESTAMP WITHOUT TIME ZONE,
+        projected_end TIMESTAMP WITHOUT TIME ZONE,
+        multiplier NUMERIC(3,1) DEFAULT 1.0,
+        step_states JSONB NOT NULL DEFAULT '{}',
+        step_timestamps JSONB NOT NULL DEFAULT '{}',
+        temperature_log JSONB DEFAULT '[]',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_active ON bake_sessions(user_id) WHERE finished_at IS NULL;`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_recipe ON bake_sessions(recipe_id, finished_at DESC);`);
       console.log("✅ Datenbank bereit");
       return;
     } catch (err) {
@@ -592,6 +614,9 @@ app.post('/api/auth/change-password', authenticateToken, changePassword);
 // ============================================================
 app.use(authenticateToken);
 
+// ── Bake Sessions Router ──
+app.use('/api/bake-sessions', bakeSessionsRouter);
+
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
   const imageUrl = `${getPublicBaseUrl(req)}/uploads/${req.file.filename}`;
@@ -1001,9 +1026,73 @@ app.get('/api/ntfy/status', (req, res) => {
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Backend läuft auf Port ${PORT}`);
-  await initDB();
-  // Haupt-Schleife: alle 60 Sek prüfen + Status alle 15 Min aktualisieren
-  setInterval(checkAndNotify, 60000);
+await initDB();
+  
+  // Bake-Session Notifications (soft_done, gates, preheat, overdue)
+  const checkBakeSessionNotifications = async () => {
+    try {
+      const result = await pool.query(
+        `SELECT bs.*, r.title, r.dough_sections FROM bake_sessions bs
+         JOIN recipes r ON r.id = bs.recipe_id WHERE bs.finished_at IS NULL`
+      );
+      const now = new Date();
+      for (const session of result.rows) {
+        const sections = session.dough_sections || [];
+        const states = session.step_states || {};
+        const timestamps = session.step_timestamps || {};
+        const { states: updatedStates, softDoneSteps } = checkSoftDone(sections, states, timestamps);
+        if (softDoneSteps.length > 0) {
+          await pool.query('UPDATE bake_sessions SET step_states = $1 WHERE id = $2',
+            [JSON.stringify(updatedStates), session.id]);
+          for (const step of softDoneSteps) {
+            const notifId = `bs-${session.id}-softdone-${step.globalIdx}`;
+            if (sentNotifications.has(notifId)) continue;
+            await sendNtfyNotification(`⏱ ${step.instruction.substring(0, 50)}`,
+              `${session.title} · Geplante Zeit abgelaufen — prüfe und bestätige`);
+            sentNotifications.add(notifId);
+          }
+        }
+        const gates = getPendingGates(sections, updatedStates);
+        for (const gate of gates) {
+          const notifId = `bs-${session.id}-gate-${gate.phase}`;
+          if (sentNotifications.has(notifId)) continue;
+          await sendNtfyNotification(`🔓 ${gate.phase} kann starten`,
+            `${session.title} · ${gate.dependencies.join(' + ')} fertig`);
+          sentNotifications.add(notifId);
+        }
+        const steps = flattenSteps(sections);
+        steps.forEach(step => {
+          if (step.type === 'Backen' && updatedStates[step.globalIdx] === 'ready') {
+            const notifId = `bs-${session.id}-preheat-${step.globalIdx}`;
+            if (!sentNotifications.has(notifId)) {
+              const temp = extractTemp(step.instruction);
+              sendNtfyNotification(temp ? `🔥 Ofen auf ${temp}°C vorheizen` : `🔥 Ofen vorheizen`,
+                `${session.title} · Backen steht an`);
+              sentNotifications.add(notifId);
+            }
+          }
+          if (updatedStates[step.globalIdx] === 'soft_done') {
+            const ts = timestamps[step.globalIdx];
+            if (ts?.timer_end && (now.getTime() - ts.timer_end) / 60000 >= 30) {
+              const notifId = `bs-${session.id}-overdue-${step.globalIdx}`;
+              if (!sentNotifications.has(notifId)) {
+                sendNtfyNotification(`⚠️ ${step.phase} überfällig`,
+                  `${session.title} · ${step.instruction.substring(0, 40)} — alles okay?`);
+                sentNotifications.add(notifId);
+              }
+            }
+          }
+        });
+        const projectedEnd = calculateProjectedEnd(sections, updatedStates, timestamps);
+        await pool.query('UPDATE bake_sessions SET projected_end = $1 WHERE id = $2', [projectedEnd, session.id]);
+      }
+    } catch (err) { console.error('❌ bake-session Check-Fehler:', err.message); }
+  };
+
+  setInterval(async () => {
+    await checkAndNotify();
+    await checkBakeSessionNotifications();
+  }, 60000);
   // Status-Notification alle 15 Min auch ohne neue Schritt-Events aktualisieren
   setInterval(async () => {
     try {

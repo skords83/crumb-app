@@ -4,9 +4,10 @@ import React, { useEffect, useState, useMemo, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Icons from 'lucide-react';
-import { calculateBackplan, formatTimeManual, calcTotalDuration, calcTotalDurationRange, parseLocalDate } from '@/lib/backplan-utils';
+import { calculateBackplan, calcTotalDuration, calcTotalDurationRange, parseLocalDate } from '@/lib/backplan-utils';
 import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 import PlanModal from "@/components/PlanModal";
+import BakeHistory from '@/components/BakeHistory';
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 
 // ── BÄCKERPROZENTE ──────────────────────────────────────────
@@ -37,11 +38,9 @@ function DescriptionBox({ description }: { description: string }) {
   const needsExpansion = description.length > 150;
   return (
     <div className="mb-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 rounded-2xl border border-amber-100/50 dark:border-amber-800/50">
-      {/* Voller Text: nur beim Drucken sichtbar (hidden im Browser, block via print.css) */}
       <p className="print-description-full hidden text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
         {description}
       </p>
-      {/* Gekürzter Text: im Browser sichtbar, beim Drucken ausgeblendet via print.css */}
       <p className="print-description-preview text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
         {isExpanded ? description : preview + (needsExpansion ? '...' : '')}
       </p>
@@ -73,13 +72,15 @@ function formatStepDuration(step: any): string {
   return formatDuration(step.duration);
 }
 
-// ── MENGE SKALIEREN & FORMATIEREN ───────────────────────────
+function formatTimeManual(date: Date): string {
+  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 function scaleAmount(rawAmount: string | number, multiplier: number): string {
   if (multiplier === 1) return String(rawAmount);
   const parsed = parseFloat(String(rawAmount || '0').replace(',', '.'));
   if (isNaN(parsed) || parsed === 0) return String(rawAmount);
   const scaled = parsed * multiplier;
-  // Schöne Darstellung: keine unnötigen Dezimalstellen
   const result = Math.round(scaled * 10) / 10;
   return result % 1 === 0 ? String(result) : String(result).replace('.', ',');
 }
@@ -107,16 +108,12 @@ function DeleteConfirmModal({ recipeName, onConfirm, onCancel }: {
           „{recipeName}"
         </p>
         <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
             Abbrechen
           </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-black transition-colors"
-          >
+          <button onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-black transition-colors">
             Löschen
           </button>
         </div>
@@ -137,15 +134,12 @@ function ScalerBar({ multiplier, onChange }: { multiplier: number; onChange: (v:
       </div>
       <div className="flex gap-1.5 flex-wrap">
         {MULTIPLIER_STEPS.map(step => (
-          <button
-            key={step}
-            onClick={() => onChange(step)}
+          <button key={step} onClick={() => onChange(step)}
             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
               multiplier === step
                 ? 'bg-[#8B4513] text-white shadow-sm'
                 : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 hover:border-[#8B4513]/40 dark:hover:border-[#C4A484]/40'
-            }`}
-          >
+            }`}>
             {step === 1 ? '× 1' : `× ${step}`}
           </button>
         ))}
@@ -179,7 +173,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [recipe, setRecipe] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPlanModal, setShowPlanModal] = useState(false);
-  const [targetTime, setTargetTime] = useState("");
   const [showBakersPercent, setShowBakersPercent] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -221,7 +214,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     return { steps, duration, durationMin, durationMax, hydration };
   }, [recipe]);
 
-  // Timeline aus planned_at ableiten — parseLocalDate statt new Date() vermeidet UTC-Versatz
   const calculatedTimeline = useMemo(() => {
     if (!recipe?.planned_at || !recipe?.dough_sections) return [];
     return calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
@@ -308,41 +300,31 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           </Link>
 
           <div className="no-print absolute top-4 right-4 z-10 flex gap-2">
-            <button
-              onClick={toggleFavorite}
-              className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm transition-all hover:scale-110"
-            >
+            <button onClick={toggleFavorite}
+              className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm transition-all hover:scale-110">
               <Icons.Heart size={18} className={isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-500 dark:text-gray-400'} />
             </button>
             <div className="relative">
-              <button
-                onClick={() => setShowMenu(v => !v)}
-                className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors"
-              >
+              <button onClick={() => setShowMenu(v => !v)}
+                className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
                 <Icons.MoreVertical size={18} className="text-gray-700 dark:text-gray-200" />
               </button>
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
                   <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[200px]">
-                    <button
-                      onClick={() => { router.push(`/recipes/${id}/edit`); setShowMenu(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
-                    >
+                    <button onClick={() => { router.push(`/recipes/${id}/edit`); setShowMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700">
                       <Icons.Edit3 size={15} className="text-gray-400" />
                       <span className="text-sm font-medium">Bearbeiten</span>
                     </button>
-                    <button
-                      onClick={handlePrint}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
-                    >
+                    <button onClick={handlePrint}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700">
                       <Icons.Printer size={15} className="text-gray-400" />
                       <span className="text-sm font-medium">Drucken / PDF</span>
                     </button>
-                    <button
-                      onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
+                    <button onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                       <Icons.Trash2 size={15} />
                       <span className="text-sm font-semibold">Rezept löschen</span>
                     </button>
@@ -539,6 +521,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                 </section>
               );
             })}
+
+            {/* BAKE HISTORY */}
+            <div className="max-w-2xl mx-auto px-5">
+              <BakeHistory recipeId={parseInt(id)} />
+            </div>
           </div>
         </div>
 
@@ -559,49 +546,8 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={recipe}
-onConfirm={async (plannedAt, multiplier, timeline, plannedTimeline) => {
-  try {
-    console.log("plannedTimeline:", plannedTimeline, Array.isArray(plannedTimeline), plannedTimeline?.length);
-    let timelineToSave = plannedTimeline ?? null;
-    if (!timelineToSave) {
-      try {
-        const nightRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}/plan-night`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-          body: JSON.stringify({ nightWindow: { start: '22:00', end: '06:30' }, targetEndTime: plannedAt }),
-        });
-        if (nightRes.ok) {
-          const nightData = await nightRes.json();
-          if (nightData.viable && nightData.plan?.length > 0) timelineToSave = nightData.plan;
-        }
-      } catch {}
-    }
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-      },
-      body: JSON.stringify({ 
-        planned_at: plannedAt,
-        planned_timeline: timelineToSave,
-        planned_multiplier: multiplier,
-      }),
-    });
-            if (res.ok) {
-              setTargetTime(plannedAt);
-              setShowPlanModal(false);
-              // Recipe neu laden damit planned_at aktuell ist → useMemo berechnet Timeline neu
-              fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
-              }).then(r => r.json()).then(data => { setRecipe(data); });
-              router.refresh();
-            }
-          } catch (err) { console.error(err); }
-        }}
       />
 
-      {/* DELETE CONFIRMATION */}
       {showDeleteConfirm && (
         <DeleteConfirmModal
           recipeName={recipe.title}

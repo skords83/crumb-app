@@ -353,25 +353,6 @@ function HomePageContent() {
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={selectedRecipe}
-        onConfirm={async (plannedAt, multiplier, _timeline, _plannedTimeline) => {
-          if (!selectedRecipe) return;
-          try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${selectedRecipe.id}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-              },
-              body: JSON.stringify({ planned_at: plannedAt, planned_multiplier: multiplier }),
-            });
-            if (res.ok) {
-              setRecipes(prev => prev.map(r =>
-                r.id === selectedRecipe.id ? { ...r, planned_at: plannedAt } : r
-              ));
-              setShowPlanModal(false);
-            }
-          } catch (err) { console.error("Planungs-Fehler:", err); }
-        }}
       />
     </div>
   );

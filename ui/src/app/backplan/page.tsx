@@ -1,389 +1,171 @@
-"use client";
+// ui/src/app/backplan/page.tsx
+'use client';
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { Clock, ChevronLeft, ChevronRight, Check, Sun, AlignLeft, BarChart2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { BackplanSkeleton } from "@/components/LoadingSkeletons";
-import { calculateBackplan, calculateDynamicTimeline, parseLocalDate, findPendingParallelPhases, type BackplanStep, type PendingParallelInfo } from '@/lib/backplan-utils';
+import {
+  ChevronLeft, ChevronRight, Clock, Check, AlignLeft, BarChart2,
+  Sun, Timer, ThermometerSun, Flame, Play, Plus, Minus, X,
+} from 'lucide-react';
+import {
+  type BakeSession, type TimelineStep, type PhaseGate,
+  formatSmartTime, formatCountdown, formatDuration, formatStepDuration,
+  formatTime, getActiveStep, getSoftDoneStep, getProgress, getPhases,
+  getPhaseProgress, parseLocalDate,
+} from '@/lib/backplan-utils';
 
-// ── ZEIT-HELPER ──────────────────────────────────────────────
+const API = process.env.NEXT_PUBLIC_API_URL;
+const authHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`,
+});
 
-/** Date → "YYYY-MM-DDTHH:mm" ohne Zeitzonen-Suffix (zum Speichern / an API senden) */
-const formatLocalISO = (d: Date): string => {
-  const Y = d.getFullYear();
-  const M = String(d.getMonth() + 1).padStart(2, '0');
-  const D = String(d.getDate()).padStart(2, '0');
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${Y}-${M}-${D}T${h}:${m}`;
-};
+// ── Loading Skeleton ────────────────────────────────────────
+function BackplanSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#FDFCFB] dark:bg-gray-900 flex items-center justify-center">
+      <div className="animate-pulse flex flex-col items-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-[#F5F0E8] dark:bg-gray-700" />
+        <div className="h-4 w-40 bg-[#F5F0E8] dark:bg-gray-700 rounded-full" />
+      </div>
+    </div>
+  );
+}
 
-/** Date → "HH:mm" */
-const formatTime = (date: Date): string =>
-  `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-
-/** Date → "HH:mm" wenn heute, "Mo 24.3. HH:mm" wenn anderer Tag */
-const DAYS_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-const isToday = (date: Date): boolean => {
-  const now = new Date();
-  return date.getDate() === now.getDate()
-    && date.getMonth() === now.getMonth()
-    && date.getFullYear() === now.getFullYear();
-};
-const formatSmartTime = (date: Date): string => {
-  const time = formatTime(date);
-  if (isToday(date)) return time;
-  return `${DAYS_SHORT[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}. ${time}`;
-};
-/** Kompakte Variante für Phasen-Zeitleisten: "HH:mm" oder "Mo HH:mm" */
-const formatShortTime = (date: Date): string => {
-  const time = formatTime(date);
-  if (isToday(date)) return time;
-  return `${DAYS_SHORT[date.getDay()]} ${time}`;
-};
-
-/** Minuten → "Xh Ym" / "X Min" */
-const formatDuration = (mins: number): string => {
-  if (mins < 60) return `${mins} Min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-};
-
-/** Schritt-Dauer mit optionalem min–max-Bereich */
-const formatStepDuration = (step: any): string => {
-  const min = parseInt(step.duration_min);
-  const max = parseInt(step.duration_max);
-  if (!isNaN(min) && !isNaN(max)) return `${formatDuration(min)} – ${formatDuration(max)}`;
-  return formatDuration(step.duration);
-};
-
-/** Sekunden → "HH:mm:ss" oder "mm:ss" */
-const formatCountdown = (seconds: number): string => {
-  if (seconds <= 0) return "00:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-};
-
-/** Zutatenmenge mit Multiplier skalieren */
-const scaleAmount = (rawAmount: string | number, multiplier: number): string => {
-  if (!multiplier || multiplier === 1) return String(rawAmount);
-  const parsed = parseFloat(String(rawAmount || '0').replace(',', '.'));
-  if (isNaN(parsed) || parsed === 0) return String(rawAmount);
-  const scaled = parsed * multiplier;
-  const result = Math.round(scaled * 10) / 10;
-  return result % 1 === 0 ? String(result) : String(result).replace('.', ',');
-};
-
-// ── HAUPTKOMPONENTE ──────────────────────────────────────────
-
+// ── Haupt-Komponente ────────────────────────────────────────
 export default function BackplanPage() {
-  const [plannedRecipes, setPlannedRecipes] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<BakeSession[]>([]);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'focus' | 'schritte' | 'zeitplan'>('focus');
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('crumb_completed_steps');
-      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
-    } catch { return new Set<string>(); }
-  });
-  const [stepCompletedAt, setStepCompletedAt] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem('crumb_step_completed_at');
-      return saved ? JSON.parse(saved) : {};
-    } catch { return {}; }
-  });
-  const [activeTab, setActiveTab] = useState<'schritte' | 'zeitplan'>('schritte');
-  const [activeRecipeIdx, setActiveRecipeIdx] = useState(0);
-  const [finishModalRecipeId, setFinishModalRecipeId] = useState<number | null>(null);
-  const [openDrawers, setOpenDrawers] = useState<Set<string>>(new Set());
-  const activeCardRef = useRef<HTMLDivElement>(null);
-  const [expandedDoneSections, setExpandedDoneSections] = useState<Set<string>>(new Set());
-  const [parallelPhaseModal, setParallelPhaseModal] = useState<{
-    recipeId: number;
-    completedPhase: string;
-    pendingPhases: string[];
-    stepIndices: Record<string, number[]>;
-    currentCompletedAt: Record<string, number>;
-  } | null>(null);
+  const [finishModalId, setFinishModalId] = useState<number | null>(null);
+  const [finishNotes, setFinishNotes] = useState('');
+  const [tempInput, setTempInput] = useState('');
+  const [showTempInput, setShowTempInput] = useState(false);
 
-  const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) => {
-    setter(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  };
-
-  // ── Ticking clock ──
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+  // ── Daten laden ───────────────────────────────────────────
+  const loadSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/bake-sessions/active`, { headers: authHeaders() });
+      const data = await res.json();
+      setSessions(Array.isArray(data) ? data : []);
+    } catch { /* silent */ }
+    setIsLoading(false);
   }, []);
 
-  // ── LocalStorage-Persistenz ──
-  useEffect(() => {
-    try { localStorage.setItem('crumb_completed_steps', JSON.stringify([...completedSteps])); } catch {}
-  }, [completedSteps]);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
 
+  // ── Ticking Clock (1s) ────────────────────────────────────
   useEffect(() => {
-    try { localStorage.setItem('crumb_step_completed_at', JSON.stringify(stepCompletedAt)); } catch {}
-  }, [stepCompletedAt]);
-
-  // ── Rezepte laden ──
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        const planned = data
-          .filter((r: any) => r.planned_at)
-          .sort((a: any, b: any) => parseLocalDate(a.planned_at).getTime() - parseLocalDate(b.planned_at).getTime());
-        setPlannedRecipes(planned);
-        setIsLoading(false);
-      })
-      .catch(() => setIsLoading(false));
+    const t = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(t);
   }, []);
 
-  // ── Schritt toggeln (manuell erledigt / rückgängig) ──
-  // FIX: Beim Abhaken werden alle vorherigen Schritte derselben Phase automatisch mit-markiert
-  const toggleStep = (recipeId: number, stepIdx: number) => {
-    const key = `${recipeId}-${stepIdx}`;
-    setCompletedSteps(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-        // Vorherige Schritte derselben Phase mit-markieren
-        const stepPhase = timeline[stepIdx]?.phase;
-        if (stepPhase) {
-          timeline.forEach((s: any, i: number) => {
-            if (s.phase === stepPhase && i < stepIdx) {
-              next.add(`${recipeId}-${i}`);
-            }
-          });
-        }
-      }
-      return next;
-    });
-    // Rückgängig → completedAt entfernen
-    setStepCompletedAt(prev => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  };
+  // ── Reload alle 30s (für soft_done etc.) ──────────────────
+  useEffect(() => {
+    const t = setInterval(loadSessions, 30000);
+    return () => clearInterval(t);
+  }, [loadSessions]);
 
-  // ── Schritt vorzeitig abschließen → Timeline dynamisch neu berechnen ──
-  // FIX: Vorherige Schritte derselben Phase werden automatisch mit-markiert
-  const completeStepEarly = async (recipeId: number, stepIdx: number) => {
-    const key = `${recipeId}-${stepIdx}`;
-    const now = Date.now();
- 
-    // Optimistic Update — vorherige Schritte derselben Phase mit-markieren
-    const newCompletedSteps = new Set(completedSteps);
-    newCompletedSteps.add(key);
-    const stepPhase = timeline[stepIdx]?.phase;
-    if (stepPhase) {
-      timeline.forEach((s: any, i: number) => {
-        if (s.phase === stepPhase && i < stepIdx) {
-          newCompletedSteps.add(`${recipeId}-${i}`);
-        }
-      });
-    }
-    const newStepCompletedAt = { ...stepCompletedAt, [key]: now };
-    setCompletedSteps(newCompletedSteps);
-    setStepCompletedAt(newStepCompletedAt);
- 
-    const recipe = plannedRecipes.find(r => r.id === recipeId);
-    if (!recipe) return;
- 
-    // NEU: Prüfen ob parallele Phasen auch abgeschlossen werden sollen
-    const pending = findPendingParallelPhases(
-      recipeId, stepIdx, newStepCompletedAt, recipe.dough_sections, timeline
-    );
-    if (pending && pending.pendingPhases.length > 0) {
-      setParallelPhaseModal({
-        recipeId,
-        completedPhase: pending.completedPhase,
-        pendingPhases: pending.pendingPhases,
-        stepIndices: pending.stepIndices,
-        currentCompletedAt: newStepCompletedAt,
-      });
-    }
- 
-    const { newPlannedAt } = calculateDynamicTimeline(
-      parseLocalDate(recipe.planned_at),
-      recipe.dough_sections,
-      newStepCompletedAt,
-      recipeId
-    );
-
-    // API: Neuen Zeitpunkt + Schritt-Completion senden
-    // formatLocalISO statt toISOString — kein UTC-Versatz!
+  // ── Transition ausführen ──────────────────────────────────
+  const transition = async (sessionId: number, stepIndex: number, action: string, extra: Record<string, any> = {}) => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}/complete-step`, {
+      const res = await fetch(`${API}/bake-sessions/${sessionId}/transition`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-        },
-        body: JSON.stringify({
-          stepIndex: stepIdx,
-          completedAt: now,
-          newPlannedAt: formatLocalISO(newPlannedAt),
-        }),
+        headers: authHeaders(),
+        body: JSON.stringify({ stepIndex, action, ...extra }),
       });
-      // planned_at lokal aktualisieren damit useMemo neu triggert
-      setPlannedRecipes(prev => prev.map(r =>
-        r.id === recipeId ? { ...r, planned_at: formatLocalISO(newPlannedAt) } : r
-      ));
-    } catch { /* Optimistic Update bleibt, API-Fehler ignorieren */ }
+      if (!res.ok) {
+        const err = await res.json();
+        console.error('Transition error:', err);
+        return;
+      }
+      const data = await res.json();
+      // Optimistic Update
+      setSessions(prev => prev.map(s => {
+        if (s.id !== sessionId) return s;
+        return {
+          ...s,
+          step_states: data.step_states,
+          step_timestamps: data.step_timestamps,
+          projected_end: data.projected_end,
+          timeline: data.timeline,
+          gates: data.gates,
+        };
+      }));
+    } catch (err) {
+      console.error('Transition fetch error:', err);
+      loadSessions(); // Fallback: reload
+    }
   };
 
-// ── Parallele Phasen abschließen (Modal-Handler) ──
-  const handleCompleteParallelPhases = async () => {
-    if (!parallelPhaseModal) return;
-    const { recipeId, stepIndices, currentCompletedAt } = parallelPhaseModal;
-    const now = Date.now();
- 
-    const newCompletedSteps = new Set(completedSteps);
-    const newStepCompletedAt = { ...currentCompletedAt };
- 
-    Object.values(stepIndices).flat().forEach(idx => {
-      const key = `${recipeId}-${idx}`;
-      newCompletedSteps.add(key);
-      newStepCompletedAt[key] = now;
-    });
- 
-    setCompletedSteps(newCompletedSteps);
-    setStepCompletedAt(newStepCompletedAt);
-    setParallelPhaseModal(null);
- 
-    const recipe = plannedRecipes.find(r => r.id === recipeId);
-    if (!recipe) return;
- 
-    const { newPlannedAt } = calculateDynamicTimeline(
-      parseLocalDate(recipe.planned_at),
-      recipe.dough_sections,
-      newStepCompletedAt,
-      recipeId
-    );
- 
+  // ── Backen abschließen ────────────────────────────────────
+  const finishBaking = async (sessionId: number) => {
     try {
-      for (const idx of Object.values(stepIndices).flat()) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}/complete-step`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-          },
-          body: JSON.stringify({
-            stepIndex: idx,
-            completedAt: now,
-            newPlannedAt: formatLocalISO(newPlannedAt),
-          }),
-        });
-      }
-      setPlannedRecipes(prev => prev.map(r =>
-        r.id === recipeId ? { ...r, planned_at: formatLocalISO(newPlannedAt) } : r
-      ));
-    } catch { /* Optimistic Update bleibt */ }
-  };
- 
-  // ── Backen abschließen ──
-  const finishBaking = async (recipeId: number) => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${recipeId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-        },
-        body: JSON.stringify({ planned_at: null }),
+      const res = await fetch(`${API}/bake-sessions/${sessionId}/finish`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ notes: finishNotes || null }),
       });
       if (res.ok) {
-        // Schritte für dieses Rezept aufräumen
-        setCompletedSteps(prev => {
-          const next = new Set(prev);
-          [...next].filter(k => k.startsWith(`${recipeId}-`)).forEach(k => next.delete(k));
-          return next;
-        });
-        setStepCompletedAt(prev => {
-          const next = { ...prev };
-          Object.keys(next).filter(k => k.startsWith(`${recipeId}-`)).forEach(k => delete next[k]);
-          return next;
-        });
-        const remaining = plannedRecipes.filter(r => r.id !== recipeId);
-        setPlannedRecipes(remaining);
-        setActiveRecipeIdx(0);
-        setFinishModalRecipeId(null);
-        if (remaining.length === 0) window.location.href = "/";
+        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        setActiveIdx(0);
+        setFinishModalId(null);
+        setFinishNotes('');
+        if (sessions.length <= 1) window.location.href = '/';
       }
-    } catch { alert("Fehler"); }
+    } catch { alert('Fehler beim Abschließen'); }
   };
 
-  // ── Aktives Rezept + Timeline ──
-  const recipe = plannedRecipes[activeRecipeIdx];
-  const sections = recipe?.dough_sections || [];
+  // ── Aktive Session ────────────────────────────────────────
+  const session = sessions[activeIdx];
+  const timeline = session?.timeline || [];
+  const gates = session?.gates || [];
+  const progress = getProgress(timeline);
 
-  const hasEarlyCompleted = recipe
-    ? Object.keys(stepCompletedAt).some(k => k.startsWith(`${recipe.id}-`))
-    : false;
+  const activeStep = useMemo(() => timeline.find(s => s.state === 'active') || null, [timeline]);
+  const softDoneStep = useMemo(() => timeline.find(s => s.state === 'soft_done') || null, [timeline]);
+  const focusStep = softDoneStep || activeStep;
+  const nextSteps = useMemo(() => {
+    if (!focusStep) return timeline.filter(s => s.state === 'ready' || s.state === 'locked').slice(0, 3);
+    return timeline.filter(s => s.globalIdx > focusStep.globalIdx && s.state !== 'done').slice(0, 3);
+  }, [timeline, focusStep]);
 
-  const { timeline, newPlannedAt, shifted } = useMemo(() => {
-    if (!recipe) return { timeline: [], newPlannedAt: new Date(), shifted: false };
-    if (hasEarlyCompleted) {
-      return calculateDynamicTimeline(
-        parseLocalDate(recipe.planned_at),
-        recipe.dough_sections,
-        stepCompletedAt,
-        recipe.id
-      );
-    }
-    return {
-      timeline: calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections),
-      newPlannedAt: parseLocalDate(recipe.planned_at),
-      shifted: false,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipe?.id, recipe?.planned_at, stepCompletedAt]);
+  // ── Timer-Berechnung ──────────────────────────────────────
+  const remaining = useMemo(() => {
+    if (!focusStep || !focusStep.end) return null;
+    const endMs = new Date(focusStep.end).getTime();
+    const diff = Math.max(0, Math.round((endMs - currentTime.getTime()) / 1000));
+    return diff;
+  }, [focusStep, currentTime]);
 
-  // Original-Timeline (unveränderlich) — für zeitbasierte isDone-Erkennung
-  const originalTimeline = useMemo(() => {
-    if (!recipe) return [];
-    return calculateBackplan(parseLocalDate(recipe.planned_at), recipe.dough_sections);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipe?.id, recipe?.planned_at]);
+  const timerProgress = useMemo(() => {
+    if (!focusStep || !focusStep.start || !focusStep.end) return 0;
+    const startMs = new Date(focusStep.start).getTime();
+    const endMs = new Date(focusStep.end).getTime();
+    const total = endMs - startMs;
+    if (total <= 0) return 1;
+    return Math.min(1, (currentTime.getTime() - startMs) / total);
+  }, [focusStep, currentTime]);
 
-  // Fortschritt pro Rezept (einmal pro Minute aktualisiert)
-  const currentMinute = Math.floor(currentTime.getTime() / 60000);
-  const progressMap = useMemo(() => {
-    const map: Record<number, number> = {};
-    const now = new Date();
-    plannedRecipes.forEach(r => {
-      const tl = calculateBackplan(parseLocalDate(r.planned_at), r.dough_sections);
-      const done = tl.filter((s, i) =>
-        completedSteps.has(`${r.id}-${i}`)
-        || (now > s.end && (s.type === 'Warten' || s.duration === 0))
-      ).length;
-      map[r.id] = tl.length > 0 ? done / tl.length : 0;
+  // ── Sorted Phases ─────────────────────────────────────────
+  const sortedPhases = useMemo(() => {
+    const phases = getPhases(timeline);
+    return phases.map(name => {
+      const steps = timeline.filter(s => s.phase === name);
+      const { done, total } = getPhaseProgress(timeline, name);
+      const hasActive = steps.some(s => s.state === 'active' || s.state === 'soft_done');
+      const allDone = done === total;
+      const allLocked = steps.every(s => s.state === 'locked');
+      return { name, steps, done, total, hasActive, allDone, allLocked };
     });
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plannedRecipes, completedSteps, currentMinute]);
+  }, [timeline]);
 
-  const getRecipeProgress = (r: any) => progressMap[r.id] ?? 0;
-
-  // ── Loading / Empty ──
+  // ── Loading / Empty ───────────────────────────────────────
   if (isLoading) return <BackplanSkeleton />;
 
-  if (plannedRecipes.length === 0) return (
+  if (sessions.length === 0) return (
     <div className="min-h-screen flex items-center justify-center bg-[#FDFCFB] dark:bg-gray-900 px-6">
       <div className="text-center">
         <div className="w-20 h-20 rounded-full bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center mx-auto mb-6">
@@ -398,99 +180,45 @@ export default function BackplanPage() {
     </div>
   );
 
-  // ── Berechnete Werte für aktives Rezept ──
-  const sortedSections = [...sections].sort((a, b) => {
-    const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
-    const bStart = timeline.find((t: any) => t.phase === b.name)?.start.getTime() ?? Infinity;
-    return aStart - bStart;
-  });
+  if (!session) return null;
 
-  const totalDuration = timeline.reduce((s: number, t: any) => s + t.duration, 0);
+  const projectedEnd = session.projected_end ? new Date(session.projected_end) : null;
+  const totalDuration = timeline.reduce((s, t) => s + t.duration, 0);
 
-  // isDone: Schritt erledigt (manuell bestätigt, zeitlich abgelaufen bei Warten-Schritten,
-  // oder implizit weil ein späterer Schritt derselben Phase bereits erledigt ist)
-  // FIX: Implizite Erledigung durch späteren Schritt derselben Phase
-  const isStepDone = (globalIdx: number) => {
-    // 1. Explizit manuell markiert
-    if (completedSteps.has(`${recipe.id}-${globalIdx}`)) return true;
-    // 2. Zeitlich abgelaufen (nur Warten-Schritte und 0-Min-Aktionen)
-    const originalEnd = originalTimeline[globalIdx]?.end;
-    if (originalEnd && currentTime > originalEnd) {
-      const step = originalTimeline[globalIdx];
-      if (step?.type === 'Warten' || step?.duration === 0) return true;
-    }
-    // 3. Implizit erledigt: ein späterer Schritt derselben Phase ist bereits abgehakt
-    const phase = timeline[globalIdx]?.phase;
-    if (phase) {
-      for (let i = globalIdx + 1; i < timeline.length; i++) {
-        if (timeline[i]?.phase === phase && completedSteps.has(`${recipe.id}-${i}`)) return true;
-      }
-    }
-    return false;
-  };
-
-  // Aktiver Schritt: läuft gerade (start <= now < end) oder erster offener nach Verschiebung
-  const activeIndex = (() => {
-    const exact = timeline.findIndex((s: any, i: number) =>
-      !isStepDone(i) && currentTime >= s.start && currentTime < s.end
-    );
-    if (exact >= 0) return exact;
-    // Fallback: erster nicht-erledigter Schritt dessen Startzeit bereits verstrichen ist
-    return timeline.findIndex((s: any, i: number) =>
-      !isStepDone(i) && currentTime >= s.start
-    );
-  })();
-
-  // Nächster Schritt: erster nicht-erledigter in der Zukunft
-  const nextIndex = timeline.findIndex((s: any, i: number) =>
-    !isStepDone(i) && currentTime < s.start
-  );
-
-  const activeStep = activeIndex >= 0 ? timeline[activeIndex] : null;
-  const remainingSeconds = activeStep ? Math.max(0, Math.floor((activeStep.end.getTime() - currentTime.getTime()) / 1000)) : 0;
-  const stepProgress = activeStep ? Math.min(1, (currentTime.getTime() - activeStep.start.getTime()) / (activeStep.duration * 60000)) : 0;
-
-  const plannedTimeDisplay = formatSmartTime(parseLocalDate(recipe.planned_at));
-
-  // ── RENDER ──
-
+  // ── RENDER ────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#FDFCFB] dark:bg-gray-900 pb-32 transition-colors duration-200">
 
       {/* ── FERTIG-MODAL ── */}
-      {finishModalRecipeId !== null && (() => {
-        const modalRecipe = plannedRecipes.find(r => r.id === finishModalRecipeId);
-        if (!modalRecipe) return null;
+      {finishModalId !== null && (() => {
+        const modalSession = sessions.find(s => s.id === finishModalId);
+        if (!modalSession) return null;
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinishModalRecipeId(null)} />
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setFinishModalId(null)} />
             <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
-              <div className="relative h-48 overflow-hidden rounded-t-3xl rounded-b-2xl">
-                <img
-                  src={modalRecipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=400'}
-                  className="w-full h-full object-cover"
-                  alt=""
-                />
+              <div className="relative h-36 overflow-hidden rounded-t-3xl">
+                <img src={modalSession.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=400'}
+                  className="w-full h-full object-cover" alt="" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute bottom-3 left-4 right-4">
-                  <p className="text-white font-extrabold text-[15px] leading-tight truncate">{modalRecipe.title}</p>
-                  <p className="text-white/70 text-[11px] font-bold mt-0.5">
-                    Fertig um {formatSmartTime(parseLocalDate(modalRecipe.planned_at))} Uhr
-                  </p>
+                  <p className="text-white font-extrabold text-[15px] truncate">{modalSession.title}</p>
                 </div>
               </div>
               <div className="p-5">
-                <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mb-5 mt-1">Backplan abschließen und entfernen?</p>
-                <button
-                  onClick={() => finishBaking(finishModalRecipeId)}
-                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-4"
-                >
-                  Ja, fertig gebacken
+                <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-3">Notizen zum Backergebnis (optional):</p>
+                <textarea
+                  value={finishNotes}
+                  onChange={e => setFinishNotes(e.target.value)}
+                  placeholder="z.B. Krume perfekt, nächstes Mal 5 Min länger Stockgare..."
+                  className="w-full h-20 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-[#8B7355]/30 mb-4"
+                />
+                <button onClick={() => finishBaking(finishModalId)}
+                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[14px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-3">
+                  Fertig gebacken
                 </button>
-                <button
-                  onClick={() => setFinishModalRecipeId(null)}
-                  className="w-full py-2 text-gray-400 dark:text-gray-500 font-bold text-[13px] transition-colors hover:text-gray-600 dark:hover:text-gray-300"
-                >
+                <button onClick={() => setFinishModalId(null)}
+                  className="w-full py-2 text-gray-400 dark:text-gray-500 font-bold text-[13px]">
                   Weiterbacken
                 </button>
               </div>
@@ -499,93 +227,31 @@ export default function BackplanPage() {
         );
       })()}
 
-            {/* ── PARALLELE PHASE MODAL ── */}
-      {parallelPhaseModal && (() => {
-        const { completedPhase, pendingPhases, stepIndices } = parallelPhaseModal;
-        return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setParallelPhaseModal(null)} />
-            <div className="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-              <div className="bg-gradient-to-br from-[#8B7355] to-[#6B5740] p-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg">✓</div>
-                  <div>
-                    <p className="text-white font-extrabold text-[15px]">{completedPhase} fertig!</p>
-                    <p className="text-white/70 text-[11px] font-bold mt-0.5">
-                      Parallele Phase{pendingPhases.length > 1 ? 'n' : ''} noch offen
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5">
-                <p className="text-[13px] text-gray-600 dark:text-gray-300 mb-4 leading-relaxed">
-                  {pendingPhases.length === 1 ? (
-                    <>Der <strong className="text-[#8B7355]">{pendingPhases[0]}</strong> läuft noch parallel. Auch abschließen, um den nächsten Schritt vorzuziehen?</>
-                  ) : (
-                    <>Folgende Phasen laufen noch parallel: {pendingPhases.map((p, i) => (
-                      <span key={p}><strong className="text-[#8B7355]">{p}</strong>{i < pendingPhases.length - 1 ? ', ' : ''}</span>
-                    ))}. Alle abschließen, um den nächsten Schritt vorzuziehen?</>
-                  )}
-                </p>
-                <div className="mb-5 space-y-2">
-                  {pendingPhases.map(phase => (
-                    <div key={phase} className="bg-[#F9F6F2] dark:bg-gray-700/50 rounded-xl px-3 py-2 border border-[#EDE5D8] dark:border-gray-600">
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#8B7355]">{phase}</span>
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-2">
-                        {stepIndices[phase]?.length || 0} offene Schritt{(stepIndices[phase]?.length || 0) !== 1 ? 'e' : ''}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={handleCompleteParallelPhases}
-                  className="w-full py-3.5 rounded-2xl bg-[#8B7355] hover:bg-[#7A6347] active:scale-[0.98] text-white font-extrabold text-[13px] tracking-wide transition-all shadow-lg shadow-[#8B7355]/20 mb-3"
-                >
-                  Ja, {pendingPhases.length === 1 ? pendingPhases[0] : 'alle'} auch abschließen
-                </button>
-                <button
-                  onClick={() => setParallelPhaseModal(null)}
-                  className="w-full py-2.5 text-gray-400 dark:text-gray-500 font-bold text-[12px] transition-colors hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  Nein, weiterlaufen lassen
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
- 
-      {/* ── REZEPT-SWITCHER (nur bei mehreren Plänen) ── */}
-      {plannedRecipes.length > 1 && (
+      {/* ── REZEPT-SWITCHER ── */}
+      {sessions.length > 1 && (
         <div className="bg-white dark:bg-gray-800 border-b border-[#F0EBE3] dark:border-gray-700">
           <div className="max-w-3xl mx-auto px-4 py-3">
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600 mb-2">
-              {plannedRecipes.length} aktive Backpläne
+              {sessions.length} aktive Backpläne
             </p>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {plannedRecipes.map((r, idx) => {
-                const progress = getRecipeProgress(r);
-                const isActive = idx === activeRecipeIdx;
+              {sessions.map((s, idx) => {
+                const p = getProgress(s.timeline || []);
+                const isActive = idx === activeIdx;
                 return (
-                  <button key={r.id} onClick={() => { setActiveRecipeIdx(idx); setActiveTab('schritte'); }}
+                  <button key={s.id} onClick={() => { setActiveIdx(idx); setActiveTab('focus'); }}
                     className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all ${
-                      isActive
-                        ? 'bg-[#8B7355] border-[#8B7355] text-white shadow-md'
-                        : 'bg-[#FAFAF9] dark:bg-gray-700 border-[#F0EBE3] dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-[#8B7355]/40'
+                      isActive ? 'bg-[#8B7355] border-[#8B7355] text-white' : 'bg-white dark:bg-gray-700 border-[#F0EBE3] dark:border-gray-600'
                     }`}>
-                    <img src={r.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=100'}
-                      className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
+                    <img src={s.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=100'}
+                      className="w-8 h-8 rounded-lg object-cover" alt="" />
                     <div className="text-left min-w-0">
                       <div className={`text-[12px] font-extrabold truncate max-w-[130px] ${isActive ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
-                        {r.title}
+                        {s.title}
                       </div>
-                      <div className={`text-[10px] font-bold flex items-center gap-1 ${isActive ? 'text-white/70' : 'text-[#8B7355]'}`}>
-                        <Clock size={9} /> {formatSmartTime(parseLocalDate(r.planned_at))} Uhr
+                      <div className={`text-[10px] font-bold ${isActive ? 'text-white/70' : 'text-[#8B7355]'}`}>
+                        {Math.round(p * 100)}%
                       </div>
-                    </div>
-                    <div className={`w-1 h-8 rounded-full overflow-hidden flex-shrink-0 ${isActive ? 'bg-white/30' : 'bg-gray-200 dark:bg-gray-600'}`}>
-                      <div className={`w-full rounded-full transition-all duration-500 ${isActive ? 'bg-white' : 'bg-[#8B7355]'}`}
-                        style={{ height: `${progress * 100}%`, marginTop: `${(1 - progress) * 100}%` }} />
                     </div>
                   </button>
                 );
@@ -601,428 +267,419 @@ export default function BackplanPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <Link href="/" className="p-2 rounded-xl hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors">
-                <ChevronLeft size={18} className="text-gray-400 dark:text-gray-500" />
+                <ChevronLeft size={18} className="text-gray-400" />
               </Link>
-              <img src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=200'}
+              <img src={session.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=200'}
                 className="w-10 h-10 rounded-xl object-cover" alt="" />
               <div>
-                <h1 className="text-[16px] font-extrabold tracking-tight leading-tight dark:text-gray-100">{recipe.title}</h1>
+                <h1 className="text-[16px] font-extrabold tracking-tight leading-tight dark:text-gray-100">{session.title}</h1>
                 <p className="text-[12px] text-[#8B7355] font-bold flex items-center gap-1">
                   <Clock size={11} />
-                  {shifted ? (
-                    <>
-                      <span className="line-through text-gray-300 dark:text-gray-600">{plannedTimeDisplay}</span>
-                      <span className="text-green-500 ml-1">→ {formatSmartTime(newPlannedAt)} Uhr</span>
-                    </>
-                  ) : (
-                    <>Fertig um {plannedTimeDisplay} Uhr</>
-                  )}
+                  {projectedEnd ? `Fertig um ~${formatSmartTime(projectedEnd)} Uhr` : 'Berechne...'}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {plannedRecipes.length > 1 && (
-                <div className="flex items-center gap-0.5">
-                  <button onClick={() => setActiveRecipeIdx(i => (i - 1 + plannedRecipes.length) % plannedRecipes.length)}
-                    className="p-1.5 rounded-lg hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors">
-                    <ChevronLeft size={16} className="text-gray-400" />
-                  </button>
-                  <span className="text-[11px] font-bold text-gray-400 tabular-nums px-1">{activeRecipeIdx + 1}/{plannedRecipes.length}</span>
-                  <button onClick={() => setActiveRecipeIdx(i => (i + 1) % plannedRecipes.length)}
-                    className="p-1.5 rounded-lg hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors">
-                    <ChevronRight size={16} className="text-gray-400" />
-                  </button>
-                </div>
-              )}
-              <button onClick={() => setFinishModalRecipeId(recipe.id)}
-                className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-[11px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors">
-                Fertig
-              </button>
-            </div>
+            <button onClick={() => setFinishModalId(session.id)}
+              className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-[11px] font-bold border border-green-100 dark:border-green-800">
+              Fertig
+            </button>
           </div>
 
           {/* Fortschrittsbalken */}
           <div className="flex gap-[2px] mb-3">
-            {timeline.map((step: any, i: number) => {
-              const isDone = completedSteps.has(`${recipe.id}-${i}`) || currentTime > step.end;
-              const isActiveStep = i === activeIndex;
-              const widthPercent = totalDuration > 0 ? (step.duration / totalDuration) * 100 : 0;
-              const prog = isActiveStep ? stepProgress : 0;
+            {timeline.map((step, i) => {
+              const widthPct = totalDuration > 0 ? (step.duration / totalDuration) * 100 : 0;
+              const isDone = step.state === 'done';
+              const isActiveStep = step.state === 'active' || step.state === 'soft_done';
+              const prog = isActiveStep ? timerProgress : 0;
               return (
-                <div key={i} className="h-1 rounded-full transition-all duration-500"
-                  style={{
-                    flex: `${widthPercent} 0 0%`,
-                    background: isDone
-                      ? '#8B7355'
-                      : isActiveStep
-                        ? `linear-gradient(90deg, #8B7355 ${prog * 100}%, #E8E2D8 ${prog * 100}%)`
-                        : '#E8E2D8'
-                  }} />
+                <div key={i} className="h-1 rounded-full transition-all duration-500" style={{
+                  flex: `${widthPct} 0 0%`,
+                  background: isDone ? '#8B7355' : isActiveStep
+                    ? `linear-gradient(90deg, #8B7355 ${prog * 100}%, #E8E2D8 ${prog * 100}%)`
+                    : step.state === 'ready' ? '#D4C9B8' : '#E8E2D8',
+                }} />
               );
             })}
           </div>
 
           {/* Tabs */}
           <div className="flex">
-            {(['schritte', 'zeitplan'] as const).map(tab => (
+            {(['focus', 'schritte', 'zeitplan'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-bold border-b-2 transition-colors ${
-                  activeTab === tab ? 'border-[#8B7355] text-[#8B7355]' : 'border-transparent text-gray-300 dark:text-gray-600 hover:text-gray-500'
+                  activeTab === tab ? 'border-[#8B7355] text-[#8B7355]' : 'border-transparent text-gray-300 dark:text-gray-600'
                 }`}>
-                {tab === 'schritte' ? <><AlignLeft size={13} /> Schritte</> : <><BarChart2 size={13} /> Zeitplan</>}
+                {tab === 'focus' ? <><Timer size={13} /> Fokus</> :
+                 tab === 'schritte' ? <><AlignLeft size={13} /> Schritte</> :
+                 <><BarChart2 size={13} /> Zeitplan</>}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── TAB: SCHRITTE ── */}
-      {activeTab === 'schritte' && (
+      {/* ── TAB: FOKUS ── */}
+      {activeTab === 'focus' && (
         <div className="max-w-3xl mx-auto px-4 pt-5">
-          {sortedSections.map((section: any, sIdx: number) => {
-            const sectionSteps = timeline.map((t: any, i: number) => ({ ...t, globalIdx: i })).filter((t: any) => t.phase === section.name);
-            if (sectionSteps.length === 0) return null;
-            const sectionStart = sectionSteps[0].start;
-            const sectionEnd = sectionSteps[sectionSteps.length - 1].end;
-            const hasActive = sectionSteps.some((s: any) => s.globalIdx === activeIndex);
 
-            const drawerKey = `${recipe.id}-${sIdx}`;
-            const isDrawerOpen = openDrawers.has(drawerKey);
-            const sectionIngredients = section.ingredients || [];
+          {/* Phase-Gate */}
+          {gates.length > 0 && gates.map(gate => (
+            <div key={gate.phase} className="mb-5 rounded-2xl border-2 border-dashed border-emerald-400/50 dark:border-emerald-600/50 bg-emerald-50/50 dark:bg-emerald-900/10 p-5">
+              <div className="text-[13px] font-extrabold text-emerald-700 dark:text-emerald-400 mb-1">
+                {gate.phase} kann starten
+              </div>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3">
+                Alle Vorstufen sind fertig. Bereit für den nächsten Schritt?
+              </p>
+              <div className="flex gap-2 mb-3">
+                {gate.dependencies.map(dep => (
+                  <span key={dep} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold">
+                    <Check size={10} /> {dep}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={() => transition(session.id, gate.firstStepIdx, 'confirm_gate', { phase: gate.phase })}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] transition-colors active:scale-[0.98]">
+                {gate.phase} jetzt ansetzen
+              </button>
+            </div>
+          ))}
 
-            return (
-              <div key={sIdx} className="mb-7">
-                {/* Phasen-Header */}
-                <div className="flex items-center gap-3 mb-3 px-1">
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 transition-colors ${hasActive ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>{sIdx + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[13px] font-extrabold text-gray-800 dark:text-gray-100 uppercase tracking-wider">{section.name}</span>
-                    <span className="ml-2 text-[11px] text-gray-400 dark:text-gray-500">{formatShortTime(sectionStart)} – {formatShortTime(sectionEnd)}</span>
+          {/* Soft-Done Card */}
+          {softDoneStep && (
+            <div className="mb-5 rounded-2xl border-2 border-amber-400/60 dark:border-amber-600/40 bg-amber-50/50 dark:bg-amber-900/10 p-5">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                  {softDoneStep.phase}
+                </span>
+                <span className="text-[11px] font-bold text-amber-500">Zeit abgelaufen</span>
+              </div>
+              <p className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-4 leading-relaxed">
+                {softDoneStep.instruction}
+              </p>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-4">
+                Geplante Zeit ist abgelaufen. Ist der Teig fertig?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => transition(session.id, softDoneStep.globalIdx, 'complete')}
+                  className="flex-1 py-3 rounded-xl bg-[#8B7355] text-white font-bold text-[13px] active:scale-[0.98]">
+                  Ja, fertig
+                </button>
+                <button
+                  onClick={() => transition(session.id, softDoneStep.globalIdx, 'extend_timer', { minutes: 15 })}
+                  className="px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-[13px]">
+                  +15 Min
+                </button>
+                <button
+                  onClick={() => transition(session.id, softDoneStep.globalIdx, 'extend_timer', { minutes: 30 })}
+                  className="px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-[13px]">
+                  +30 Min
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Active Step Card */}
+          {activeStep && !softDoneStep && (
+            <div className="mb-5 rounded-2xl border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-750 p-5">
+              <div className="flex justify-between items-center mb-2">
+                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${
+                  activeStep.type === 'Backen' ? 'bg-red-500 text-white' :
+                  activeStep.type === 'Aktion' ? 'bg-[#8B7355] text-white' :
+                  'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'
+                }`}>
+                  {activeStep.type === 'Backen' ? '🔥' : activeStep.type === 'Aktion' ? '👐' : '⏳'}
+                  {' '}{activeStep.phase}
+                </span>
+                <span className="text-[11px] text-gray-400 font-bold">
+                  {activeStep.start ? `seit ${formatTime(activeStep.start)}` : ''}
+                </span>
+              </div>
+
+              <p className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-4 leading-relaxed">
+                {activeStep.instruction}
+              </p>
+
+              {/* Timer (für Warten/Backen) */}
+              {remaining !== null && remaining > 0 && (activeStep.type !== 'Aktion') && (
+                <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-white/60 dark:bg-gray-700/50 border border-[#F0EBE3] dark:border-gray-600">
+                  <div className="w-11 h-11 rounded-full border-[3px] border-gray-200 dark:border-gray-600 flex items-center justify-center relative">
+                    <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 44 44">
+                      <circle cx="22" cy="22" r="19" fill="none" stroke="#8B7355" strokeWidth="3"
+                        strokeDasharray={`${timerProgress * 119.4} 119.4`} strokeLinecap="round" />
+                    </svg>
+                    <span className="text-[9px] font-bold text-[#8B7355]">{Math.round(timerProgress * 100)}%</span>
                   </div>
-                  {sectionIngredients.length > 0 && (
-                    <button
-                      onClick={() => toggleSet(setOpenDrawers, drawerKey)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all flex-shrink-0 ${
-                        isDrawerOpen
-                          ? 'bg-[#8B7355] text-white border-[#8B7355]'
-                          : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] border-[#E8E0D5] dark:border-gray-600 hover:bg-[#EDE5D8] dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M1 3h10M3 6h6M5 9h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                      </svg>
-                      {sectionIngredients.length}
-                    </button>
+                  <div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Verbleibend</div>
+                    <div className="text-[20px] font-extrabold text-gray-800 dark:text-gray-100 tabular-nums">
+                      {formatCountdown(remaining)}
+                    </div>
+                  </div>
+                  {activeStep.extended_by > 0 && (
+                    <span className="ml-auto text-[10px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-lg">
+                      +{activeStep.extended_by} Min
+                    </span>
                   )}
                 </div>
+              )}
 
-                {/* Zutaten-Drawer */}
-                {isDrawerOpen && sectionIngredients.length > 0 && (
-                  <div className="ml-10 mb-3 rounded-xl border border-[#EDE5D8] dark:border-gray-700 bg-[#FAF7F3] dark:bg-gray-800/60 overflow-hidden">
-                    <div className="px-4 py-2 border-b border-[#EDE5D8] dark:border-gray-700">
-                      <span className="text-[10px] font-extrabold text-[#8B7355] uppercase tracking-widest">
-                        Zutaten – {section.name}
-                        {(recipe.planned_multiplier ?? 1) !== 1 && (
-                          <span className="ml-2 text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-md">
-                            {recipe.planned_multiplier}×
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="px-4 py-1">
-                      {sectionIngredients.map((ing: any, ii: number) => (
-                        <div key={ii} className="flex items-center justify-between py-1.5 text-[13px] border-b border-[#F0EBE3] dark:border-gray-700 last:border-0">
-                          <span className="text-gray-700 dark:text-gray-300">{ing.name}</span>
-                          <span className="font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                            {scaleAmount(ing.amount, recipe.planned_multiplier ?? 1)} {ing.unit || ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {/* Temperatur-Input */}
+              {showTempInput && (
+                <div className="flex items-center gap-2 mb-4 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-800/30">
+                  <ThermometerSun size={16} className="text-blue-500 flex-shrink-0" />
+                  <input
+                    type="number" step="0.5" min="15" max="40" placeholder="z.B. 26"
+                    value={tempInput} onChange={e => setTempInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <span className="text-[12px] text-gray-500">°C</span>
+                  <button onClick={() => {
+                    if (tempInput) {
+                      transition(session.id, activeStep.globalIdx, 'log_temperature', { temperature: tempInput });
+                      setTempInput('');
+                      setShowTempInput(false);
+                    }
+                  }} className="px-3 py-2 rounded-lg bg-blue-500 text-white text-[12px] font-bold">
+                    OK
+                  </button>
+                  <button onClick={() => setShowTempInput(false)} className="p-1 text-gray-400">
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                {activeStep.type === 'Aktion' || activeStep.type === 'Kneten' ? (
+                  <>
+                    <button onClick={() => transition(session.id, activeStep.globalIdx, 'complete')}
+                      className="flex-1 py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98] transition-all">
+                      Erledigt
+                    </button>
+                    {!showTempInput && (
+                      <button onClick={() => setShowTempInput(true)}
+                        className="px-3 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 text-blue-500 transition-colors">
+                        <ThermometerSun size={16} />
+                      </button>
+                    )}
+                  </>
+                ) : activeStep.type === 'Backen' ? (
+                  <button onClick={() => transition(session.id, activeStep.globalIdx, 'complete')}
+                    className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">
+                    🔥 Raus aus dem Ofen
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={() => transition(session.id, activeStep.globalIdx, 'complete')}
+                      className="flex-1 py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">
+                      Fertig (Teig reif)
+                    </button>
+                    <button onClick={() => transition(session.id, activeStep.globalIdx, 'extend_timer', { minutes: 15 })}
+                      className="px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-[12px]">
+                      +15 Min
+                    </button>
+                  </>
                 )}
-
-                {/* Schritte: erledigt (kollapsierbar) + offen */}
-                {(() => {
-                  const doneSteps = sectionSteps.filter(({ globalIdx }: any) => isStepDone(globalIdx));
-                  const pendingSteps = sectionSteps.filter(({ globalIdx }: any) => !isStepDone(globalIdx));
-                  const sectionDoneKey = `done-${recipe.id}-${sIdx}`;
-                  const isDoneExpanded = expandedDoneSections.has(sectionDoneKey);
-                  return (
-                    <div className="flex flex-col gap-2 pl-10">
-                      {/* Erledigte Schritte */}
-                      {doneSteps.length > 0 && (
-                        <>
-                          <button
-                            onClick={() => toggleSet(setExpandedDoneSections, sectionDoneKey)}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#F9F6F2] dark:bg-gray-800/50 border border-[#EDE5D8] dark:border-gray-700 text-left transition-colors hover:bg-[#F5F0E8] dark:hover:bg-gray-700/50"
-                          >
-                            <Check size={13} className="text-[#8B7355] flex-shrink-0" />
-                            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 flex-1">
-                              {doneSteps.length} Schritt{doneSteps.length !== 1 ? 'e' : ''} erledigt
-                            </span>
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`text-gray-300 dark:text-gray-600 transition-transform ${isDoneExpanded ? 'rotate-180' : ''}`}>
-                              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-                          {isDoneExpanded && doneSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => (
-                            <div key={globalIdx}
-                              onClick={() => toggleStep(recipe.id, globalIdx)}
-                              className="border border-[#F0EBE3] dark:border-gray-700 bg-[#FAFAFA] dark:bg-gray-800/50 p-4 opacity-40 rounded-2xl cursor-pointer"
-                            >
-                              <div className="flex justify-between items-center mb-1">
-                                <div className="flex items-center gap-2">
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
-                                    {step.type}
-                                  </span>
-                                  <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
-                                  <Check size={13} className="text-[#8B7355]" />
-                                </div>
-                              </div>
-                              <p className="text-[13px] text-gray-400 dark:text-gray-600 line-through leading-snug">{step.instruction}</p>
-                            </div>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Offene Schritte */}
-                      {pendingSteps.map(({ globalIdx, ...step }: BackplanStep & { globalIdx: number }) => {
-                        const isActiveStep = globalIdx === activeIndex;
-                        const isNextStep = globalIdx === nextIndex;
-                        return (
-                          <div key={globalIdx} ref={isActiveStep ? activeCardRef : null}
-                            className={`transition-all duration-300 rounded-2xl ${
-                              isActiveStep ? 'border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-700 p-5'
-                              : isNextStep ? 'border-2 border-dashed border-[#D4C9B8] dark:border-gray-600 bg-white dark:bg-gray-800 p-4'
-                              : 'border border-[#F0EBE3] dark:border-gray-700 bg-white dark:bg-gray-800 p-4'
-                            }`}>
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${step.type === 'Backen' ? 'bg-red-500 text-white' : step.type === 'Aktion' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>
-                                  {step.type === 'Backen' ? '🔥' : step.type === 'Aktion' ? '👐' : '⏳'} {step.type}
-                                </span>
-                                <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatTime(step.start)}</span>
-                                {isActiveStep && (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); completeStepEarly(recipe.id, globalIdx); }}
-                                    className="ml-1 px-2 py-1 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 transition-colors"
-                                  >
-                                    ✓ Fertig
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <p className={`text-[14px] leading-relaxed m-0 ${isActiveStep ? 'text-[15px] font-semibold text-[#2D2D2D] dark:text-gray-100' : 'text-gray-600 dark:text-gray-300 font-medium'}`}>
-                              {step.instruction}
-                            </p>
-                            {isActiveStep && (
-                              <>
-                                {/* Timer-Box */}
-                                <div className={`mt-4 rounded-2xl p-4 flex items-center justify-between ${step.type === 'Warten' ? 'bg-[#F5F0E8] dark:bg-gray-700' : step.type === 'Backen' ? 'bg-gradient-to-br from-red-500 to-red-700' : 'bg-gradient-to-br from-[#8B7355] to-[#6B5740]'}`}>
-                                  <div>
-                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${step.type === 'Warten' ? 'text-[#8B7355]' : 'text-white/70'}`}>{step.type === 'Warten' ? 'Restzeit' : 'Timer'}</div>
-                                    <div className={`text-[28px] font-extrabold tabular-nums tracking-tight ${step.type === 'Warten' ? 'text-[#2D2D2D] dark:text-gray-100' : 'text-white'}`}>{formatCountdown(remainingSeconds)}</div>
-                                  </div>
-                                  <div className="relative w-12 h-12">
-                                    <svg width="48" height="48" className="absolute -rotate-90">
-                                      <circle cx="24" cy="24" r="20" fill="none" stroke={step.type === 'Warten' ? '#E8E2D8' : 'rgba(255,255,255,0.2)'} strokeWidth="3" />
-                                      <circle cx="24" cy="24" r="20" fill="none" stroke={step.type === 'Warten' ? '#8B7355' : 'white'} strokeWidth="3"
-                                        strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - stepProgress)}`}
-                                        strokeLinecap="round" className="transition-all duration-1000 ease-linear" />
-                                    </svg>
-                                  </div>
-                                </div>
-                                {/* Bereit-zwischen-Anzeige bei Wartezeiten mit min/max */}
-                                {step.type === 'Warten' && step.duration_min != null && step.duration_max != null && (() => {
-                                  const earliestEnd = new Date(step.start.getTime() + step.duration_min * 60000);
-                                  const latestEnd = new Date(step.start.getTime() + step.duration_max * 60000);
-                                  return (
-                                    <div className="mt-2 px-4 py-2.5 rounded-xl bg-[#F5F0E8]/60 dark:bg-gray-700/60 border border-[#E8E0D5] dark:border-gray-600 flex items-center justify-between">
-                                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#8B7355]">Bereit zwischen</span>
-                                      <span className="text-[13px] font-extrabold text-[#2D2D2D] dark:text-gray-100 tabular-nums">
-                                        {formatTime(earliestEnd)} – {formatTime(latestEnd)} Uhr
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-                                {/* Fortschrittsbalken */}
-                                <div className="mt-3 h-1 rounded-full bg-[#E8E2D8]">
-                                  <div className="h-full rounded-full bg-gradient-to-r from-[#8B7355] to-[#A0845C] transition-all duration-1000 ease-linear" style={{ width: `${stepProgress * 100}%` }} />
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
               </div>
-            );
-          })}
+            </div>
+          )}
 
-          {/* Rezept-Ende-Block */}
-          <div className="pl-10 mb-6">
-            <div className="rounded-2xl border border-[#E8E0D5] dark:border-gray-700 bg-[#F9F6F2] dark:bg-gray-900/40 p-4 flex items-center justify-between mb-4">
-              <span className="text-[#8B7355] dark:text-[#C4A484] font-bold text-[14px]">{recipe.title} – fertig</span>
-              <span className="text-[#8B7355] dark:text-[#C4A484] font-extrabold text-[14px]">
-                {timeline.length > 0 ? formatSmartTime(timeline[timeline.length - 1].end) : plannedTimeDisplay} Uhr
+          {/* Ready Backen-Step (wartet auf "Ofen bereit") */}
+          {timeline.filter(s => s.state === 'ready' && s.type === 'Backen').map(step => (
+            <div key={step.globalIdx} className="mb-5 rounded-2xl border-2 border-dashed border-red-300/60 dark:border-red-700/40 bg-red-50/30 dark:bg-red-900/10 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-extrabold uppercase text-red-500">🔥 Bereit zum Backen</span>
+              </div>
+              <p className="text-[13px] text-gray-700 dark:text-gray-200 mb-3">{step.instruction}</p>
+              <button
+                onClick={() => transition(session.id, step.globalIdx, 'start_baking')}
+                className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">
+                Ofen ist bereit — Backen starten
+              </button>
+            </div>
+          ))}
+
+          {/* Kein aktiver Step & keine Gates → alles erledigt? */}
+          {!focusStep && gates.length === 0 && timeline.every(s => s.state === 'done') && (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-4">🎉</div>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">Alle Schritte erledigt!</h3>
+              <p className="text-gray-400 mb-6">Du kannst den Backplan jetzt abschließen.</p>
+              <button onClick={() => setFinishModalId(session.id)}
+                className="px-6 py-3 rounded-2xl bg-[#8B7355] text-white font-bold text-sm">
+                Backen abschließen
+              </button>
+            </div>
+          )}
+
+          {/* Nächste Schritte */}
+          {nextSteps.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600 mb-2 px-1">
+                Als Nächstes
+              </p>
+              <div className="flex flex-col gap-2">
+                {nextSteps.map(step => (
+                  <div key={step.globalIdx} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-[#F0EBE3] dark:border-gray-700">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      step.state === 'ready' ? 'bg-[#8B7355]' : 'bg-gray-200 dark:bg-gray-600'
+                    }`} />
+                    <span className="text-[12px] text-gray-600 dark:text-gray-300 flex-1 truncate">
+                      {step.instruction}
+                    </span>
+                    <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold flex-shrink-0">
+                      {step.state === 'locked' ? 'wartet' : formatStepDuration(step)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Multiplier Badge */}
+          {session.multiplier && session.multiplier !== 1 && (
+            <div className="mt-4 text-center">
+              <span className="text-[10px] font-bold text-[#8B7355] bg-[#8B7355]/10 px-3 py-1 rounded-lg">
+                {session.multiplier}× Menge
               </span>
             </div>
-            <Link href={`/recipes/${recipe.id}`}
-              className="block w-full text-center py-4 rounded-2xl bg-[#8B7355] text-white font-extrabold text-[13px] uppercase tracking-widest shadow-lg shadow-[#8B7355]/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+          )}
+
+          {/* Link zum Rezept */}
+          <div className="mt-6">
+            <Link href={`/recipes/${session.recipe_id}`}
+              className="block w-full text-center py-3 rounded-2xl bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-bold text-[12px] border border-[#F0EBE3] dark:border-gray-700 hover:bg-gray-100 transition-colors">
               Ganzes Rezept zeigen
             </Link>
           </div>
         </div>
       )}
 
-      {/* ── TAB: ZEITPLAN ── */}
-      {activeTab === 'zeitplan' && (
-        <GanttChart sections={sortedSections} timeline={timeline} currentTime={currentTime} />
+      {/* ── TAB: SCHRITTE ── */}
+      {activeTab === 'schritte' && (
+        <div className="max-w-3xl mx-auto px-4 pt-5">
+          {sortedPhases.map((phase, pIdx) => (
+            <div key={pIdx} className="mb-6">
+              {/* Phase Header */}
+              <div className="flex items-center gap-3 mb-3 px-1">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 ${
+                  phase.hasActive ? 'bg-[#8B7355] text-white' :
+                  phase.allDone ? 'bg-green-100 dark:bg-green-900/30 text-green-600' :
+                  phase.allLocked ? 'bg-gray-100 dark:bg-gray-700 text-gray-400' :
+                  'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'
+                }`}>
+                  {phase.allDone ? <Check size={13} /> : pIdx + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[13px] font-extrabold text-gray-800 dark:text-gray-100">{phase.name}</span>
+                  <span className="text-[11px] text-gray-400 ml-2">{phase.done}/{phase.total}</span>
+                </div>
+              </div>
+
+              {/* Steps */}
+              <div className="flex flex-col gap-2 pl-10">
+                {phase.steps.map(step => {
+                  const isDone = step.state === 'done';
+                  const isActive = step.state === 'active' || step.state === 'soft_done';
+                  const isLocked = step.state === 'locked';
+
+                  return (
+                    <div key={step.globalIdx}
+                      className={`rounded-2xl p-4 transition-all ${
+                        isActive ? 'border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-750' :
+                        isDone ? 'border border-[#F0EBE3] dark:border-gray-700 bg-[#FAFAFA] dark:bg-gray-800/50 opacity-50' :
+                        isLocked ? 'border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 opacity-40' :
+                        'border border-[#F0EBE3] dark:border-gray-700 bg-white dark:bg-gray-800'
+                      }`}>
+                      <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase ${
+                            step.type === 'Backen' ? 'bg-red-500 text-white' :
+                            step.type === 'Aktion' || step.type === 'Kneten' ? 'bg-[#8B7355] text-white' :
+                            'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'
+                          }`}>
+                            {step.type}
+                          </span>
+                          <span className="text-[11px] text-gray-300 dark:text-gray-600 font-bold">{formatStepDuration(step)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {isDone && <Check size={13} className="text-green-500" />}
+                          {isActive && <div className="w-2 h-2 rounded-full bg-[#8B7355] animate-pulse" />}
+                          {isLocked && <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />}
+                          {step.state === 'ready' && <div className="w-2 h-2 rounded-full bg-amber-400" />}
+                        </div>
+                      </div>
+                      <p className={`text-[13px] leading-snug ${isDone ? 'text-gray-400 line-through' : isLocked ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
+                        {step.instruction}
+                      </p>
+                      {step.temperature && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-blue-500 font-bold">
+                          <ThermometerSun size={10} /> {step.temperature}°C
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* ── NÄCHSTER SCHRITT (fixed bottom) ── */}
-      {activeTab === 'schritte' && nextIndex >= 0 && (() => {
-        const nextStep = timeline[nextIndex];
-        return (
-          <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#FDFCFB]/95 dark:bg-gray-900/95 backdrop-blur-xl border-t border-[#F0EBE3] dark:border-gray-700">
-            <div className="max-w-3xl mx-auto px-6 py-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center flex-shrink-0 text-[15px]">
-                {nextStep.type === 'Aktion' ? '👐' : '⏳'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-[#8B7355] uppercase tracking-widest">Nächster Schritt um {formatShortTime(nextStep.start)}</div>
-                <div className="text-[13px] font-semibold text-[#2D2D2D] dark:text-gray-100 truncate">{nextStep.instruction}</div>
-              </div>
-              <span className="text-[11px] font-bold text-gray-300 dark:text-gray-500 flex-shrink-0">{formatStepDuration(nextStep)}</span>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
-  );
-}
+      {/* ── TAB: ZEITPLAN (simplified) ── */}
+      {activeTab === 'zeitplan' && (
+        <div className="max-w-3xl mx-auto px-4 pt-5">
+          <div className="space-y-4">
+            {sortedPhases.map((phase, pIdx) => {
+              const COLORS = [
+                { bg: 'bg-amber-50 dark:bg-amber-900/20', bar: '#F59E0B', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-100 dark:border-amber-800' },
+                { bg: 'bg-blue-50 dark:bg-blue-900/20', bar: '#3B82F6', text: 'text-blue-700 dark:text-blue-400', border: 'border-blue-100 dark:border-blue-800' },
+                { bg: 'bg-emerald-50 dark:bg-emerald-900/20', bar: '#10B981', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-100 dark:border-emerald-800' },
+                { bg: 'bg-rose-50 dark:bg-rose-900/20', bar: '#F43F5E', text: 'text-rose-700 dark:text-rose-400', border: 'border-rose-100 dark:border-rose-800' },
+                { bg: 'bg-violet-50 dark:bg-violet-900/20', bar: '#8B5CF6', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-100 dark:border-violet-800' },
+              ];
+              const c = COLORS[pIdx % COLORS.length];
 
-// ── GANTT-CHART ──────────────────────────────────────────────
-
-const PHASE_COLORS = [
-  { bg: 'bg-amber-50 dark:bg-amber-900/20', bar: '#F59E0B', text: 'text-amber-700 dark:text-amber-400', border: 'border-amber-100 dark:border-amber-800' },
-  { bg: 'bg-blue-50 dark:bg-blue-900/20', bar: '#3B82F6', text: 'text-blue-700 dark:text-blue-400', border: 'border-blue-100 dark:border-blue-800' },
-  { bg: 'bg-emerald-50 dark:bg-emerald-900/20', bar: '#10B981', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-100 dark:border-emerald-800' },
-  { bg: 'bg-rose-50 dark:bg-rose-900/20', bar: '#F43F5E', text: 'text-rose-700 dark:text-rose-400', border: 'border-rose-100 dark:border-rose-800' },
-  { bg: 'bg-violet-50 dark:bg-violet-900/20', bar: '#8B5CF6', text: 'text-violet-700 dark:text-violet-400', border: 'border-violet-100 dark:border-violet-800' },
-];
-
-function GanttChart({ sections, timeline, currentTime }: { sections: any[]; timeline: any[]; currentTime: Date }) {
-  if (timeline.length === 0) return <div className="p-8 text-center text-gray-400">Keine Schritte</div>;
-
-  const sortedSections = [...sections].sort((a: any, b: any) => {
-    const aStart = timeline.find((t: any) => t.phase === a.name)?.start.getTime() ?? Infinity;
-    const bStart = timeline.find((t: any) => t.phase === b.name)?.start.getTime() ?? Infinity;
-    return aStart - bStart;
-  });
-
-  const totalStart = timeline[0].start;
-  const totalEnd = timeline[timeline.length - 1].end;
-  const totalMs = totalEnd.getTime() - totalStart.getTime();
-  const pct = (d: Date) => Math.max(0, Math.min(100, ((d.getTime() - totalStart.getTime()) / totalMs) * 100));
-
-  // Adaptive Tick-Marks: Intervall abhängig von Gesamtdauer
-  const totalHours = totalMs / (1000 * 60 * 60);
-  const tickIntervalHours = totalHours <= 4 ? 1 : totalHours <= 12 ? 2 : totalHours <= 24 ? 3 : totalHours <= 48 ? 6 : 12;
-  const ticks: Date[] = [];
-  const tickStart = new Date(totalStart);
-  tickStart.setMinutes(0, 0, 0);
-  tickStart.setHours(tickStart.getHours() + tickIntervalHours);
-  const t = new Date(tickStart);
-  while (t <= totalEnd) { ticks.push(new Date(t)); t.setHours(t.getHours() + tickIntervalHours); }
-
-  const nowPct = pct(currentTime);
-  const isNowVisible = currentTime >= totalStart && currentTime <= totalEnd;
-
-  return (
-    <div className="max-w-3xl mx-auto px-4 pt-5 pb-10">
-      {/* Legende */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {sortedSections.map((section: any, i: number) => {
-          const c = PHASE_COLORS[i % PHASE_COLORS.length];
-          return (
-            <div key={i} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold ${c.bg} ${c.text} ${c.border}`}>
-              <div className="w-2 h-2 rounded-full" style={{ background: c.bar }} />{section.name}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Balkendiagramm */}
-      <div className="space-y-3 mb-2">
-        {sortedSections.map((section: any, sIdx: number) => {
-          const c = PHASE_COLORS[sIdx % PHASE_COLORS.length];
-          const steps = timeline.filter((t: any) => t.phase === section.name);
-          if (!steps.length) return null;
-          const phaseStart = steps[0].start;
-          const phaseEnd = steps[steps.length - 1].end;
-          return (
-            <div key={sIdx}>
-              <div className={`text-[11px] font-extrabold uppercase tracking-widest mb-1 ${c.text}`}>
-                {section.name}
-                <span className="ml-2 font-normal normal-case tracking-normal text-gray-400 dark:text-gray-500 text-[10px]">{formatTime(phaseStart)} – {formatTime(phaseEnd)}</span>
-              </div>
-              <div className="relative h-8 bg-gray-50 dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700">
-                {ticks.map((tk, ti) => <div key={ti} className="absolute top-0 bottom-0 w-px bg-gray-200/60 dark:bg-gray-700" style={{ left: `${pct(tk)}%` }} />)}
-                <div className="absolute top-1 bottom-1 rounded-lg opacity-20" style={{ left: `${pct(phaseStart)}%`, width: `${pct(phaseEnd) - pct(phaseStart)}%`, background: c.bar }} />
-                {steps.map((step: any, si: number) => {
-                  const l = pct(step.start);
-                  const w = Math.max(0.5, pct(step.end) - l);
-                  return <div key={si} className="absolute top-1.5 bottom-1.5 rounded-md" style={{ left: `${l}%`, width: `${w}%`, background: c.bar, opacity: step.type === 'Warten' ? 0.35 : 0.85 }} title={`${step.instruction} (${formatDuration(step.duration)})`} />;
-                })}
-                {isNowVisible && <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 z-10" style={{ left: `${nowPct}%` }}><div className="w-2 h-2 rounded-full bg-red-400 absolute -top-0.5 -left-[3px]" /></div>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Zeitachse */}
-      <div className="relative h-5">
-        <span className="absolute text-[10px] text-gray-400 dark:text-gray-500 font-bold left-0">{formatTime(totalStart)}</span>
-        {ticks.map((tk, ti) => {
-          const p = pct(tk);
-          if (p < 4 || p > 94) return null;
-          return <span key={ti} className="absolute text-[10px] text-gray-300 dark:text-gray-600 font-bold -translate-x-1/2 whitespace-nowrap" style={{ left: `${p}%` }}>{totalHours > 24 ? formatShortTime(tk) : formatTime(tk)}</span>;
-        })}
-        <span className="absolute text-[10px] text-green-500 font-bold right-0">{totalHours > 24 ? formatShortTime(totalEnd) : formatTime(totalEnd)}</span>
-      </div>
-
-      {/* Detail-Liste pro Phase */}
-      <div className="mt-8 space-y-4">
-        {sortedSections.map((section: any, sIdx: number) => {
-          const c = PHASE_COLORS[sIdx % PHASE_COLORS.length];
-          const steps = timeline.filter((t: any) => t.phase === section.name);
-          if (!steps.length) return null;
-          return (
-            <div key={sIdx} className={`rounded-2xl border p-4 ${c.bg} ${c.border}`}>
-              <div className={`text-[11px] font-extrabold uppercase tracking-widest mb-3 ${c.text}`}>{section.name}</div>
-              <div className="space-y-2">
-                {steps.map((step: any, si: number) => (
-                  <div key={si} className="flex items-start gap-2 text-[12px]">
-                    <span className="text-gray-400 dark:text-gray-500 font-bold tabular-nums w-10 flex-shrink-0 pt-px">{formatTime(step.start)}</span>
-                    <span className={`flex-1 text-gray-700 dark:text-gray-300 leading-relaxed ${step.type === 'Warten' ? 'opacity-60 italic' : ''}`}>{step.instruction.length > 90 ? step.instruction.slice(0, 90) + '…' : step.instruction}</span>
-                    <span className="text-gray-300 dark:text-gray-600 text-[11px] flex-shrink-0 pt-px">{formatStepDuration(step)}</span>
+              return (
+                <div key={pIdx} className={`rounded-2xl border p-4 ${c.bg} ${c.border}`}>
+                  <div className={`text-[11px] font-extrabold uppercase tracking-widest mb-3 ${c.text}`}>
+                    {phase.name}
+                    <span className="opacity-60 ml-2 normal-case">{phase.done}/{phase.total} erledigt</span>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-2">
+                    {phase.steps.map(step => (
+                      <div key={step.globalIdx} className="flex items-start gap-2 text-[12px]">
+                        <span className="w-3 flex-shrink-0 pt-1">
+                          {step.state === 'done' ? <Check size={10} className="text-green-500" /> :
+                           step.state === 'active' || step.state === 'soft_done' ? <div className="w-2 h-2 rounded-full bg-[#8B7355] animate-pulse mt-0.5" /> :
+                           <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 mt-0.5" />}
+                        </span>
+                        <span className={`flex-1 ${
+                          step.state === 'done' ? 'text-gray-400 line-through' :
+                          step.state === 'locked' ? 'text-gray-400 opacity-60' :
+                          'text-gray-700 dark:text-gray-300'
+                        } ${step.type === 'Warten' || step.type === 'Ruhen' || step.type === 'Kühl' ? 'italic opacity-60' : ''}`}>
+                          {step.instruction.length > 80 ? step.instruction.slice(0, 80) + '…' : step.instruction}
+                        </span>
+                        <span className="text-gray-300 dark:text-gray-600 text-[11px] flex-shrink-0 pt-px">{formatStepDuration(step)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {projectedEnd && (
+            <div className="text-center mt-6 text-[12px] text-gray-400">
+              Voraussichtlich fertig um {formatSmartTime(projectedEnd)} Uhr
             </div>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
