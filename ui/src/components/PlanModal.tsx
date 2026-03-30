@@ -10,7 +10,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, Minus, Plus, Moon, Coffee, Clock, Sunrise, ChevronDown } from 'lucide-react';
+import { X, Minus, Plus, Moon, Coffee, Clock, Sunrise, Play, ChevronDown } from 'lucide-react';
 import { calcTotalDuration, calculateBackplan, formatDuration, formatSmartTime, parseLocalDate } from '@/lib/backplan-utils';
 import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
 
