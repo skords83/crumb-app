@@ -328,4 +328,22 @@ router.get('/recipe-stats/:recipeId', async (req, res) => {
   }
 });
 
+// ── DELETE /api/bake-sessions/:id — Session löschen ─────────
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM bake_sessions WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, req.user.userId]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Session nicht gefunden' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ delete session Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = { router, setPool };

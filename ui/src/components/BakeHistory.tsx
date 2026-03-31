@@ -2,10 +2,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Clock, ThermometerSun, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Clock, FileText, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { type BakeHistoryEntry, type RecipeStats, formatDuration } from '@/lib/backplan-utils';
 
 const API = process.env.NEXT_PUBLIC_API_URL;
+const authHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`,
+});
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -26,22 +30,37 @@ export default function BakeHistory({ recipeId }: BakeHistoryProps) {
   const [history, setHistory] = useState<BakeHistoryEntry[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-  useEffect(() => {
+  const loadData = () => {
     const headers = { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` };
 
-    // Stats laden
     fetch(`${API}/bake-sessions/recipe-stats/${recipeId}`, { headers })
       .then(r => r.json())
       .then(setStats)
       .catch(() => {});
 
-    // History laden
     fetch(`${API}/bake-sessions/history?recipe_id=${recipeId}`, { headers })
       .then(r => r.json())
       .then(data => { setHistory(Array.isArray(data) ? data : []); setIsLoading(false); })
       .catch(() => setIsLoading(false));
-  }, [recipeId]);
+  };
+
+  useEffect(() => { loadData(); }, [recipeId]);
+
+  const deleteEntry = async (sessionId: number) => {
+    try {
+      const res = await fetch(`${API}/bake-sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        setHistory(prev => prev.filter(e => e.id !== sessionId));
+        setStats(prev => prev ? { ...prev, bake_count: Math.max(0, prev.bake_count - 1) } : prev);
+        setDeleteConfirmId(null);
+      }
+    } catch { /* silent */ }
+  };
 
   if (isLoading || !stats || stats.bake_count === 0) return null;
 
@@ -72,48 +91,53 @@ export default function BakeHistory({ recipeId }: BakeHistoryProps) {
       {/* History List */}
       {isExpanded && history.length > 0 && (
         <div className="mt-2 space-y-2">
-          {history.map(entry => {
-            const temps = (entry.temperature_log || []).filter((t: any) => t.temp_c);
-            const avgTemp = temps.length > 0
-              ? (temps.reduce((s: number, t: any) => s + t.temp_c, 0) / temps.length).toFixed(1)
-              : null;
-
-            return (
-              <div key={entry.id} className="px-4 py-3 rounded-xl bg-white dark:bg-gray-800 border border-[#F0EBE3] dark:border-gray-700">
-                <div className="flex justify-between items-start mb-1">
-                  <div>
-                    <span className="text-[12px] font-bold text-gray-800 dark:text-gray-100">
-                      {formatDateShort(entry.finished_at)}
+          {history.map(entry => (
+            <div key={entry.id} className="px-4 py-3 rounded-xl bg-white dark:bg-gray-800 border border-[#F0EBE3] dark:border-gray-700 group">
+              <div className="flex justify-between items-start mb-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] font-bold text-gray-800 dark:text-gray-100">
+                    {formatDateShort(entry.finished_at)}
+                  </span>
+                  {entry.multiplier !== 1 && (
+                    <span className="text-[10px] font-bold text-[#8B7355] bg-[#8B7355]/10 dark:bg-[#8B7355]/20 px-1.5 py-0.5 rounded">
+                      {entry.multiplier}×
                     </span>
-                    {entry.multiplier !== 1 && (
-                      <span className="ml-2 text-[10px] font-bold text-[#8B7355] bg-[#8B7355]/10 px-1.5 py-0.5 rounded">
-                        {entry.multiplier}×
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-gray-400">
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
                     {entry.total_actual_duration > 0 && formatDuration(Math.round(entry.total_actual_duration / 60))}
                   </span>
+                  {/* Delete button */}
+                  {deleteConfirmId === entry.id ? (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => deleteEntry(entry.id)}
+                        className="text-[10px] font-bold text-red-500 hover:text-red-600 px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 transition-colors">
+                        Löschen
+                      </button>
+                      <button onClick={() => setDeleteConfirmId(null)}
+                        className="text-[10px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1.5 py-0.5 transition-colors">
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setDeleteConfirmId(entry.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-300 dark:text-gray-600 hover:text-red-400">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
                 </div>
-
-                {/* Temperature */}
-                {avgTemp && (
-                  <div className="flex items-center gap-1 mb-1">
-                    <ThermometerSun size={11} className="text-blue-500" />
-                    <span className="text-[11px] text-blue-500 font-bold">Ø {avgTemp}°C</span>
-                  </div>
-                )}
-
-                {/* Notes */}
-                {entry.notes && (
-                  <div className="flex items-start gap-1.5 mt-1">
-                    <FileText size={11} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">{entry.notes}</p>
-                  </div>
-                )}
               </div>
-            );
-          })}
+
+              {/* Notes */}
+              {entry.notes && (
+                <div className="flex items-start gap-1.5 mt-1">
+                  <FileText size={11} className="text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">{entry.notes}</p>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
