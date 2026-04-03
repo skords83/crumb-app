@@ -134,7 +134,7 @@ export default function RecipeForm({
         const amount = parseFloat(ing.amount.toString().replace(',', '.')) || 0;
         const unit = ing.unit || "g";
         if (totals[key]) {
-          totals[key].amount += amount;
+          totals[key].amount = Math.round((totals[key].amount + amount) * 100) / 100;
         } else {
           totals[key] = { name: ing.name, amount, unit };
         }
