@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
 import { calcTotalDurationRange } from "@/lib/backplan-utils";
 import { calcHydration } from '@/lib/hydration';
+import { getCategoryStyle, getHydrationColor } from '@/lib/category-colors';
 
 interface RecipeCardProps {
   recipe: any;
@@ -43,9 +44,6 @@ const getRecipeLabels = (recipe: any) => {
 
   const st = "bg-[#FDE2E2] text-[#A23939] border-[#f5c5c5]";
 
-  // Den Sauerteig-Typ aus dem Anstellgut ableiten — nicht aus dem Phasennamen
-  // oder dem Mehl im Hauptteig. "Hafersauerteig" als Phasenname bedeutet nur
-  // was dabei entsteht; entscheidend ist was der User im Kühlschrank braucht.
   const allIngredients = (recipe.dough_sections || []).flatMap((s: any) => s.ingredients || []);
   const anstellgutZutat = allIngredients.find((ing: any) =>
     /anstellgut|starter|lievito/.test((ing.name || "").toLowerCase())
@@ -53,16 +51,13 @@ const getRecipeLabels = (recipe: any) => {
   const anstellgutName = (anstellgutZutat?.name || "").toLowerCase();
 
   const getSauerteigLabel = (): { label: string; color: string } => {
-    // Lievito Madre hat Vorrang
     if (hatLM) return { label: "Lievito Madre", color: st };
-    // Anstellgut-Zutat auswerten — das ist die Quelle der Wahrheit
     if (anstellgutName) {
       if (anstellgutName.includes("roggen")) return { label: "Roggensauerteig", color: st };
       if (anstellgutName.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
       if (anstellgutName.includes("weizen")) return { label: "Weizensauerteig", color: st };
       if (anstellgutName.includes("hafer")) return { label: "Hafersauerteig", color: st };
     }
-    // Fallback: expliziter Typ im Phasennamen oder Rezepttitel
     if (content.includes("roggensauerteig") || content.includes("roggen-sauerteig")) return { label: "Roggensauerteig", color: st };
     if (content.includes("dinkelsauerteig") || content.includes("dinkel-sauerteig")) return { label: "Dinkelsauerteig", color: st };
     if (content.includes("weizensauerteig") || content.includes("weizen-sauerteig")) return { label: "Weizensauerteig", color: st };
@@ -71,7 +66,6 @@ const getRecipeLabels = (recipe: any) => {
   };
 
   if (hatSauerteig && hatHefe) {
-    // Sauerteig-Typ bestimmen, dann "+ Hefe" anhängen
     const stLabel = getSauerteigLabel();
     labels.push({ label: `${stLabel.label} + Hefe`, color: st });
   } else if (hatSauerteig) {
@@ -195,6 +189,17 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
   );
 }
 
+// Quelle aus URL extrahieren
+function getSourceHostname(recipe: any): string | null {
+  const url = recipe.original_source_url || recipe.source_url;
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace('www.', '');
+  } catch {
+    return null;
+  }
+}
+
 export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeCardProps) {
   const stats = getStats(recipe);
   const labels = getRecipeLabels(recipe);
@@ -202,94 +207,133 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
 
   const imageSrc = recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=800&auto=format&fit=crop';
 
+  // Kategorie-Style aus konfigurierbarer Map
+  const catStyle = getCategoryStyle(recipe.category);
+
+  // Hydration-Farbe (Blau-Skala)
+  const hydrationColor = stats.hydration !== null ? getHydrationColor(stats.hydration) : null;
+
+  // Untertitelzeile: "Kategorie · quelle.de" oder nur eins davon
+  const sourceHost = getSourceHostname(recipe);
+  const subtitleParts: string[] = [];
+  if (catStyle) subtitleParts.push(catStyle.label);
+  if (sourceHost) subtitleParts.push(sourceHost);
+  const subtitle = subtitleParts.join(' · ');
+
   return (
     <Link
       href={`/recipes/${recipe.id}`}
-      className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 group active:scale-[0.98]"
+      className="rounded-2xl overflow-hidden flex flex-col relative border border-gray-100 dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-600 group active:scale-[0.98]"
+      style={{
+        // Farbiger Seitenstreifen links
+        borderLeft: catStyle ? `3px solid ${catStyle.borderColor}` : undefined,
+        background: undefined,
+      }}
     >
-      {/* Bild mit Titel-Overlay */}
-      <div className="h-56 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
-        <Image
-          src={imageSrc}
-          alt={recipe.title}
-          fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-          onLoad={() => setImgLoaded(true)}
-        />
+      {/* Wrapper für bg-color, damit border-left nicht vom bg überdeckt wird */}
+      <div className="bg-white dark:bg-gray-800 flex flex-col flex-1">
 
-        {/* Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent pointer-events-none" />
+        {/* Bild mit Titel-Overlay */}
+        <div className="h-56 overflow-hidden relative rounded-b-2xl bg-gray-100 dark:bg-gray-700">
+          <Image
+            src={imageSrc}
+            alt={recipe.title}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setImgLoaded(true)}
+          />
 
-        {/* Herz oben rechts */}
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
-          className="absolute top-3 right-3 z-10 p-2 bg-white/35 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
-        >
-          <Heart size={16} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
-        </button>
+          {/* Gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent pointer-events-none" />
 
-        {/* Titel unten im Bild */}
-        <div className="absolute bottom-0 inset-x-0 z-10 px-4 pb-4">
-          <h3 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
-            {recipe.title}
-          </h3>
-        </div>
-      </div>
-
-      {/* Card Body */}
-      <div className="px-4 pb-0 pt-3 flex-1 flex flex-col gap-3">
-
-        {/* Badges eine Zeile + X mit Tooltip */}
-        <BadgeRow labels={labels} />
-
-        {/* Stats Bar — Variant D */}
-        <div className="flex items-center bg-gray-50 dark:bg-white/[0.04] rounded-xl px-2 py-2">
-          <div className="flex items-center justify-center gap-1.5 flex-[2] min-w-0">
-            <Clock size={14} className="text-[#8B7355] dark:text-[#A68B6A] flex-shrink-0" />
-            <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 leading-none truncate">{stats.timeString}</span>
-          </div>
-          <div className="w-px self-center h-3.5 bg-gray-300 dark:bg-white/20 flex-shrink-0" />
-          <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
-            <Layers size={14} className="text-[#8B7355] dark:text-[#A68B6A] flex-shrink-0" />
-            <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 leading-none">{stats.totalSteps}</span>
-          </div>
-          {stats.hydration !== null && (
-            <>
-              <div className="w-px self-center h-3.5 bg-gray-300 dark:bg-white/20 flex-shrink-0" />
-              <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
-                <Droplets size={14} className="text-blue-500 dark:text-blue-400 flex-shrink-0" />
-                <span className="text-[13px] font-bold text-blue-500 dark:text-blue-400 leading-none">{stats.hydration}%</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Buttons — gap = px-4 für Symmetrie */}
-        <div className="grid grid-cols-2 gap-4 mt-auto">
-          <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-            <Utensils size={13} /> Details
-          </div>
+          {/* Herz oben rechts */}
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
-            className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/15 dark:bg-[#8B7355]/25 text-[#6B5340] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/30 dark:border-[#8B7355]/40 hover:bg-[#8B7355] hover:text-white transition-all"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
+            className="absolute top-3 right-3 z-10 p-2 bg-white/35 backdrop-blur-sm rounded-xl transition-transform hover:scale-110"
           >
-            <Clock size={13} /> Planen
+            <Heart size={16} className={`${recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'}`} />
           </button>
+
+          {/* Titel unten im Bild */}
+          <div className="absolute bottom-0 inset-x-0 z-10 px-4 pb-4">
+            <h3 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+              {recipe.title}
+            </h3>
+          </div>
         </div>
 
-        {/* Quelle — feste Höhe damit Buttons nicht rutschen */}
-        <div className="text-right h-5 flex items-center justify-end pb-1">
-          {(() => {
-            const url = recipe.original_source_url || recipe.source_url;
-            try {
-              return url ? (
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-                  {new URL(url).hostname.replace('www.', '')}
-                </span>
-              ) : null;
-            } catch { return null; }
-          })()}
+        {/* Card Body */}
+        <div className="px-4 pb-0 pt-3 flex-1 flex flex-col gap-3">
+
+          {/* NEU: Untertitelzeile — Kategorie · Quelle */}
+          {subtitle && (
+            <p
+              className="text-[11px] font-medium leading-none -mb-1"
+              style={{ color: catStyle ? catStyle.textDark : undefined }}
+            >
+              {/* Light-Mode-Farbe über CSS-Klasse, Dark-Mode über Inline-Style */}
+              <span
+                className="dark:hidden"
+                style={{ color: catStyle ? catStyle.textLight : undefined }}
+              >
+                {subtitle}
+              </span>
+              <span
+                className="hidden dark:inline"
+                style={{ color: catStyle ? catStyle.textDark : undefined }}
+              >
+                {subtitle}
+              </span>
+            </p>
+          )}
+
+          {/* Badges eine Zeile + X mit Tooltip */}
+          <BadgeRow labels={labels} />
+
+          {/* Stats Bar */}
+          <div className="flex items-center bg-gray-50 dark:bg-white/[0.04] rounded-xl px-2 py-2">
+            <div className="flex items-center justify-center gap-1.5 flex-[2] min-w-0">
+              <Clock size={14} className="text-[#8B7355] dark:text-[#A68B6A] flex-shrink-0" />
+              <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 leading-none truncate">{stats.timeString}</span>
+            </div>
+            <div className="w-px self-center h-3.5 bg-gray-300 dark:bg-white/20 flex-shrink-0" />
+            <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
+              <Layers size={14} className="text-[#8B7355] dark:text-[#A68B6A] flex-shrink-0" />
+              <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 leading-none">{stats.totalSteps}</span>
+            </div>
+            {stats.hydration !== null && hydrationColor && (
+              <>
+                <div className="w-px self-center h-3.5 bg-gray-300 dark:bg-white/20 flex-shrink-0" />
+                <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
+                  <Droplets size={14} className="flex-shrink-0 dark:hidden" style={{ color: hydrationColor.light }} />
+                  <Droplets size={14} className="flex-shrink-0 hidden dark:block" style={{ color: hydrationColor.dark }} />
+                  <span className="text-[13px] font-bold leading-none dark:hidden" style={{ color: hydrationColor.light }}>
+                    {stats.hydration}%
+                  </span>
+                  <span className="text-[13px] font-bold leading-none hidden dark:inline" style={{ color: hydrationColor.dark }}>
+                    {stats.hydration}%
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Buttons */}
+          <div className="grid grid-cols-2 gap-4 mt-auto">
+            <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+              <Utensils size={13} /> Details
+            </div>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
+              className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/15 dark:bg-[#8B7355]/25 text-[#6B5340] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/30 dark:border-[#8B7355]/40 hover:bg-[#8B7355] hover:text-white transition-all"
+            >
+              <Clock size={13} /> Planen
+            </button>
+          </div>
+
+          {/* Spacer — gleiche Höhe wie die alte Quellenzeile, hält Card-Höhen konsistent */}
+          <div className="h-5 pb-1" />
         </div>
       </div>
     </Link>
