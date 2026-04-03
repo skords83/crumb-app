@@ -12,6 +12,7 @@ import {
   Thermometer as TempIcon,
   Images,
   GripVertical,
+  ExternalLink,
 } from 'lucide-react';
 import ImageSelectModal from '@/components/ImageSelectModal';
 
@@ -49,6 +50,8 @@ export default function RecipeForm({
   onSubmit,
   isSubmitting,
   availableImages = [],
+  sourceUrl,
+  setSourceUrl,
 }: any) {
 
   const addSection = () => {
@@ -227,6 +230,19 @@ export default function RecipeForm({
                 ))}
               </select>
             </div>
+            {setSourceUrl && (
+              <div className="flex items-center gap-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                  <ExternalLink size={12} className="inline -mt-0.5 mr-1" />Quelle
+                </label>
+                <input
+                  className="flex-1 bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#8B7355] shadow-sm text-gray-500 dark:text-gray-300 placeholder-gray-300 dark:placeholder-gray-600"
+                  value={sourceUrl || ""}
+                  onChange={(e) => setSourceUrl(e.target.value)}
+                  placeholder="https://..."
+                />
+              </div>
+            )}
             <input 
               className="w-full bg-white dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-xl px-4 py-2 text-xs outline-none focus:border-[#8B7355] shadow-sm text-gray-400 dark:text-gray-300"
               value={imageUrl || ""}
