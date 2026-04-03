@@ -284,10 +284,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="print-card-wrapper min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
+      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
         {/* HERO IMAGE */}
-        <div className="print-hero relative h-96 w-full rounded-[1.5rem] overflow-hidden">
+        <div className="print-hero relative h-96 w-full rounded-t-[2rem] overflow-hidden">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
             className="w-full h-full object-cover object-[center_65%]"
@@ -530,8 +530,8 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         {/* STICKY BOTTOM BAR */}
-        <div className="no-print fixed bottom-0 left-0 right-0 z-40 px-4 pb-20 md:pb-4 pt-3 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none">
-          <div className="max-w-2xl mx-auto pointer-events-auto">
+        <div className="no-print sticky bottom-0 z-40 px-6 pb-6 pt-3 bg-gradient-to-t from-white dark:from-gray-800 via-white/95 dark:via-gray-800/95 to-transparent rounded-b-[2rem]">
+          <div className="max-w-2xl mx-auto">
             <button
               onClick={() => setShowPlanModal(true)}
               className="w-full flex items-center justify-center gap-3 bg-[#8B4513] text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-[#6F360F] transition-all active:scale-[0.98]"
