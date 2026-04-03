@@ -228,6 +228,7 @@ export default function EditRecipePage() {
           imageUrl={imageUrl} setImageUrl={setImageUrl}
           description={description} setDescription={setDescription}
           category={category} setCategory={setCategory}
+          sourceUrl={sourceUrl} setSourceUrl={setSourceUrl}
           doughSections={doughSections} setDoughSections={setDoughSections}
           onSubmit={handleSubmit}
           isSubmitting={isSaving}
