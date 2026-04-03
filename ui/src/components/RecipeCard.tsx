@@ -264,7 +264,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
         </div>
 
         {/* Card Body */}
-        <div className="px-4 pb-0 pt-3 flex-1 flex flex-col gap-3">
+        <div className="px-4 pb-4 pt-3 flex-1 flex flex-col gap-3">
 
           {/* NEU: Untertitelzeile — Kategorie · Quelle */}
           {subtitle && (
@@ -331,9 +331,6 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
               <Clock size={13} /> Planen
             </button>
           </div>
-
-          {/* Spacer — gleiche Höhe wie die alte Quellenzeile, hält Card-Höhen konsistent */}
-          <div className="h-5 pb-1" />
         </div>
       </div>
     </Link>
