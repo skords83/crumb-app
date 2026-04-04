@@ -290,7 +290,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         <div className="print-hero relative h-96 w-full rounded-t-[2rem] overflow-hidden">
           <img
             src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
-            className="w-full h-full object-cover object-[center_65%]"
+            className="w-full h-full object-cover object-[center_65%] rounded-t-[2rem]"
             alt={recipe.title}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/65 from-[0%] via-black/25 via-[45%] to-black/15 pointer-events-none" />
