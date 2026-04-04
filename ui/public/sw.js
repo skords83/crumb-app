@@ -44,9 +44,12 @@ self.addEventListener('fetch', event => {
   if (!url.protocol.startsWith('http')) return;
 
   // API-Calls: Network First mit Cache-Fallback
-  if (url.pathname.startsWith('/api/recipes')) {
-    event.respondWith(networkFirst(request, API_CACHE, 60 * 60 * 24 * 7));
-    return;
+  // NACHHER:
+  if (url.pathname.startsWith('/api/')) {
+      // API-Calls NICHT cachen – sie sind personalisiert, gefiltert
+      // und sollten immer frisch vom Server kommen.
+      // Offline-Fallback für die Rezeptliste bleibt via Navigation-Cache erhalten.
+      return; // → Browser handled den fetch normal, kein SW-Eingriff
   }
 
   // Bilder (eigene Uploads + Unsplash): Cache First

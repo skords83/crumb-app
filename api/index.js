@@ -614,6 +614,13 @@ app.post('/api/auth/change-password', authenticateToken, changePassword);
 // ============================================================
 app.use(authenticateToken);
 
+// Alle API-Responses: kein Caching (personalisierte Daten)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Surrogate-Control', 'no-store'); // Cloudflare CDN
+  next();
+});
+
 // ── Bake Sessions Router ──
 app.use('/api/bake-sessions', bakeSessionsRouter);
 
