@@ -284,17 +284,19 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="print-card-wrapper min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700 transition-colors duration-200" style={{ overflow: 'clip' }}>
+      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
-        {/* HERO IMAGE */}
-        <div className="print-hero relative h-96 w-full" style={{ borderRadius: '2rem 2rem 0 0', overflow: 'clip' }}>
-          <img
-            src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
-              className="w-full h-full object-cover object-[center_65%]"
-              style={{ borderRadius: '2rem 2rem 0 0' }}
-            alt={recipe.title}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/65 from-[0%] via-black/25 via-[45%] to-black/15 pointer-events-none" />
+{/* HERO IMAGE */}
+<div className="print-hero relative h-96 w-full rounded-t-[2rem] overflow-hidden">
+  <div
+    className="absolute inset-0"
+    style={{
+      backgroundImage: `url(${recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center 65%',
+    }}
+  />
+  <div className="absolute inset-0 bg-gradient-to-t from-black/65 from-[0%] via-black/25 via-[45%] to-black/15 pointer-events-none" />
 
           <Link href="/" className="no-print absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
             <Icons.ChevronLeft size={20} className="text-gray-700 dark:text-gray-200" />
