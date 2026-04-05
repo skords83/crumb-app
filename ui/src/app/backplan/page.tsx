@@ -53,13 +53,37 @@ export default function BackplanPage() {
   const timeline = session?.timeline || [];
   const gates = session?.gates || [];
   const multiplier = session?.multiplier || 1;
-  const activeStep = useMemo(() => timeline.find(s => s.state === 'active') || null, [timeline]);
-  const softDoneStep = useMemo(() => timeline.find(s => s.state === 'soft_done') || null, [timeline]);
+
+  // Alle aktiven Schritte sammeln (parallele Phasen können mehrere haben)
+  const allActiveSteps = useMemo(() => timeline.filter(s => s.state === 'active'), [timeline]);
+  const allSoftDoneSteps = useMemo(() => timeline.filter(s => s.state === 'soft_done'), [timeline]);
+
+  // Primärer Fokus: soft_done hat Priorität, dann erster aktiver Schritt
+  const activeStep = allActiveSteps[0] || null;
+  const softDoneStep = allSoftDoneSteps[0] || null;
   const focusStep = softDoneStep || activeStep;
+
+  // Parallele Schritte (aus anderen Phasen) die GLEICHZEITIG aktiv sind
+  const parallelActiveSteps = useMemo(() => {
+    if (!activeStep) return [];
+    return allActiveSteps.filter(s => s.globalIdx !== activeStep.globalIdx);
+  }, [allActiveSteps, activeStep]);
+
+  const parallelSoftDoneSteps = useMemo(() => {
+    if (!softDoneStep) return [];
+    return allSoftDoneSteps.filter(s => s.globalIdx !== softDoneStep.globalIdx);
+  }, [allSoftDoneSteps, softDoneStep]);
+
   const totalDuration = timeline.reduce((s, t) => s + t.duration, 0);
 
   const remaining = useMemo(() => { if (!focusStep?.end) return null; return Math.max(0, Math.round((new Date(focusStep.end).getTime() - currentTime.getTime()) / 1000)); }, [focusStep, currentTime]);
   const timerProgress = useMemo(() => { if (!focusStep?.start || !focusStep?.end) return 0; const s = new Date(focusStep.start).getTime(), e = new Date(focusStep.end).getTime(); return e <= s ? 1 : Math.min(1, (currentTime.getTime() - s) / (e - s)); }, [focusStep, currentTime]);
+
+  // Helper: remaining für einen beliebigen Step berechnen
+  const stepRemaining = useCallback((step: TimelineStep) => {
+    if (!step.end) return null;
+    return Math.max(0, Math.round((new Date(step.end).getTime() - currentTime.getTime()) / 1000));
+  }, [currentTime]);
 
   const sortedPhases = useMemo(() => getPhases(timeline).map(name => { const steps = timeline.filter(s => s.phase === name); const { done, total } = getPhaseProgress(timeline, name); return { name, steps, done, total, hasActive: steps.some(s => s.state === 'active' || s.state === 'soft_done'), allDone: done === total, allLocked: steps.every(s => s.state === 'locked') }; }), [timeline]);
 
@@ -87,11 +111,34 @@ export default function BackplanPage() {
 
         {gates.map(gate => (<div key={gate.phase} className="mb-4 rounded-2xl border-2 border-dashed border-emerald-400/60 dark:border-emerald-600/40 bg-emerald-50/50 dark:bg-emerald-900/10 p-5"><div className="text-[13px] font-extrabold text-emerald-700 dark:text-emerald-400 mb-1">{gate.phase} kann starten</div><p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3">Alle Vorstufen sind fertig.</p><div className="flex gap-2 mb-3 flex-wrap">{gate.dependencies.map(dep => (<span key={dep} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold"><Check size={10} /> {dep}</span>))}</div><button onClick={() => transition(session.id, gate.firstStepIdx, 'confirm_gate', { phase: gate.phase })} className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] transition-colors active:scale-[0.98]">{gate.phase} jetzt ansetzen</button></div>))}
 
-        {softDoneStep && (<div className="mb-4 rounded-2xl border-2 border-amber-400/60 dark:border-amber-600/40 bg-amber-50/50 dark:bg-amber-900/10 p-5"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">{softDoneStep.phase}</span><span className="text-[11px] font-bold text-amber-500">Zeit abgelaufen</span></div><p className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-4 leading-relaxed">{softDoneStep.instruction}</p><div className="flex gap-2"><button onClick={() => transition(session.id, softDoneStep.globalIdx, 'complete')} className="flex-1 py-3 rounded-xl bg-[#8B7355] text-white font-bold text-[13px] active:scale-[0.98]">Ja, fertig</button><button onClick={() => transition(session.id, softDoneStep.globalIdx, 'extend_timer', { minutes: 15 })} className="px-4 py-3 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] dark:text-gray-300 font-bold text-[13px]">+15 Min</button><button onClick={() => transition(session.id, softDoneStep.globalIdx, 'extend_timer', { minutes: 30 })} className="px-4 py-3 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] dark:text-gray-300 font-bold text-[13px]">+30 Min</button></div></div>)}
+        {/* Alle soft_done Steps anzeigen (primärer + parallele) */}
+        {allSoftDoneSteps.map((sdStep, sdIdx) => (<div key={sdStep.globalIdx} className="mb-4 rounded-2xl border-2 border-amber-400/60 dark:border-amber-600/40 bg-amber-50/50 dark:bg-amber-900/10 p-5"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">{sdStep.phase}</span><span className="text-[11px] font-bold text-amber-500">Zeit abgelaufen</span></div><p className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-4 leading-relaxed">{sdStep.instruction}</p><div className="flex gap-2"><button onClick={() => transition(session.id, sdStep.globalIdx, 'complete')} className="flex-1 py-3 rounded-xl bg-[#8B7355] text-white font-bold text-[13px] active:scale-[0.98]">Ja, fertig</button><button onClick={() => transition(session.id, sdStep.globalIdx, 'extend_timer', { minutes: 15 })} className="px-4 py-3 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] dark:text-gray-300 font-bold text-[13px]">+15 Min</button><button onClick={() => transition(session.id, sdStep.globalIdx, 'extend_timer', { minutes: 30 })} className="px-4 py-3 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] dark:text-gray-300 font-bold text-[13px]">+30 Min</button></div></div>))}
 
-        {activeStep && !softDoneStep && (<div ref={activeCardRef} className="mb-4 rounded-2xl border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-800 p-5"><div className="flex justify-between items-center mb-2"><span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${activeStep.type === 'Backen' ? 'bg-red-500 text-white' : activeStep.type === 'Aktion' || activeStep.type === 'Kneten' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>{activeStep.phase}</span><span className="text-[11px] text-gray-400 dark:text-gray-500 font-bold">{activeStep.start ? `seit ${formatSmartTime(new Date(activeStep.start))}` : ''}</span></div><p className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3 leading-relaxed">{activeStep.instruction}</p>
+        {/* Primäre aktive Hero-Card (nur wenn kein soft_done) */}
+        {activeStep && allSoftDoneSteps.length === 0 && (<div ref={activeCardRef} className="mb-4 rounded-2xl border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-800 p-5"><div className="flex justify-between items-center mb-2"><span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${activeStep.type === 'Backen' ? 'bg-red-500 text-white' : activeStep.type === 'Aktion' || activeStep.type === 'Kneten' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>{activeStep.phase}</span><span className="text-[11px] text-gray-400 dark:text-gray-500 font-bold">{activeStep.start ? `seit ${formatSmartTime(new Date(activeStep.start))}` : ''}</span></div><p className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3 leading-relaxed">{activeStep.instruction}</p>
           {remaining !== null && remaining > 0 && activeStep.type !== 'Aktion' && activeStep.type !== 'Kneten' && (<div className="flex items-center gap-3 mb-3 p-3 rounded-xl bg-white/60 dark:bg-gray-700/50 border border-[#F0EBE3] dark:border-gray-600"><div className="w-11 h-11 rounded-full border-[3px] border-[#E8E2D8] dark:border-gray-600 flex items-center justify-center relative"><svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="#8B7355" strokeWidth="3" strokeDasharray={`${timerProgress * 119.4} 119.4`} strokeLinecap="round" /></svg><span className="text-[9px] font-bold text-[#8B7355]">{Math.round(timerProgress * 100)}%</span></div><div><div className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Verbleibend</div><div className="text-[20px] font-extrabold text-gray-800 dark:text-gray-100 tabular-nums">{formatCountdown(remaining)}</div></div>{activeStep.extended_by > 0 && <span className="ml-auto text-[10px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-lg">+{activeStep.extended_by} Min</span>}</div>)}
           <div className="flex gap-2">{activeStep.type === 'Backen' ? (<button onClick={() => transition(session.id, activeStep.globalIdx, 'complete')} className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">Raus aus dem Ofen</button>) : activeStep.type === 'Warten' || activeStep.type === 'Ruhen' || activeStep.type === 'Kühl' ? (<><button onClick={() => transition(session.id, activeStep.globalIdx, 'complete')} className="flex-1 py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">Fertig (Teig reif)</button><button onClick={() => transition(session.id, activeStep.globalIdx, 'extend_timer', { minutes: 15 })} className="px-4 py-3 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] dark:text-gray-300 font-bold text-[12px]">+15 Min</button></>) : (<button onClick={() => transition(session.id, activeStep.globalIdx, 'complete')} className="flex-1 py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">Erledigt</button>)}</div></div>)}
+
+        {/* Parallele aktive Schritte aus anderen Phasen — gut sichtbar als Hinweis-Cards */}
+        {parallelActiveSteps.length > 0 && allSoftDoneSteps.length === 0 && parallelActiveSteps.map(pStep => {
+          const pRemaining = stepRemaining(pStep);
+          return (<div key={pStep.globalIdx} className="mb-4 rounded-2xl border-2 border-dashed border-[#D4C9B8] dark:border-gray-600 bg-[#FAF7F2] dark:bg-gray-800 p-4">
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]">Parallel</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide ${pStep.type === 'Backen' ? 'bg-red-500 text-white' : pStep.type === 'Aktion' || pStep.type === 'Kneten' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'}`}>{pStep.phase}</span>
+              </div>
+              {pRemaining !== null && pRemaining > 0 && <span className="text-[12px] font-bold text-[#8B7355] tabular-nums">{formatCountdown(pRemaining)}</span>}
+            </div>
+            <p className="text-[13px] text-gray-700 dark:text-gray-200 mb-3 leading-relaxed">{pStep.instruction}</p>
+            <div className="flex gap-2">
+              {pStep.type === 'Warten' || pStep.type === 'Ruhen' || pStep.type === 'Kühl' ? (<>
+                <button onClick={() => transition(session.id, pStep.globalIdx, 'complete')} className="flex-1 py-2.5 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[12px] active:scale-[0.98]">Fertig (Teig reif)</button>
+                <button onClick={() => transition(session.id, pStep.globalIdx, 'extend_timer', { minutes: 15 })} className="px-3 py-2.5 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355] dark:text-gray-300 font-bold text-[11px]">+15 Min</button>
+              </>) : (<button onClick={() => transition(session.id, pStep.globalIdx, 'complete')} className="flex-1 py-2.5 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[12px] active:scale-[0.98]">Erledigt</button>)}
+            </div>
+          </div>);
+        })}
 
         {timeline.filter(s => s.state === 'ready' && s.type === 'Backen').map(step => (<div key={step.globalIdx} className="mb-4 rounded-2xl border-2 border-dashed border-red-300/60 dark:border-red-700/40 bg-red-50/30 dark:bg-red-900/10 p-5"><span className="text-[10px] font-extrabold uppercase text-red-500 mb-2 block">Bereit zum Backen</span><p className="text-[13px] text-gray-700 dark:text-gray-200 mb-3">{step.instruction}</p><button onClick={() => transition(session.id, step.globalIdx, 'start_baking')} className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">Ofen ist bereit — Backen starten</button></div>))}
 
@@ -108,12 +155,12 @@ export default function BackplanPage() {
             {isIO && ings.length > 0 && (<div className="ml-10 mb-3 bg-[#FAF7F2] dark:bg-gray-800 border border-[#F0EBE3] dark:border-gray-700 rounded-xl p-3">{ings.map((ing: any, iIdx: number) => (<div key={iIdx} className="flex justify-between text-[11px] py-1.5 border-b border-[#F5F0E8] dark:border-gray-700 last:border-0"><span className="text-gray-600 dark:text-gray-400">{ing.name}</span><span className="font-bold text-gray-800 dark:text-gray-200">{ing.amount ? `${scaleAmount(ing.amount, multiplier)} ${String(ing.amount||'').includes(ing.unit) ? '' : ing.unit||''}` : ''}</span></div>))}</div>)}
             <div className="flex flex-col gap-1.5 pl-10">
               {doneS.length > 0 && !phase.allDone && (<div className="text-[11px] text-gray-400 dark:text-gray-500 font-bold px-3 py-1.5"><Check size={11} className="inline mr-1 text-green-500" />{doneS.length} Schritt{doneS.length !== 1 ? 'e' : ''} erledigt</div>)}
-              {pendS.map(step => { const isA = step.state==='active'||step.state==='soft_done'; const isL = step.state==='locked'; const isR = step.state==='ready'; return (
+              {pendS.map(step => { const isA = step.state==='active'||step.state==='soft_done'; const isL = step.state==='locked'; const isR = step.state==='ready'; const sRem = isA ? stepRemaining(step) : null; return (
                 <div key={step.globalIdx} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl transition-all ${isA ? 'border-2 border-[#8B7355] bg-gradient-to-br from-[#FFFDF9] to-[#FAF7F2] dark:from-gray-800 dark:to-gray-800' : isR ? 'border border-dashed border-[#D4C9B8] dark:border-gray-600 bg-white dark:bg-gray-800' : isL ? 'border border-[#F0EBE3] dark:border-gray-700 bg-white/50 dark:bg-gray-800/30 opacity-40' : 'border border-[#F0EBE3] dark:border-gray-700 bg-white dark:bg-gray-800'}`}>
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${isA ? 'bg-[#8B7355] animate-pulse' : isR ? 'bg-amber-400' : 'bg-gray-200 dark:bg-gray-600'}`} />
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${step.type==='Backen' ? 'bg-red-500 text-white' : step.type==='Aktion'||step.type==='Kneten' ? 'bg-[#8B7355] text-white' : 'bg-[#F5F0E8] dark:bg-gray-700 text-[#8B7355]'} ${isL ? 'opacity-50' : ''}`}>{step.type}</span>
                   <span className={`text-[12px] flex-1 leading-snug ${isL ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>{step.instruction}</span>
-                  <span className={`text-[11px] font-bold flex-shrink-0 ${isA && remaining ? 'text-[#8B7355]' : 'text-gray-300 dark:text-gray-600'}`}>{isA && remaining ? formatCountdown(remaining) : formatStepDuration(step)}</span>
+                  <span className={`text-[11px] font-bold flex-shrink-0 ${isA && sRem ? 'text-[#8B7355]' : 'text-gray-300 dark:text-gray-600'}`}>{isA && sRem ? formatCountdown(sRem) : formatStepDuration(step)}</span>
                 </div>); })}
             </div>
           </div>); })}
