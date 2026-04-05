@@ -287,7 +287,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700 transition-colors duration-200">
 
 {/* HERO IMAGE */}
-<div className="print-hero relative h-96 w-full rounded-t-[2rem] overflow-hidden">
+<div className="print-hero relative h-96 w-full rounded-[2rem] overflow-hidden">
   <div
     className="absolute inset-0"
     style={{
