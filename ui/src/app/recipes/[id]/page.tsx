@@ -284,7 +284,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="print-card-wrapper min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
-      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700 transition-colors duration-200">
+      <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl border border-gray-100 dark:border-gray-700 transition-colors duration-200" style={{ overflow: 'clip' }}>
 
         {/* HERO IMAGE */}
         <div className="print-hero relative h-96 w-full" style={{ borderRadius: '2rem 2rem 0 0', overflow: 'clip' }}>
