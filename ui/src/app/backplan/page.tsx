@@ -105,7 +105,30 @@ export default function BackplanPage() {
 
       {sessions.length > 1 && (<div className="bg-white dark:bg-gray-800 border-b border-[#F0EBE3] dark:border-gray-700"><div className="max-w-3xl mx-auto px-4 py-3"><p className="text-[10px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600 mb-2">{sessions.length} aktive Backpläne</p><div className="flex gap-2 overflow-x-auto pb-1">{sessions.map((s, idx) => { const p = getProgress(s.timeline || []); const isAct = idx === activeIdx; return (<button key={s.id} onClick={() => setActiveIdx(idx)} className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all ${isAct ? 'bg-[#8B7355] border-[#8B7355] text-white shadow-md' : 'bg-[#FAFAF9] dark:bg-gray-700 border-[#F0EBE3] dark:border-gray-600'}`}><img src={s.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=100'} className="w-8 h-8 rounded-lg object-cover" alt="" /><div className="text-left min-w-0"><div className={`text-[12px] font-extrabold truncate max-w-[130px] ${isAct ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>{s.title}</div><div className={`text-[10px] font-bold ${isAct ? 'text-white/70' : 'text-[#8B7355]'}`}>{Math.round(p * 100)}%</div></div></button>); })}</div></div></div>)}
 
-      <div className="sticky top-0 z-30 bg-[#FDFCFB]/95 dark:bg-gray-900/95 backdrop-blur-xl border-b border-[#F0EBE3] dark:border-gray-700"><div className="max-w-3xl mx-auto px-4 pt-4 pb-3"><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-3"><Link href="/" className="p-2 rounded-xl hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors"><ChevronLeft size={18} className="text-gray-400 dark:text-gray-500" /></Link><img src={session.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=200'} className="w-10 h-10 rounded-xl object-cover" alt="" /><div><h1 className="text-[16px] font-extrabold tracking-tight leading-tight text-gray-900 dark:text-gray-100">{session.title}</h1><p className="text-[12px] text-[#8B7355] font-bold flex items-center gap-1"><Clock size={11} />{projectedEnd ? `Fertig um ~${formatSmartTime(projectedEnd)} Uhr` : 'Berechne...'}</p></div></div><button onClick={() => setFinishModalId(session.id)} className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-[11px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">Fertig</button></div><div className="flex gap-[2px]">{timeline.map((step, i) => { const w = totalDuration > 0 ? (step.duration / totalDuration) * 100 : 0; const d = step.state === 'done'; const a = step.state === 'active' || step.state === 'soft_done'; return <div key={i} className={`h-1 rounded-full transition-all duration-500 ${d ? '' : ''}`} style={{ flex: `${w} 0 0%`, background: d ? '#8B7355' : a ? `linear-gradient(90deg, #8B7355 ${timerProgress*100}%, #E8E2D8 ${timerProgress*100}%)` : step.state === 'ready' ? '#D4C9B8' : '#E8E2D8' }} />; })}</div></div></div>
+      <div className="sticky top-0 z-30 bg-[#FDFCFB]/95 dark:bg-gray-900/95 backdrop-blur-xl border-b border-[#F0EBE3] dark:border-gray-700"><div className="max-w-3xl mx-auto px-4 pt-4 pb-3"><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-3"><Link href="/" className="p-2 rounded-xl hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors"><ChevronLeft size={18} className="text-gray-400 dark:text-gray-500" /></Link><img src={session.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=200'} className="w-10 h-10 rounded-xl object-cover" alt="" /><div><h1 className="text-[16px] font-extrabold tracking-tight leading-tight text-gray-900 dark:text-gray-100">{session.title}</h1><p className="text-[12px] text-[#8B7355] font-bold flex items-center gap-1"><Clock size={11} />{projectedEnd ? `Fertig um ~${formatSmartTime(projectedEnd)} Uhr` : 'Berechne...'}</p></div></div><button onClick={() => setFinishModalId(session.id)} className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-[11px] font-bold border border-green-100 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">Fertig</button></div><div className="flex flex-col gap-[5px]">
+  {sortedPhases.map((phase) => {
+    const { done, total } = getPhaseProgress(timeline, phase.name);
+    const pct = total > 0 ? done / total : 0;
+    const isDone = pct === 1;
+    const isActive = phase.hasActive;
+    const isLocked = phase.allLocked;
+    return (
+      <div key={phase.name} className="flex items-center gap-2">
+        <span className={`text-[10px] w-[72px] flex-shrink-0 truncate font-bold ${isDone ? 'text-[#5a4a3a] dark:text-[#6a5a4a]' : isActive ? 'text-[#c4a070]' : 'text-gray-400 dark:text-gray-600'}`}>
+          {phase.name}
+        </span>
+        <div className="flex-1 h-[3px] rounded-full bg-[#2a2a2a] dark:bg-gray-700 overflow-hidden">
+          {isDone && <div className="h-full w-full rounded-full bg-[#4a3a2a] dark:bg-[#5a4a3a]" />}
+          {isActive && <div className="h-full rounded-full bg-[#c4a070] animate-pulse" style={{ width: `${pct * 100}%` }} />}
+          {!isDone && !isActive && !isLocked && <div className="h-full rounded-full bg-[#8B7355]/40" style={{ width: `${pct * 100}%` }} />}
+        </div>
+        <span className={`text-[10px] w-5 text-right flex-shrink-0 font-bold ${isDone ? 'text-[#5a4a3a] dark:text-[#6a5a4a]' : isActive ? 'text-[#c4a070]' : 'text-gray-600 dark:text-gray-700'}`}>
+          {isDone ? '✓' : isLocked ? '—' : `${Math.round(pct * 100)}%`}
+        </span>
+      </div>
+    );
+  })}
+</div></div></div>
 
       <div className="max-w-3xl mx-auto px-4 pt-4">
 
