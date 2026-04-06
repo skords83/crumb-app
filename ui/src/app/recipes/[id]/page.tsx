@@ -545,11 +545,48 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
-      <PlanModal
-        isOpen={showPlanModal}
-        onClose={() => setShowPlanModal(false)}
-        recipe={recipe}
-      />
+<PlanModal
+  isOpen={showPlanModal}
+  onClose={() => setShowPlanModal(false)}
+  recipe={recipe}
+  onConfirm={async (plannedAt, multiplier, timeline) => {
+    try {
+      let timelineToSave = timeline?.length > 0 ? timeline : null;
+
+      if (!timelineToSave) {
+        try {
+          const nightRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}/plan-night`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+            body: JSON.stringify({ nightWindow: { start: '22:00', end: '06:30' }, targetEndTime: plannedAt }),
+          });
+          if (nightRes.ok) {
+            const nightData = await nightRes.json();
+            if (nightData.viable && nightData.plan?.length > 0) timelineToSave = nightData.plan;
+          }
+        } catch {}
+      }
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+        body: JSON.stringify({
+          planned_at: plannedAt,
+          planned_timeline: timelineToSave,
+          multiplier,
+        }),
+      });
+
+      if (res.ok) {
+        setShowPlanModal(false);
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
+        }).then(r => r.json()).then(data => setRecipe(data));
+        router.refresh();
+      }
+    } catch (err) { console.error(err); }
+  }}
+/>
 
       {showDeleteConfirm && (
         <DeleteConfirmModal

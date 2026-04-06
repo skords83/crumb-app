@@ -110,7 +110,8 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS planned_at TIMESTAMP WITHOUT TIME ZONE,
       ADD COLUMN IF NOT EXISTS planned_timeline JSONB,
       ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Sonstiges';`;
+      ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Sonstiges',
+      ADD COLUMN IF NOT EXISTS multiplier NUMERIC(5,2) DEFAULT 1;`;
 
   // planned_at: TIMESTAMP WITH TIME ZONE → WITHOUT TIME ZONE
   // Konvertiert bestehende UTC-Werte nach Serverzeit (Europe/Berlin).
@@ -933,7 +934,7 @@ app.delete('/api/recipes/:id', async (req, res) => {
 
 app.patch('/api/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  const { is_favorite, planned_at, planned_timeline } = req.body;
+  const { is_favorite, planned_at, planned_timeline, multiplier } = req.body;
   try {
     let result;
     if (planned_at !== undefined) {
@@ -966,9 +967,9 @@ app.patch('/api/recipes/:id', async (req, res) => {
       }
 
       result = await pool.query(
-        "UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 RETURNING *",
-        [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, id, req.user.userId]
-      );
+  "UPDATE recipes SET planned_at=$1, planned_timeline=$2, multiplier=$3 WHERE id=$4 AND user_id=$5 RETURNING *",
+  [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, multiplier ?? 1, id, req.user.userId]
+);
     } else if (is_favorite !== undefined) {
       result = await pool.query(
         "UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *",
