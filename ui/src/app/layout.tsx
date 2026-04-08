@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
+import { Outfit, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 import './print.css'; 
 import { AuthProvider } from "@/context/AuthContext";
@@ -11,6 +11,13 @@ import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
+});
+
+const dmSerif = DM_Serif_Display({
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["normal", "italic"],
+  variable: "--font-dm-serif",
 });
 
 export const metadata: Metadata = {
@@ -59,7 +66,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${outfit.variable} font-sans transition-colors duration-200`} suppressHydrationWarning={true}>
+      <body className={`${outfit.variable} ${dmSerif.variable} font-sans transition-colors duration-200`} suppressHydrationWarning={true}>
         <ServiceWorkerRegistration />
         <AuthProvider>
           <ProtectedRoute>
