@@ -310,32 +310,83 @@ export default function Navigation() {
 
   return (
     <>
-      {/* ── DESKTOP HEADER ── */}
-      <header className="hidden md:block fixed top-0 left-0 right-0 z-50">
-        <div className="bg-[#0F172A] text-white px-8 py-5 flex justify-between items-center border-b border-white/[0.07]">
-          <div className="flex items-center gap-3">
-            <h1 className="text-[1.65rem] leading-none tracking-tight text-[#F5EDD8]" style={{ fontFamily: 'var(--font-dm-serif), serif' }}>
-            crumb<span className="inline-block w-[5px] h-[5px] rounded-full bg-[#C4A484] ml-[3px] mb-[5px] align-bottom" />
-            </h1>
+{/* ── DESKTOP HEADER ── */}
+<header className="hidden md:block fixed top-0 left-0 right-0 z-50">
+  <div className="bg-[#0F172A] border-b border-white/[0.07] px-8 flex items-center justify-between">
+
+    {/* Links: Wordmark + Nav */}
+    <div className="flex items-center gap-8">
+      <h1 className="py-4 text-[1.65rem] leading-none tracking-tight text-[#F5EDD8] flex items-end"
+        style={{ fontFamily: 'var(--font-dm-serif), serif' }}>
+        crumb<span className="inline-block w-[5px] h-[5px] rounded-full bg-[#C4A484] ml-[3px] mb-[5px]" />
+      </h1>
+
+      <nav className="flex">
+        {allNavItems.map((item) => {
+          const isActive = pathname === item.href;
+          const isSpecial = item.href === '/backplan';
+          return (
+            <Link key={item.href} href={item.href}
+              className={`flex items-center gap-2.5 px-5 py-5 text-sm font-medium transition-all relative ${
+                isActive
+                  ? 'text-[#C4A484]'
+                  : isSpecial
+                    ? 'text-orange-400 hover:text-orange-300 font-bold'
+                    : 'text-white/40 hover:text-white/75'
+              }`}>
+              <div className="relative">
+                <item.icon size={16} strokeWidth={isActive ? 2.5 : 2}
+                  className={isSpecial && !isActive ? 'drop-shadow-[0_0_8px_rgba(234,88,12,0.4)]' : ''} />
+                {isSpecial && !isActive && (
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+                  </span>
+                )}
+              </div>
+              {item.name}
+              {isActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C4A484]" />}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+
+    {/* Rechts: Backplan-Indikator, Install, User-Menu */}
+    <div className="flex items-center gap-4">
+      {hasActivePlan && (
+        <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse border border-white/10">
+          <div className="w-2 h-2 bg-orange-400 rounded-full" />
+          <span className="text-white/70">Backvorgang läuft</span>
+        </div>
+      )}
+      {canInstall && (
+        <button onClick={install} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 transition-colors text-white/60 hover:text-white text-xs font-bold">
+          <Download size={14} /> App installieren
+        </button>
+      )}
+      <button onClick={toggleTheme} className="p-2 rounded-full bg-white/10 hover:bg-white/15 transition-colors">
+        {darkMode ? <Sun size={18} className="text-white/60" /> : <Moon size={18} className="text-white/60" />}
+      </button>
+
+      {/* User Menu */}
+      <div className="relative">
+        <button onClick={() => setShowUserMenu(!showUserMenu)}
+          className="flex items-center gap-2 p-2 rounded-full bg-white/10 hover:bg-white/15 transition-colors">
+          <div className="w-6 h-6 rounded-full bg-[#C4A484]/30 border border-[#C4A484]/40 flex items-center justify-center text-[#C4A484] text-xs font-bold">
+            {user?.username ? user.username.slice(0, 2).toUpperCase() : '?'}
           </div>
-
-          <div className="flex items-center gap-4">
-            {StatusBadge}
-            {canInstall && (
-              <button onClick={install} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold">
-                <Download size={14} /> App installieren
-              </button>
-            )}
-
-            {/* User Menu */}
-            <div className="relative">
-              <button onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors">
-                <div className="w-6 h-6 rounded-full bg-[#8B7355] flex items-center justify-center text-white text-xs font-bold">
-                  {user?.username ? user.username.slice(0, 2).toUpperCase() : '?'}
-                </div>
-                <ChevronDown size={14} className="text-white" />
-              </button>
+          <ChevronDown size={14} className="text-white/40" />
+        </button>
+        {showUserMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+            <div className="absolute right-0 mt-2 w-60 bg-gray-900 rounded-xl shadow-xl border border-white/10 py-2 z-50">
+              <div className="px-4 py-2 border-b border-white/10">
+                <p className="text-sm font-bold text-white/90">{user?.username || 'Benutzer'}</p>
+                <p className="text-xs text-white/40">{user?.email}</p>
+              </div>
+              {/* Rest des User-Menus bleibt unverändert */}
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
