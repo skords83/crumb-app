@@ -326,7 +326,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
             </div>
             <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
-              className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/15 dark:bg-[#8B7355]/25 text-[#6B5340] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/30 dark:border-[#8B7355]/40 hover:bg-[#8B7355] hover:text-white transition-all"
+              className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/12 dark:bg-[#C4A484]/15 text-[#6B5340] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/25 dark:border-[#C4A484]/30 hover:bg-[#8B7355] hover:text-white dark:hover:bg-[#C4A484]/30 transition-all"
             >
               <Clock size={13} /> Planen
             </button>
