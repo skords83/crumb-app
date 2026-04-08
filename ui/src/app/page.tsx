@@ -21,12 +21,12 @@ const SORT_OPTIONS = [
 
 // Primärkategorien — exklusiv, direkte DB-Spalte
 const PRIMARY_CATEGORIES = [
-  { id: 'alle',      label: 'Alle' },
-  { id: 'brot',      label: 'Brot' },
-  { id: 'broetchen', label: 'Brötchen' },
-  { id: 'pizza',     label: 'Pizza & Fladen' },
-  { id: 'suesses',   label: 'Süßes Gebäck' },
-  { id: 'cracker',   label: 'Knäcke & Cracker' },
+  { id: 'alle',      label: 'Alle',            icon: '✦' },
+  { id: 'brot',      label: 'Brot',            icon: '🍞' },
+  { id: 'broetchen', label: 'Brötchen',        icon: '🥐' },
+  { id: 'pizza',     label: 'Pizza & Fladen',  icon: '🍕' },
+  { id: 'suesses',   label: 'Süßes Gebäck',   icon: '🧇' },
+  { id: 'cracker',   label: 'Knäcke & Cracker', icon: '🫙' },
 ];
 
 function HomePageContent() {
@@ -209,7 +209,7 @@ function HomePageContent() {
                 placeholder="Brot, Mehl oder Zutat suchen..."
                 value={inputValue}
                 onChange={(e) => handleSearchInput(e.target.value)}
-                className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 dark:focus:border-[#8B7355]/60 transition-all text-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-[#C4A484]/20 py-4 pl-14 pr-8 rounded-2xl shadow-sm outline-none focus:border-[#8B7355]/40 dark:focus:border-[#C4A484]/40 transition-all text-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
               />
             </div>
 
@@ -217,7 +217,7 @@ function HomePageContent() {
             <div className="relative" ref={sortMenuRef}>
               <button
                 onClick={() => setShowSortMenu(v => !v)}
-                className="flex items-center gap-2 px-4 py-4 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm text-sm font-bold text-gray-500 dark:text-gray-400 hover:border-gray-200 dark:hover:border-gray-600 transition-all whitespace-nowrap"
+                className="flex items-center gap-2 px-4 py-4 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-[#C4A484]/20 rounded-2xl shadow-sm text-sm font-bold text-gray-500 dark:text-[#C4A484]/70 hover:border-gray-200 dark:hover:border-[#C4A484]/40 transition-all whitespace-nowrap"
               >
                 <ArrowUpDown size={16} />
                 <span className="hidden sm:inline">{activeSortLabel}</span>
@@ -254,6 +254,7 @@ function HomePageContent() {
                     : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm'
                 }`}
               >
+                <span className="text-sm leading-none">{cat.icon}</span>
                 {cat.label}
                 {allRecipes.length > 0 && (
                   <span className={`text-xs font-normal px-1.5 py-0.5 rounded-full ${
