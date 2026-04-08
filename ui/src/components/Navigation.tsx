@@ -312,16 +312,11 @@ export default function Navigation() {
     <>
       {/* ── DESKTOP HEADER ── */}
       <header className="hidden md:block fixed top-0 left-0 right-0 z-50">
-        <div className="bg-[#8B7355] text-white px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 border-2 border-white/30 rounded-full flex items-center justify-center bg-white/10 overflow-hidden">
-              <img src="/logo.png" alt="Crumb Logo" className="w-11 h-11 object-contain" />
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-2xl font-black tracking-[-0.05em] text-white leading-none uppercase">Crumb</h1>
-              <div className="h-[2px] w-full bg-white/30 mt-1 rounded-full" />
-              <p className="text-[10px] font-medium tracking-[0.3em] text-white/80 uppercase mt-1">Perfect Bread, Perfect Timing</p>
-            </div>
+        <div className="bg-[#0F172A] text-white px-8 py-5 flex justify-between items-center border-b border-white/[0.07]">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[1.65rem] leading-none tracking-tight text-[#F5EDD8]" style={{ fontFamily: 'var(--font-dm-serif), serif' }}>
+            crumb<span className="inline-block w-[5px] h-[5px] rounded-full bg-[#C4A484] ml-[3px] mb-[5px] align-bottom" />
+            </h1>
           </div>
 
           <div className="flex items-center gap-4">
@@ -552,17 +547,17 @@ export default function Navigation() {
           </div>
         </div>
 
-        <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 flex">
+        <nav className="bg-[#0F172A] border-b border-white/[0.07] px-8 flex">
           {allNavItems.map((item) => {
             const isActive = pathname === item.href;
             const isSpecial = item.href === '/backplan';
             return (
               <Link key={item.href} href={item.href}
                 className={`flex items-center gap-3 px-6 py-4 text-sm font-medium transition-all relative group ${
-                  isActive ? 'text-[#8B7355]' : isSpecial
-                    ? 'text-orange-600 hover:text-orange-700 font-bold'
-                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}>
+  isActive ? 'text-[#C4A484]' : isSpecial
+    ? 'text-orange-400 hover:text-orange-300 font-bold'
+    : 'text-white/40 hover:text-white/75'
+}`}>
                 <div className="relative">
                   <item.icon size={20} strokeWidth={isActive ? 2.5 : 2}
                     className={isSpecial && !isActive ? 'drop-shadow-[0_0_8px_rgba(234,88,12,0.4)]' : ''} />
@@ -574,7 +569,7 @@ export default function Navigation() {
                   )}
                 </div>
                 {item.name}
-                {isActive && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#8B7355]" />}
+                {isActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C4A484]" />}
               </Link>
             );
           })}
