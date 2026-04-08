@@ -577,28 +577,36 @@ export default function Navigation() {
       </header>
 
       {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-        <div className="flex items-center justify-around h-16 pb-safe">
-          {allNavItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.href} href={item.href}
-                className={`flex flex-col items-center gap-1 transition-colors px-4 ${
-                  isActive ? 'text-[#8B7355]' : item.href === '/backplan' ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'
-                }`}>
-                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-bold uppercase tracking-tighter">{item.name}</span>
-              </Link>
-            );
-          })}
-          {canInstall && (
-            <button onClick={install} className="flex flex-col items-center gap-1 text-[#8B7355] px-4">
-              <Download size={22} strokeWidth={2} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Installieren</span>
-            </button>
-          )}
-        </div>
-      </nav>
+<nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0F172A] border-t border-white/[0.07]">
+  <div className="flex items-center justify-around h-16 pb-safe">
+    {allNavItems.map((item) => {
+      const isActive = pathname === item.href;
+      return (
+        <Link key={item.href} href={item.href}
+          className={`flex flex-col items-center gap-1 transition-colors px-4 ${
+            isActive ? 'text-[#C4A484]' : item.href === '/backplan' ? 'text-orange-400' : 'text-white/35'
+          }`}>
+          <div className="relative">
+            <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+            {item.href === '/backplan' && !isActive && (
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-medium">{item.name}</span>
+        </Link>
+      );
+    })}
+    {canInstall && (
+      <button onClick={install} className="flex flex-col items-center gap-1 text-[#8B7355] px-4">
+        <Download size={22} strokeWidth={2} />
+        <span className="text-[10px] font-bold uppercase tracking-tighter">Installieren</span>
+      </button>
+    )}
+  </div>
+</nav>
     </>
   );
 }
