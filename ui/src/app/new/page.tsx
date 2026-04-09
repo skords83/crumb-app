@@ -53,12 +53,14 @@ function ImportLoadingOverlay() {
   return (
     <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl z-10 flex flex-col items-center justify-center gap-4">
       <Loader2 size={36} className="text-[#8B7355] animate-spin" />
-      <p className="text-sm font-semibold text-[#8B7355] animate-in fade-in duration-300 key-[msgIndex]">
+      <p className="text-sm font-semibold text-[#8B7355] animate-in fade-in duration-300">
         {IMPORT_MESSAGES[msgIndex]}
       </p>
       <div className="flex gap-1.5 mt-1">
         {IMPORT_MESSAGES.map((_, i) => (
-          <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i <= msgIndex ? 'bg-[#8B7355] w-4' : 'bg-gray-200 dark:bg-gray-600 w-1.5'}`} />
+          <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${
+            i <= msgIndex ? 'bg-[#8B7355] w-4' : 'bg-[#D6C9B4] dark:bg-gray-600 w-1.5'
+          }`} />
         ))}
       </div>
     </div>
@@ -214,55 +216,99 @@ export default function NewRecipePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] dark:bg-gray-900 p-4 md:p-8 text-[#2d2d2d] dark:text-gray-100 font-sans pb-32 transition-colors duration-200">
+    <div className="min-h-screen bg-[#F5F0E8] dark:bg-gray-900 p-4 md:p-8 text-[#2C1A0E] dark:text-gray-100 font-sans pb-32 transition-colors duration-200">
       <div className="max-w-5xl mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white mb-6 font-medium text-sm transition-colors">
+
+        <Link href="/" className="inline-flex items-center gap-2 text-[#A68B6A] dark:text-gray-400 hover:text-[#2C1A0E] dark:hover:text-white mb-6 font-medium text-sm transition-colors">
           <ArrowLeft size={18} /> Zurück zur Bibliothek
         </Link>
 
-        <div className="bg-[#f1f1f1] dark:bg-gray-800 p-1.5 rounded-2xl inline-flex w-full mb-8 border border-gray-200 dark:border-gray-700">
-          <button type="button" onClick={() => { setActiveTab('import'); setShowEditor(false); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${activeTab === 'import' && !showEditor ? 'bg-white dark:bg-gray-700 shadow-sm text-[#8B7355]' : 'text-gray-500 dark:text-gray-400'}`}>
+        {/* Tab-Switcher */}
+        <div className="bg-[#EDE5D6] dark:bg-gray-800 p-1.5 rounded-2xl inline-flex w-full mb-8 border border-[#D6C9B4] dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('import'); setShowEditor(false); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${
+              activeTab === 'import' && !showEditor
+                ? 'bg-white dark:bg-gray-700 shadow-sm text-[#8B7355]'
+                : 'text-[#A68B6A] dark:text-gray-400 hover:text-[#5C3D1E] dark:hover:text-gray-200'
+            }`}>
             <LinkIcon size={18} /> Von URL importieren
           </button>
-          <button type="button" onClick={() => { setShowEditor(true); setActiveTab('manual'); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${showEditor && activeTab === 'manual' ? 'bg-white dark:bg-gray-700 shadow-sm text-[#8B7355]' : 'text-gray-500 dark:text-gray-400'}`}>
+          <button
+            type="button"
+            onClick={() => { setShowEditor(true); setActiveTab('manual'); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${
+              showEditor && activeTab === 'manual'
+                ? 'bg-white dark:bg-gray-700 shadow-sm text-[#8B7355]'
+                : 'text-[#A68B6A] dark:text-gray-400 hover:text-[#5C3D1E] dark:hover:text-gray-200'
+            }`}>
             <Edit3 size={18} /> Manuell erstellen
           </button>
         </div>
 
+        {/* Import-Panel */}
         {!showEditor && activeTab === 'import' && (
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl p-10 border border-gray-200 dark:border-gray-700 shadow-sm text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl p-10 border border-[#D6C9B4] dark:border-gray-700 shadow-sm text-center animate-in fade-in zoom-in-95 duration-300">
             {isImporting && <ImportLoadingOverlay />}
             <h2 className="text-3xl font-bold text-[#8B7355] mb-2 text-center">Rezept importieren</h2>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mb-8 font-medium">Link vom Plötzblog, Homebaking.at, Marcel Paa oder Jo Semola einfügen.</p>
+            <p className="text-sm text-[#A68B6A] dark:text-gray-500 mb-8 font-medium">
+              Link vom Plötzblog, Homebaking.at, Marcel Paa oder Jo Semola einfügen.
+            </p>
+
+            {/* URL Import */}
             <div className="flex flex-col md:flex-row gap-3 max-w-2xl mx-auto">
               <input
-                type="text" placeholder="https://..." value={importUrl} onChange={(e) => { setImportUrl(e.target.value); setUrlError(null); }}
+                type="text"
+                placeholder="https://..."
+                value={importUrl}
+                onChange={(e) => { setImportUrl(e.target.value); setUrlError(null); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAutoImport()}
-                className="flex-1 px-4 py-3 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl outline-none focus:border-[#8B7355] transition-all"
+                className="flex-1 px-4 py-3 border border-[#D6C9B4] dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl outline-none focus:border-[#8B7355]/50 transition-all placeholder:text-[#C4A484] dark:placeholder:text-gray-500"
               />
-              <button onClick={handleAutoImport} disabled={isImporting || !importUrl} className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md">
+              <button
+                onClick={handleAutoImport}
+                disabled={isImporting || !importUrl}
+                className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md"
+              >
                 {isImporting ? "Lädt..." : "Importieren"}
               </button>
             </div>
-            {urlError && <div className="max-w-2xl mx-auto text-left"><ErrorBanner message={urlError} onDismiss={() => setUrlError(null)} /></div>}
-            <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-sm text-gray-400 dark:text-gray-500 mb-4 font-medium">Oder HTML-Datei hochladen</p>
+            {urlError && (
+              <div className="max-w-2xl mx-auto text-left">
+                <ErrorBanner message={urlError} onDismiss={() => setUrlError(null)} />
+              </div>
+            )}
+
+            {/* HTML Upload */}
+            <div className="mt-8 pt-8 border-t border-[#EDE5D6] dark:border-gray-700">
+              <p className="text-sm text-[#A68B6A] dark:text-gray-500 mb-4 font-medium">Oder HTML-Datei hochladen</p>
               <div className="flex flex-col md:flex-row gap-3 max-w-2xl mx-auto">
                 <input type="file" accept=".html,.htm" onChange={handleFileChange} className="hidden" id="html-file-input" />
-                <label htmlFor="html-file-input" className="flex-1 px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-left cursor-pointer hover:border-[#8B7355] transition-colors text-gray-500 dark:text-gray-400">
+                <label
+                  htmlFor="html-file-input"
+                  className="flex-1 px-4 py-3 border-2 border-dashed border-[#D6C9B4] dark:border-gray-600 rounded-xl text-left cursor-pointer hover:border-[#8B7355] transition-colors text-[#A68B6A] dark:text-gray-400"
+                >
                   {selectedFile ? selectedFile.name : "HTML-Datei auswählen..."}
                 </label>
-                <button onClick={handleHtmlImport} disabled={!selectedFile || isImporting} className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md">
+                <button
+                  onClick={handleHtmlImport}
+                  disabled={!selectedFile || isImporting}
+                  className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md"
+                >
                   {isImporting ? "Lädt..." : "Hochladen"}
                 </button>
               </div>
-              {fileError && <div className="max-w-2xl mx-auto text-left"><ErrorBanner message={fileError} onDismiss={() => setFileError(null)} /></div>}
+              {fileError && (
+                <div className="max-w-2xl mx-auto text-left">
+                  <ErrorBanner message={fileError} onDismiss={() => setFileError(null)} />
+                </div>
+              )}
             </div>
           </div>
         )}
 
+        {/* Editor */}
         {showEditor && (
           <>
             <RecipeForm
