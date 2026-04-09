@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Dark Mode aktivieren - v4 Style */
 @variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -8,13 +7,25 @@
   --radius-4xl: 2rem;
   --color-brand-orange: #f59e0b;
   --color-brand-dark: #111827;
+
+  /* ── Crumb Warm Cream System ── */
+  --color-cream-bg:        #F5F0E8;
+  --color-cream-surf:      #EDE5D6;
+  --color-cream-card:      #FFFFFF;
+  --color-cream-border:    #D6C9B4;
+  --color-cream-hover:     #E5DAC8;
+  --color-brown-900:       #2C1A0E;
+  --color-brown-700:       #5C3D1E;
+  --color-brown-500:       #8B7355;
+  --color-brown-400:       #A68B6A;
+  --color-brown-300:       #C4A484;
+  --color-brown-200:       #D6C9B4;
 }
 
-/* Force color-scheme */
 @layer base {
   html {
     color-scheme: light;
-    background-color: #F4F7F8;
+    background-color: var(--color-cream-bg);
   }
 
   html.dark {
@@ -30,15 +41,70 @@
 }
 
 @layer components {
-  .recipe-card-shadow {
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  /* ── Surfaces ── */
+  .crumb-page {
+    background-color: var(--color-cream-bg);
+  }
+  .dark .crumb-page {
+    background-color: #0F172A;
   }
 
-  /* Dark Mode: Dunklerer Schatten */
-  .dark .recipe-card-shadow {
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
+  .crumb-surface {
+    background-color: var(--color-cream-surf);
+    border-color: var(--color-cream-border);
+  }
+  .dark .crumb-surface {
+    background-color: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.07);
   }
 
+  .crumb-card {
+    background-color: var(--color-cream-card);
+    border-color: var(--color-cream-border);
+  }
+  .dark .crumb-card {
+    background-color: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.07);
+  }
+
+  /* ── Text ── */
+  .crumb-text-primary {
+    color: var(--color-brown-900);
+  }
+  .dark .crumb-text-primary {
+    color: rgba(255,255,255,0.9);
+  }
+
+  .crumb-text-secondary {
+    color: var(--color-brown-700);
+  }
+  .dark .crumb-text-secondary {
+    color: rgba(255,255,255,0.55);
+  }
+
+  .crumb-text-muted {
+    color: var(--color-brown-400);
+  }
+  .dark .crumb-text-muted {
+    color: rgba(255,255,255,0.3);
+  }
+
+  .crumb-text-accent {
+    color: var(--color-brown-500);
+  }
+  .dark .crumb-text-accent {
+    color: #C4A484;
+  }
+
+  /* ── Borders ── */
+  .crumb-border {
+    border-color: var(--color-cream-border);
+  }
+  .dark .crumb-border {
+    border-color: rgba(255,255,255,0.07);
+  }
+
+  /* ── Brand Button ── */
   .btn-crumb-primary {
     @apply bg-[#8B7355] text-white py-3 px-6 rounded-xl font-bold
            border-2 border-[#8B7355] transition-all duration-200
@@ -47,21 +113,39 @@
   }
 
   .btn-crumb-secondary {
-    @apply bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-300 py-3 px-6 rounded-xl font-bold
-           border border-gray-200 dark:border-gray-600 transition-colors duration-150
-           hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-100
+    background-color: var(--color-cream-card);
+    color: var(--color-brown-700);
+    border-color: var(--color-cream-border);
+    @apply py-3 px-6 rounded-xl font-bold border
+           transition-colors duration-150
            flex items-center justify-center gap-2;
+  }
+  .dark .btn-crumb-secondary {
+    background-color: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.6);
+    border-color: rgba(255,255,255,0.1);
+  }
+  .btn-crumb-secondary:hover {
+    border-color: var(--color-brown-400);
+    color: var(--color-brown-900);
+  }
+  .dark .btn-crumb-secondary:hover {
+    border-color: rgba(255,255,255,0.25);
+    color: rgba(255,255,255,0.9);
+  }
+
+  /* ── Recipe Card Shadow ── */
+  .recipe-card-shadow {
+    box-shadow: 0 2px 12px -2px rgba(92,61,30,0.08);
+  }
+  .dark .recipe-card-shadow {
+    box-shadow: 0 4px 20px -2px rgba(0,0,0,0.3);
   }
 }
 
-/* Shimmer animation for loading skeletons */
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .animate-shimmer {

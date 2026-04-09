@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
-import './print.css'; 
+import './print.css';
 import { AuthProvider } from "@/context/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Navigation from "../components/Navigation";
@@ -44,7 +44,6 @@ export default function RootLayout({
     <html lang="de">
       <head>
         <meta name="theme-color" content="#8B7355" />
-        {/* iOS Splash Screens */}
         <link rel="apple-touch-startup-image" href="/icons/splash-1284x2778.png"
           media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" />
         <link rel="apple-touch-startup-image" href="/icons/splash-1170x2532.png"
@@ -66,7 +65,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${outfit.variable} ${dmSerif.variable} font-sans transition-colors duration-200`} suppressHydrationWarning={true}>
+      <body
+        className={`${outfit.variable} ${dmSerif.variable} font-sans transition-colors duration-200`}
+        suppressHydrationWarning={true}
+      >
         <ServiceWorkerRegistration />
         <AuthProvider>
           <ProtectedRoute>
