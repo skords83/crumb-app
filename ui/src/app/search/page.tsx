@@ -63,7 +63,6 @@ function hasLongActionFreeGap(sections: any[], minGapMinutes: number): boolean {
   phaseNames.forEach(n => calcStart(n));
   const totalDur = Math.max(...phaseNames.map(n => startO[n] || 0));
 
-  // Aktionszeitpunkte sammeln (relativ zum Planstart)
   const actions: { start: number; end: number }[] = [];
   sections.forEach((section: any) => {
     const sectionRelStart = totalDur - (startO[section.name] || 0);
@@ -79,7 +78,6 @@ function hasLongActionFreeGap(sections: any[], minGapMinutes: number): boolean {
   if (actions.length === 0) return true;
   actions.sort((a, b) => a.start - b.start);
 
-  // Größte Lücke zwischen aufeinanderfolgenden Aktionen
   let maxGap = actions[0].start;
   for (let i = 1; i < actions.length; i++) {
     const gap = actions[i].start - actions[i - 1].end;
@@ -146,7 +144,7 @@ const FILTER_GROUPS = [
 ];
 
 const PAGE_SIZE = 12;
-const WORK_GAP_MINUTES = 8 * 60; // 8h aktionsfreie Lücke
+const WORK_GAP_MINUTES = 8 * 60;
 
 function SearchPageContent() {
   const router = useRouter();
@@ -160,7 +158,6 @@ function SearchPageContent() {
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
 
-  // URL-State
   const searchQuery = searchParams.get('q') ?? '';
   const activeCategory = searchParams.get('category') ?? '';
   const activeFilters = useMemo(() => {
@@ -208,10 +205,13 @@ function SearchPageContent() {
   const activeCount = (activeCategory ? 1 : 0) + activeFilters.length + activeClientFilters.length;
   const clearAll = () => updateParams({ category: null, filter: null, client: null, q: null });
 
-  // Suche ausführen (Server-Filter)
   const fetchRecipes = useCallback(async () => {
     const hasAnyFilter = searchQuery || activeCategory || activeFilters.length > 0 || activeClientFilters.length > 0;
-    if (!hasAnyFilter) { setRecipes([]); setHasSearched(false); return; }
+    if (!hasAnyFilter) {
+      setRecipes([]);
+      setHasSearched(false);
+      return;
+    }
 
     setIsLoading(true);
     setLoadError(false);
@@ -220,11 +220,6 @@ function SearchPageContent() {
     if (searchQuery) params.set('q', searchQuery);
     if (activeCategory) params.set('category', activeCategory);
     if (activeFilters.length > 0) params.set('filter', activeFilters.join(','));
-    // Client-Filter allein (z.B. nur "Arbeitstauglich" ohne andere Filter)
-    // → alle Rezepte laden, dann clientseitig filtern
-    if (!searchQuery && !activeCategory && activeFilters.length === 0 && activeClientFilters.length > 0) {
-      // Kein Server-Filter → alle laden
-    }
 
     try {
       const res = await fetch(
@@ -244,7 +239,6 @@ function SearchPageContent() {
 
   useEffect(() => { fetchRecipes(); }, [fetchRecipes]);
 
-  // Client-seitiger Filter: Arbeitstauglich
   const filteredRecipes = useMemo(() => {
     let result = recipes;
     if (activeClientFilters.includes('Arbeitstauglich')) {
@@ -253,7 +247,6 @@ function SearchPageContent() {
     return result;
   }, [recipes, activeClientFilters]);
 
-  // Debounced Suche bei Texteingabe
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearchInput = (value: string) => {
     setInputValue(value);
@@ -281,49 +274,55 @@ function SearchPageContent() {
   const hasMore = visibleCount < filteredRecipes.length;
 
   return (
-    <div className="min-h-screen bg-[#F4F7F8] dark:bg-[#0F172A] text-gray-900 dark:text-gray-100 transition-colors duration-200">
+    <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] text-[#2C1A0E] dark:text-white transition-colors duration-200">
       <div className="max-w-6xl mx-auto px-6 pt-8 pb-20">
         <div className="flex flex-col lg:flex-row gap-8">
 
           {/* ── FILTER SIDEBAR ── */}
           <aside className="w-full lg:w-64 flex-shrink-0">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 sticky top-40">
+            <div className="bg-white dark:bg-gray-800/60 rounded-2xl border border-[#D6C9B4] dark:border-white/[0.07] shadow-sm p-6 sticky top-28">
 
+              {/* Suchfeld */}
               <div className="relative mb-6">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#C4A484] dark:text-gray-500" size={16} />
                 <input
                   type="text"
                   placeholder="Suchbegriff..."
                   value={inputValue}
                   onChange={(e) => handleSearchInput(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 py-2.5 pl-9 pr-8 rounded-xl outline-none focus:border-[#8B7355]/40 text-sm text-gray-800 dark:text-gray-100 placeholder:text-gray-400"
+                  className="w-full bg-[#F5F0E8] dark:bg-white/[0.05] border border-[#D6C9B4] dark:border-white/[0.08] py-2.5 pl-9 pr-8 rounded-xl outline-none focus:border-[#8B7355]/50 dark:focus:border-[#C4A484]/40 text-sm text-[#2C1A0E] dark:text-white/80 placeholder:text-[#C4A484] dark:placeholder:text-white/25 transition-colors"
                 />
                 {inputValue && (
-                  <button onClick={() => { setInputValue(''); updateParams({ q: null }); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button
+                    onClick={() => { setInputValue(''); updateParams({ q: null }); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#C4A484] hover:text-[#8B7355] dark:text-white/30 dark:hover:text-white/60 transition-colors"
+                  >
                     <X size={14} />
                   </button>
                 )}
               </div>
 
+              {/* Filter-Gruppen */}
               <div className="space-y-6">
                 {FILTER_GROUPS.map(group => (
                   <div key={group.id}>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#C4A484] dark:text-white/25 mb-3">
                       {group.label}
                       {'exclusive' in group && group.exclusive && (
-                        <span className="text-[9px] font-normal normal-case tracking-normal text-gray-300 dark:text-gray-600 ml-1">(eine)</span>
+                        <span className="text-[9px] font-normal normal-case tracking-normal text-[#D6C9B4] dark:text-white/15 ml-1">(eine)</span>
                       )}
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {group.filters.map(f => (
-                        <label key={f.id} className="flex items-center gap-3 cursor-pointer group">
+                        <label key={f.id} className="flex items-start gap-3 cursor-pointer group">
                           <div
                             onClick={() => toggleFilter(f.type, f.value)}
-                            className={`w-4 h-4 rounded flex items-center justify-center border-2 flex-shrink-0 transition-all ${
+                            className={`w-4 h-4 rounded flex items-center justify-center border-2 flex-shrink-0 mt-0.5 transition-all ${
                               isChecked(f.type, f.value)
-                                ? f.type === 'client' ? 'bg-emerald-600 border-emerald-600' : 'bg-[#8B7355] border-[#8B7355]'
-                                : 'border-gray-300 dark:border-gray-600 group-hover:border-[#8B7355]/50'
+                                ? f.type === 'client'
+                                  ? 'bg-emerald-600 border-emerald-600'
+                                  : 'bg-[#8B7355] border-[#8B7355]'
+                                : 'border-[#D6C9B4] dark:border-white/20 group-hover:border-[#8B7355]/50 dark:group-hover:border-[#C4A484]/50'
                             }`}
                           >
                             {isChecked(f.type, f.value) && (
@@ -334,15 +333,19 @@ function SearchPageContent() {
                           </div>
                           <span
                             onClick={() => toggleFilter(f.type, f.value)}
-                            className={`text-sm transition-colors ${
+                            className={`text-sm leading-tight transition-colors ${
                               isChecked(f.type, f.value)
-                                ? f.type === 'client' ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-[#8B7355] dark:text-[#C4A484] font-bold'
-                                : 'text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+                                ? f.type === 'client'
+                                  ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                                  : 'text-[#8B7355] dark:text-[#C4A484] font-bold'
+                                : 'text-[#5C3D1E] dark:text-white/55 group-hover:text-[#2C1A0E] dark:group-hover:text-white/80'
                             }`}
                           >
                             {f.label}
                             {f.value === 'Arbeitstauglich' && (
-                              <span className="block text-[10px] font-normal text-gray-400 dark:text-gray-500 leading-tight">mind. 8h ohne Aktion</span>
+                              <span className="block text-[10px] font-normal text-[#C4A484] dark:text-white/25 leading-tight mt-0.5">
+                                mind. 8h ohne Aktion
+                              </span>
                             )}
                           </span>
                         </label>
@@ -355,7 +358,7 @@ function SearchPageContent() {
               {activeCount > 0 && (
                 <button
                   onClick={clearAll}
-                  className="mt-6 w-full py-2 text-xs font-bold text-gray-400 hover:text-red-500 dark:hover:text-red-400 border border-gray-200 dark:border-gray-600 rounded-xl transition-colors"
+                  className="mt-6 w-full py-2 text-xs font-bold text-[#A68B6A] dark:text-white/30 hover:text-red-500 dark:hover:text-red-400 border border-[#D6C9B4] dark:border-white/10 rounded-xl transition-colors hover:border-red-300 dark:hover:border-red-500/30"
                 >
                   Alle Filter zurücksetzen ({activeCount})
                 </button>
@@ -366,6 +369,7 @@ function SearchPageContent() {
           {/* ── ERGEBNISSE ── */}
           <div className="flex-1 min-w-0">
 
+            {/* Aktive Filter-Tags */}
             {activeCount > 0 && (
               <div className="flex flex-wrap gap-2 mb-6">
                 {activeCategory && (
@@ -386,7 +390,7 @@ function SearchPageContent() {
                         const next = activeFilters.filter(f => f !== id);
                         updateParams({ filter: next.length > 0 ? next.join(',') : null });
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-gray-700 dark:bg-gray-200 text-white dark:text-gray-900 text-xs font-bold rounded-full cursor-pointer hover:bg-gray-600 dark:hover:bg-gray-300 transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-[#5C3D1E] dark:bg-gray-200 text-white dark:text-gray-900 text-xs font-bold rounded-full cursor-pointer hover:bg-[#2C1A0E] dark:hover:bg-gray-300 transition-colors"
                     >
                       {label ?? id}
                       <X size={11} />
@@ -415,10 +419,10 @@ function SearchPageContent() {
             {isLoading ? (
               <RecipeGridSkeleton count={6} />
             ) : loadError ? (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-16 text-center border border-gray-100 dark:border-gray-700">
-                <RefreshCw className="text-gray-300 dark:text-gray-600 mx-auto mb-4" size={40} />
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Laden fehlgeschlagen</h2>
-                <p className="text-gray-400 dark:text-gray-500 mt-2 mb-6 text-sm">Prüfe deine Verbindung und versuch es nochmal.</p>
+              <div className="bg-white dark:bg-gray-800/60 rounded-2xl p-16 text-center border border-[#D6C9B4] dark:border-white/[0.07]">
+                <RefreshCw className="text-[#D6C9B4] dark:text-white/20 mx-auto mb-4" size={40} />
+                <h2 className="text-xl font-bold text-[#2C1A0E] dark:text-white/90">Laden fehlgeschlagen</h2>
+                <p className="text-[#A68B6A] dark:text-white/40 mt-2 mb-6 text-sm">Prüfe deine Verbindung und versuch es nochmal.</p>
                 <button
                   onClick={fetchRecipes}
                   className="inline-flex items-center gap-2 bg-[#8B7355] text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-[#766248] transition-colors"
@@ -427,15 +431,15 @@ function SearchPageContent() {
                 </button>
               </div>
             ) : !hasSearched ? (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-16 text-center border border-gray-100 dark:border-gray-700">
-                <Search className="text-gray-200 dark:text-gray-700 mx-auto mb-4" size={40} />
-                <p className="text-gray-400 dark:text-gray-500 font-medium">Filter wählen oder Suchbegriff eingeben</p>
+              <div className="bg-white dark:bg-gray-800/60 rounded-2xl p-16 text-center border border-[#D6C9B4] dark:border-white/[0.07]">
+                <Search className="text-[#D6C9B4] dark:text-white/15 mx-auto mb-4" size={40} />
+                <p className="text-[#A68B6A] dark:text-white/40 font-medium">Filter wählen oder Suchbegriff eingeben</p>
               </div>
             ) : filteredRecipes.length === 0 ? (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-16 text-center border border-gray-100 dark:border-gray-700">
-                <BookOpen className="text-gray-200 dark:text-gray-700 mx-auto mb-4" size={40} />
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Keine Rezepte gefunden</h2>
-                <p className="text-gray-400 dark:text-gray-500 mt-2 text-sm">
+              <div className="bg-white dark:bg-gray-800/60 rounded-2xl p-16 text-center border border-[#D6C9B4] dark:border-white/[0.07]">
+                <BookOpen className="text-[#D6C9B4] dark:text-white/15 mx-auto mb-4" size={40} />
+                <h2 className="text-xl font-bold text-[#2C1A0E] dark:text-white/90">Keine Rezepte gefunden</h2>
+                <p className="text-[#A68B6A] dark:text-white/40 mt-2 text-sm">
                   {activeClientFilters.includes('Arbeitstauglich') && recipes.length > 0
                     ? `${recipes.length} Rezepte passen auf die Server-Filter, aber keines hat eine 8h+ aktionsfreie Lücke.`
                     : 'Versuch andere Filter oder einen anderen Suchbegriff.'
@@ -444,10 +448,10 @@ function SearchPageContent() {
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-400 dark:text-gray-500 mb-4 font-medium">
+                <p className="text-sm text-[#A68B6A] dark:text-white/35 mb-4 font-medium">
                   {filteredRecipes.length} {filteredRecipes.length === 1 ? 'Rezept' : 'Rezepte'} gefunden
                   {activeClientFilters.includes('Arbeitstauglich') && filteredRecipes.length !== recipes.length && (
-                    <span className="text-emerald-500"> (von {recipes.length} gefiltert)</span>
+                    <span className="text-emerald-600 dark:text-emerald-500"> (von {recipes.length} gefiltert)</span>
                   )}
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -464,7 +468,7 @@ function SearchPageContent() {
                   <div className="py-8 flex justify-center">
                     <button
                       onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
-                      className="px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-500 dark:text-gray-400 hover:border-[#8B7355]/40 transition-colors"
+                      className="px-6 py-2.5 bg-white dark:bg-white/[0.05] border border-[#D6C9B4] dark:border-white/10 rounded-xl text-sm font-bold text-[#8B7355] dark:text-white/40 hover:border-[#8B7355]/40 dark:hover:border-white/25 transition-colors"
                     >
                       Mehr laden
                     </button>

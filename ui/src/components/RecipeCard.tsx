@@ -35,12 +35,10 @@ const getRecipeLabels = (recipe: any) => {
   const anstellgutName = (anstellgutZutat?.name || "").toLowerCase();
   const getSauerteigLabel = (): { label: string; color: string } => {
     if (hatLM) return { label: "Lievito Madre", color: st };
-    if (anstellgutName) {
-      if (anstellgutName.includes("roggen")) return { label: "Roggensauerteig", color: st };
-      if (anstellgutName.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
-      if (anstellgutName.includes("weizen")) return { label: "Weizensauerteig", color: st };
-      if (anstellgutName.includes("hafer")) return { label: "Hafersauerteig", color: st };
-    }
+    if (anstellgutName.includes("roggen")) return { label: "Roggensauerteig", color: st };
+    if (anstellgutName.includes("dinkel")) return { label: "Dinkelsauerteig", color: st };
+    if (anstellgutName.includes("weizen")) return { label: "Weizensauerteig", color: st };
+    if (anstellgutName.includes("hafer")) return { label: "Hafersauerteig", color: st };
     if (content.includes("roggensauerteig")) return { label: "Roggensauerteig", color: st };
     if (content.includes("dinkelsauerteig")) return { label: "Dinkelsauerteig", color: st };
     if (content.includes("weizensauerteig")) return { label: "Weizensauerteig", color: st };
@@ -80,7 +78,7 @@ function BadgeRow({ labels }: { labels: { label: string; color: string }[] }) {
       const firstTop = children[0].offsetTop;
       let count = 0;
       for (const child of children) { if (child.offsetTop === firstTop) count++; else break; }
-      if (count < labels.length && count > 0) { const lv = children[count - 1]; if (lv.offsetLeft + lv.offsetWidth + 6 + 42 > row.offsetWidth) count = Math.max(1, count - 1); }
+      if (count < labels.length && count > 0) { const lv = children[count-1]; if (lv.offsetLeft + lv.offsetWidth + 6 + 42 > row.offsetWidth) count = Math.max(1, count-1); }
       setVisibleCount(Math.max(1, count));
     });
   }, [labels.length]);
@@ -120,78 +118,77 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
   const subtitle = subtitleParts.join(' · ');
 
   return (
+    // FIX: Nur ein einziger Border — direkt auf dem Link-Element
     <Link
       href={`/recipes/${recipe.id}`}
-      className="rounded-2xl overflow-hidden flex flex-col relative border transition-all duration-300 hover:shadow-md group active:scale-[0.98]"
+      className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-[#D6C9B4] dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[#8B7355]/40 dark:hover:border-gray-600 group active:scale-[0.98]"
       style={{
         borderLeft: catStyle ? `3px solid ${catStyle.borderColor}` : undefined,
-        borderColor: undefined,
       }}
     >
-      <div className="bg-white dark:bg-gray-800 border border-[#D6C9B4] dark:border-gray-700 rounded-2xl overflow-hidden flex flex-col flex-1 hover:border-[#8B7355]/30 dark:hover:border-gray-600 transition-colors">
+      {/* Bild */}
+      <div className="h-56 overflow-hidden relative rounded-b-2xl bg-[#EDE5D6] dark:bg-gray-700">
+        <Image src={imageSrc} alt={recipe.title} fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImgLoaded(true)} />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent pointer-events-none" />
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
+          className="absolute top-3 right-3 z-10 p-2 bg-white/35 backdrop-blur-sm rounded-xl transition-transform hover:scale-110">
+          <Heart size={16} className={recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'} />
+        </button>
+        <div className="absolute bottom-0 inset-x-0 z-10 px-4 pb-4">
+          <h3 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">{recipe.title}</h3>
+        </div>
+      </div>
 
-        {/* Bild */}
-        <div className="h-56 overflow-hidden relative rounded-b-2xl bg-[#EDE5D6] dark:bg-gray-700">
-          <Image src={imageSrc} alt={recipe.title} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent pointer-events-none" />
-          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
-            className="absolute top-3 right-3 z-10 p-2 bg-white/35 backdrop-blur-sm rounded-xl transition-transform hover:scale-110">
-            <Heart size={16} className={recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'} />
-          </button>
-          <div className="absolute bottom-0 inset-x-0 z-10 px-4 pb-4">
-            <h3 className="text-xl font-black text-white leading-tight line-clamp-2 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">{recipe.title}</h3>
+      {/* Card Body */}
+      <div className="px-4 pb-4 pt-3 flex-1 flex flex-col gap-3">
+        {subtitle && (
+          <p className="text-[11px] font-medium leading-none -mb-1">
+            <span className="dark:hidden" style={{ color: catStyle ? catStyle.textLight : '#A68B6A' }}>{subtitle}</span>
+            <span className="hidden dark:inline" style={{ color: catStyle ? catStyle.textDark : '#C4A484' }}>{subtitle}</span>
+          </p>
+        )}
+
+        <BadgeRow labels={labels} />
+
+        {/* Stats Bar */}
+        <div className="flex items-center bg-[#F5F0E8] dark:bg-white/[0.04] rounded-xl px-2 py-2">
+          <div className="flex items-center justify-center gap-1.5 flex-[2] min-w-0">
+            <Clock size={14} className="text-[#8B7355] flex-shrink-0" />
+            <span className="text-[13px] font-medium text-[#5C3D1E] dark:text-gray-200 leading-none truncate">{stats.timeString}</span>
           </div>
+          <div className="w-px self-center h-3.5 bg-[#D6C9B4] dark:bg-white/20 flex-shrink-0" />
+          <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
+            <Layers size={14} className="text-[#8B7355] flex-shrink-0" />
+            <span className="text-[13px] font-medium text-[#5C3D1E] dark:text-gray-200 leading-none">{stats.totalSteps}</span>
+          </div>
+          {stats.hydration !== null && hydrationColor && (
+            <>
+              <div className="w-px self-center h-3.5 bg-[#D6C9B4] dark:bg-white/20 flex-shrink-0" />
+              <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
+                <Droplets size={14} className="flex-shrink-0 dark:hidden" style={{ color: hydrationColor.light }} />
+                <Droplets size={14} className="flex-shrink-0 hidden dark:block" style={{ color: hydrationColor.dark }} />
+                <span className="text-[13px] font-bold leading-none dark:hidden" style={{ color: hydrationColor.light }}>{stats.hydration}%</span>
+                <span className="text-[13px] font-bold leading-none hidden dark:inline" style={{ color: hydrationColor.dark }}>{stats.hydration}%</span>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Card Body */}
-        <div className="px-4 pb-4 pt-3 flex-1 flex flex-col gap-3">
-          {subtitle && (
-            <p className="text-[11px] font-medium leading-none -mb-1">
-              <span className="dark:hidden" style={{ color: catStyle ? catStyle.textLight : '#A68B6A' }}>{subtitle}</span>
-              <span className="hidden dark:inline" style={{ color: catStyle ? catStyle.textDark : '#C4A484' }}>{subtitle}</span>
-            </p>
-          )}
-
-          <BadgeRow labels={labels} />
-
-          {/* Stats Bar */}
-          <div className="flex items-center bg-[#F5F0E8] dark:bg-white/[0.04] rounded-xl px-2 py-2">
-            <div className="flex items-center justify-center gap-1.5 flex-[2] min-w-0">
-              <Clock size={14} className="text-[#8B7355] flex-shrink-0" />
-              <span className="text-[13px] font-medium text-[#5C3D1E] dark:text-gray-200 leading-none truncate">{stats.timeString}</span>
-            </div>
-            <div className="w-px self-center h-3.5 bg-[#D6C9B4] dark:bg-white/20 flex-shrink-0" />
-            <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
-              <Layers size={14} className="text-[#8B7355] flex-shrink-0" />
-              <span className="text-[13px] font-medium text-[#5C3D1E] dark:text-gray-200 leading-none">{stats.totalSteps}</span>
-            </div>
-            {stats.hydration !== null && hydrationColor && (
-              <>
-                <div className="w-px self-center h-3.5 bg-[#D6C9B4] dark:bg-white/20 flex-shrink-0" />
-                <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
-                  <Droplets size={14} className="flex-shrink-0 dark:hidden" style={{ color: hydrationColor.light }} />
-                  <Droplets size={14} className="flex-shrink-0 hidden dark:block" style={{ color: hydrationColor.dark }} />
-                  <span className="text-[13px] font-bold leading-none dark:hidden" style={{ color: hydrationColor.light }}>{stats.hydration}%</span>
-                  <span className="text-[13px] font-bold leading-none hidden dark:inline" style={{ color: hydrationColor.dark }}>{stats.hydration}%</span>
-                </div>
-              </>
-            )}
+        {/* Buttons */}
+        <div className="grid grid-cols-2 gap-4 mt-auto">
+          <div className="flex items-center justify-center gap-2 py-2.5 bg-[#EDE5D6] dark:bg-gray-700/50 text-[#5C3D1E] dark:text-gray-300 rounded-xl text-xs font-bold border border-[#D6C9B4] dark:border-gray-600 hover:bg-[#D6C9B4] dark:hover:bg-gray-700 transition-colors">
+            <Utensils size={13} /> Details
           </div>
-
-          {/* Buttons */}
-          <div className="grid grid-cols-2 gap-4 mt-auto">
-            <div className="flex items-center justify-center gap-2 py-2.5 bg-[#EDE5D6] dark:bg-gray-700/50 text-[#5C3D1E] dark:text-gray-300 rounded-xl text-xs font-bold border border-[#D6C9B4] dark:border-gray-600 hover:bg-[#D6C9B4] dark:hover:bg-gray-700 transition-colors">
-              <Utensils size={13} /> Details
-            </div>
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
-              className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/10 dark:bg-[#C4A484]/10 text-[#8B7355] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/25 dark:border-[#C4A484]/25 hover:bg-[#8B7355] hover:text-white dark:hover:bg-[#C4A484]/25 transition-all"
-            >
-              <Clock size={13} /> Planen
-            </button>
-          </div>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
+            className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/10 dark:bg-[#C4A484]/10 text-[#8B7355] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/25 dark:border-[#C4A484]/25 hover:bg-[#8B7355] hover:text-white dark:hover:bg-[#C4A484]/25 transition-all"
+          >
+            <Clock size={13} /> Planen
+          </button>
         </div>
       </div>
     </Link>
