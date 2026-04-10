@@ -33,9 +33,12 @@ export default function LoginPage() {
 
         {/* Logo + Titel */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 border-2 border-[#D6C9B4] dark:border-white/30 rounded-full flex items-center justify-center bg-[#EDE5D6] dark:bg-white/10 overflow-hidden mx-auto mb-4">
-            <img src="/logo.png" alt="Crumb Logo" className="w-11 h-11 object-contain" />
-          </div>
+          <div
+  className="text-4xl text-[#2C1A0E] dark:text-[#F5EDD8] flex items-end justify-center mx-auto mb-4"
+  style={{ fontFamily: 'var(--font-dm-serif), serif' }}
+>
+  crumb<span className="inline-block w-[7px] h-[7px] rounded-full bg-[#8B7355] dark:bg-[#C4A484] ml-[4px] mb-[7px]" />
+</div>
           <h1 className="text-2xl font-bold text-[#2C1A0E] dark:text-gray-100">
             {isRegister ? 'Konto erstellen' : 'Willkommen zurück'}
           </h1>
