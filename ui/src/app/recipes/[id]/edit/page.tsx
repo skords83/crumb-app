@@ -154,16 +154,16 @@ export default function EditRecipePage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f8f9fa] dark:bg-gray-900">
-      <Loader2 className="animate-spin text-[#8B4513]" size={40} />
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8] dark:bg-gray-900">
+      <Loader2 className="animate-spin text-[#8B7355]" size={40} />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] dark:bg-gray-900 p-4 md:p-8 pb-32 transition-colors duration-200">
+    <div className="min-h-screen bg-[#F5F0E8] dark:bg-gray-900 p-4 md:p-8 pb-32 transition-colors duration-200">
       <div className="max-w-5xl mx-auto">
         {isSaving ? (
-          <span className="inline-flex items-center gap-2 text-gray-300 dark:text-gray-600 mb-8 text-sm font-medium cursor-not-allowed">
+          <span className="inline-flex items-center gap-2 text-[#C4A484] dark:text-gray-600 mb-8 text-sm font-medium cursor-not-allowed">
             <ArrowLeft size={18} /> Abbrechen & Zurück
           </span>
         ) : (
@@ -172,7 +172,7 @@ export default function EditRecipePage() {
               if (isDirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
               router.push(`/recipes/${recipeId}`);
             }}
-            className="inline-flex items-center gap-2 text-gray-400 dark:text-gray-500 hover:text-[#8B4513] dark:hover:text-[#A08060] mb-8 text-sm font-medium transition-colors group"
+            className="inline-flex items-center gap-2 text-[#A68B6A] dark:text-gray-500 hover:text-[#5C3D1E] dark:hover:text-[#A08060] mb-8 text-sm font-medium transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
             Abbrechen & Zurück
