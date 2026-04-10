@@ -138,7 +138,7 @@ function sectionsToPhases(doughSections: any[]): PhaseSegment[] {
   return phases;
 }
 
-const TEIG_COLORS: Record<string, string> = { s0: "#f0a500", s1: "#60a5fa", s2: "#a78bfa", s3: "#34d399" };
+const TEIG_COLORS: Record<string, string> = { s0: "#C4A484", s1: "#60a5fa", s2: "#a78bfa", s3: "#34d399" };
 
 interface TimelineProps { phases: PhaseSegment[]; gaps: GapSegment[]; planDur: number; planOffset: number; scenario: Scenario; sleepFrom: number; sleepTo: number; onOffsetChange: (newAbsStart: number) => void; snapMin: number; }
 
@@ -181,17 +181,17 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     ctx.restore(); ctx.globalAlpha = 1;
     ctx.fillStyle = "rgba(22,27,34,0.85)"; ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.fill();
     ctx.save(); ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.clip();
-    for (const p of phases) { if (p.type !== "rest") continue; const x = blockX + (p.start / planDur) * blockW; const pw = Math.max(2, (p.dur / planDur) * blockW); ctx.fillStyle = TEIG_COLORS[p.teig] || "#f0a500"; ctx.globalAlpha = 0.12; ctx.fillRect(x, TT + 2, pw, TH - 4); }
+    for (const p of phases) { if (p.type !== "rest") continue; const x = blockX + (p.start / planDur) * blockW; const pw = Math.max(2, (p.dur / planDur) * blockW); ctx.fillStyle = TEIG_COLORS[p.teig] || "#C4A484"; ctx.globalAlpha = 0.12; ctx.fillRect(x, TT + 2, pw, TH - 4); }
     ctx.globalAlpha = 1;
     for (const g of gaps) { if (g.end - g.start < 10) continue; const x = blockX + (g.start / planDur) * blockW; const gw = (g.end - g.start) / planDur * blockW; ctx.fillStyle = "rgba(34,197,94,0.10)"; ctx.fillRect(x, TT + 1, gw, TH - 2); ctx.fillStyle = "rgba(34,197,94,0.25)"; ctx.fillRect(x, TT + 1, 0.5, TH - 2); ctx.fillRect(x + gw - 0.5, TT + 1, 0.5, TH - 2); }
-    for (const p of phases) { if (p.type === "rest") continue; const x = blockX + (p.start / planDur) * blockW; const rawW = (p.dur / planDur) * blockW; const pw = Math.max(4, rawW); ctx.fillStyle = TEIG_COLORS[p.teig] || "#f0a500"; ctx.globalAlpha = 0.9; ctx.fillRect(x, TT + 3, pw, TH - 6); if (rawW < 6) { ctx.globalAlpha = 1; ctx.strokeStyle = TEIG_COLORS[p.teig] || "#f0a500"; ctx.lineWidth = 0.5; ctx.strokeRect(x, TT + 3, pw, TH - 6); } ctx.globalAlpha = 1; }
+    for (const p of phases) { if (p.type === "rest") continue; const x = blockX + (p.start / planDur) * blockW; const rawW = (p.dur / planDur) * blockW; const pw = Math.max(4, rawW); ctx.fillStyle = TEIG_COLORS[p.teig] || "#C4A484"; ctx.globalAlpha = 0.9; ctx.fillRect(x, TT + 3, pw, TH - 6); if (rawW < 6) { ctx.globalAlpha = 1; ctx.strokeStyle = TEIG_COLORS[p.teig] || "#C4A484"; ctx.lineWidth = 0.5; ctx.strokeRect(x, TT + 3, pw, TH - 6); } ctx.globalAlpha = 1; }
     ctx.restore();
-    ctx.strokeStyle = isDragging ? "rgba(240,165,0,0.9)" : "rgba(240,165,0,0.55)"; ctx.lineWidth = isDragging ? 1.5 : 1;
+    ctx.strokeStyle = isDragging ? "rgba(196,164,132,0.9)" : "rgba(196,164,132,0.55)"; ctx.lineWidth = isDragging ? 1.5 : 1;
     ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.stroke();
     const gx = blockX + blockW / 2, gy = TT + TH / 2;
-    ctx.strokeStyle = isDragging ? "rgba(240,165,0,0.7)" : "rgba(255,255,255,0.22)"; ctx.lineWidth = 1.5; ctx.lineCap = "round";
+    ctx.strokeStyle = isDragging ? "rgba(196,164,132,0.7)" : "rgba(255,255,255,0.22)"; ctx.lineWidth = 1.5; ctx.lineCap = "round";
     [-4, 0, 4].forEach((dx) => { ctx.beginPath(); ctx.moveTo(gx + dx, gy - 4); ctx.lineTo(gx + dx, gy + 4); ctx.stroke(); });
-    ctx.font = "9px sans-serif"; ctx.fillStyle = "#f0a500"; ctx.textBaseline = "bottom";
+    ctx.font = "9px sans-serif"; ctx.fillStyle = "#C4A484"; ctx.textBaseline = "bottom";
     ctx.textAlign = "left"; ctx.fillText(minToHHMM(planOffset), blockX + 2, TT);
     ctx.textAlign = "right"; ctx.fillText(minToHHMM(planOffset + planDur), blockX + blockW - 2, TT);
     const step = totalMin <= 180 ? 30 : totalMin <= 480 ? 60 : totalMin <= 960 ? 120 : 240;
@@ -312,7 +312,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   if (!isOpen || !recipe) return null;
 
-  const iconColor = (id: Scenario) => scenario === id ? "#f0a500" : "#8b949e";
+  const iconColor = (id: Scenario) => scenario === id ? "#C4A484" : "#8b949e";
   const scenarioCards: { id: Scenario; label: string; sub: string; note: string }[] = [
     { id: "jetzt", label: dayOffset === 0 ? "Jetzt" : "Frühestmöglich", sub: dayOffset === 0 ? "so früh wie möglich" : `fertig um ${minToHHMM(morgenZiel)}`, note: "" },
     { id: "abend", label: "Abend", sub: `fertig um ${minToHHMM(abendZiel)}`, note: abendNote },
@@ -360,40 +360,40 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             <div className="grid grid-cols-7 gap-1 mb-3">
               {Array.from({ length: 7 }, (_, i) => { const isActive = dayOffset === i; const info = dayPickerInfo(i); return (
                 <button key={i} onClick={() => { setDayOffset(i); const newStart = computeScenarioStart(scenario === "manuell" ? "jetzt" : scenario, i); setPlanOffset(newStart); if (scenario === "manuell") setScenario("jetzt"); setManualHint(""); }}
-                  className={`flex flex-col items-center py-1.5 rounded-lg border transition-colors ${isActive ? "bg-[rgba(240,165,0,0.12)] border-[#f0a500]" : "bg-[#21262d] border-[#30363d] hover:border-[#484f58]"}`}>
-                  <span className={`text-[10px] font-semibold leading-tight ${isActive ? "text-[#f0a500]" : "text-[#8b949e]"}`}>{info.label}</span>
-                  <span className={`text-[9px] leading-tight ${isActive ? "text-[#f0a500]/70" : "text-[#484f58]"}`}>{info.date}</span>
+                  className={`flex flex-col items-center py-1.5 rounded-lg border transition-colors ${isActive ? "bg-[rgba(196,164,132,0.12)] border-[#C4A484]" : "bg-[#21262d] border-[#30363d] hover:border-[#484f58]"}`}>
+                  <span className={`text-[10px] font-semibold leading-tight ${isActive ? "text-[#C4A484]" : "text-[#8b949e]"}`}>{info.label}</span>
+                  <span className={`text-[9px] leading-tight ${isActive ? "text-[#C4A484]/70" : "text-[#484f58]"}`}>{info.date}</span>
                 </button>); })}
             </div>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {scenarioCards.map((sc) => { const isActive = scenario === sc.id; const isDisabled = sc.id === "nacht" && !isNachtAvailable; const isManual = scenario === "manuell"; return (
                 <div key={sc.id} onClick={() => !isDisabled && activateScenario(sc.id)}
-                  className={["rounded-xl px-3 py-2 flex items-center gap-2.5 transition-colors select-none", isDisabled ? "bg-[#21262d] border border-[#30363d] opacity-35 cursor-not-allowed" : isActive ? "bg-[rgba(240,165,0,0.07)] border border-[#f0a500] cursor-pointer" : isManual ? "bg-[#21262d] border border-[#30363d] opacity-50 cursor-pointer hover:opacity-75 hover:border-[#484f58]" : "bg-[#21262d] border border-[#30363d] cursor-pointer hover:border-[#484f58]"].join(" ")}>
-                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? "bg-[rgba(240,165,0,0.15)]" : "bg-[#2d333b]"}`}><ScenarioIcon id={sc.id} /></div>
+                  className={["rounded-xl px-3 py-2 flex items-center gap-2.5 transition-colors select-none", isDisabled ? "bg-[#21262d] border border-[#30363d] opacity-35 cursor-not-allowed" : isActive ? "bg-[rgba(196,164,132,0.07)] border border-[#C4A484] cursor-pointer" : isManual ? "bg-[#21262d] border border-[#30363d] opacity-50 cursor-pointer hover:opacity-75 hover:border-[#484f58]" : "bg-[#21262d] border border-[#30363d] cursor-pointer hover:border-[#484f58]"].join(" ")}>
+                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? "bg-[rgba(196,164,132,0.15)]" : "bg-[#2d333b]"}`}><ScenarioIcon id={sc.id} /></div>
                   <div className="flex flex-col min-w-0">
                     <span className="text-[12px] font-semibold text-[#e6edf3] leading-snug">{sc.label}</span>
-                    <span className={`text-[10px] leading-snug ${isActive ? "text-[#f0a500]" : "text-[#8b949e]"}`}>{sc.sub}</span>
+                    <span className={`text-[10px] leading-snug ${isActive ? "text-[#C4A484]" : "text-[#8b949e]"}`}>{sc.sub}</span>
                     {sc.note && <span className={`text-[10px] leading-snug ${sc.id === "nacht" ? "text-[#f85149]" : "text-[#e3b341]"}`}>{sc.note}</span>}
                   </div>
                 </div>); })}
             </div>
             <div className="flex items-baseline justify-between mb-2">
               <div className="flex items-center gap-2">
-                <div className="flex flex-col items-start"><span className="text-base font-semibold text-[#f0a500] leading-tight">{minToHHMM(planStart)}</span><span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart)}</span></div>
+                <div className="flex flex-col items-start"><span className="text-base font-semibold text-[#C4A484] leading-tight">{minToHHMM(planStart)}</span><span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart)}</span></div>
                 <span className="text-sm text-[#484f58]">→</span>
-                <div className="flex flex-col items-start"><span className="text-base font-semibold text-[#f0a500] leading-tight">{minToHHMM(planStart + planDur)}</span><span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart + planDur)}</span></div>
+                <div className="flex flex-col items-start"><span className="text-base font-semibold text-[#C4A484] leading-tight">{minToHHMM(planStart + planDur)}</span><span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart + planDur)}</span></div>
               </div>
               <span className="text-xs text-[#484f58]">{totalHours}h {totalMins}m</span>
             </div>
             <div className="bg-[#0d1117] border border-[#30363d] rounded-lg px-3 pt-2.5 pb-2">
               <div className="flex gap-3 mb-2 flex-wrap">
-                {[...new Set(phases.map((p) => p.teig))].map((teig, i) => (<div key={teig} className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: TEIG_COLORS[teig] || "#f0a500" }} /><span className="text-[10px] text-[#8b949e]">{recipe?.dough_sections?.[i]?.name || (i === 0 ? "Hauptteig" : `Teig ${i + 1}`)}</span></div>))}
+                {[...new Set(phases.map((p) => p.teig))].map((teig, i) => (<div key={teig} className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: TEIG_COLORS[teig] || "#C4A484" }} /><span className="text-[10px] text-[#8b949e]">{recipe?.dough_sections?.[i]?.name || (i === 0 ? "Hauptteig" : `Teig ${i + 1}`)}</span></div>))}
                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: "rgba(34,197,94,0.5)" }} /><span className="text-[10px] text-[#8b949e]">Freie Zeit</span></div>
                 {scenario === "nacht" && <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: "rgba(96,130,210,0.35)", border: "0.5px solid rgba(96,130,210,0.5)" }} /><span className="text-[10px] text-[#8b949e]">Nachtruhe</span></div>}
               </div>
               <TimelineCanvas phases={phases} gaps={gaps} planDur={planDur} planOffset={planOffset} scenario={scenario} sleepFrom={sleepFrom} sleepTo={sleepTo} onOffsetChange={handleOffsetChange} snapMin={snapMin} />
               {warning && (<div className={`flex items-center gap-1.5 mt-1.5 text-[11px] ${warning.level === "error" ? "text-[#f85149]" : "text-[#e3b341]"}`}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L11 10H1L6 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/><path d="M6 5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="6" cy="8.5" r="0.6" fill="currentColor"/></svg>{warning.text}</div>)}
-              {manualHint && !warning && (<div className="flex items-center justify-center gap-1.5 mt-1.5"><span className="text-[10px] text-[#484f58]">Manuell angepasst —</span><button onClick={() => { activateScenario(scenario === "manuell" ? "jetzt" : scenario); }} className="text-[10px] text-[#f0a500] hover:text-[#f5c060] underline underline-offset-2 transition-colors">Zurücksetzen</button></div>)}
+              {manualHint && !warning && (<div className="flex items-center justify-center gap-1.5 mt-1.5"><span className="text-[10px] text-[#484f58]">Manuell angepasst —</span><button onClick={() => { activateScenario(scenario === "manuell" ? "jetzt" : scenario); }} className="text-[10px] text-[#C4A484] hover:text-[#D6B896] underline underline-offset-2 transition-colors">Zurücksetzen</button></div>)}
             </div>
           </div>
           {showFreieZeit && gaps.filter(g => g.end - g.start >= minFreieZeit).length > 0 && (
