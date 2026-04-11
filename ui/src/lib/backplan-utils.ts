@@ -24,6 +24,7 @@ export interface TimelineStep {
   state: StepState;
   start: string | null;   // ISO timestamp
   end: string | null;     // ISO timestamp
+  scheduled_start?: string | null;
   remaining: number | null; // seconds
   temperature: number | null;
   extended_by: number;

@@ -426,12 +426,67 @@ function getPendingGates(sections, stepStates) {
   return gates;
 }
 
+// ── Geplante Startzeitpunkte berechnen ──────────────────────
+// Berechnet den Backplan-Startzeitpunkt jedes Steps rückwärts von plannedAt.
+// Gibt ein Objekt { globalIdx → ISO-String } zurück.
+// Wird von buildUITimeline verwendet um scheduled_start zu befüllen.
+function buildScheduledStarts(sections, plannedAt) {
+  if (!plannedAt || !sections?.length) return {};
+  const target = new Date(plannedAt);
+  const phaseNames = sections.map(s => s.name);
+  const deps = buildDependencyGraph(sections);
+  const sectionMap = Object.fromEntries(sections.map(s => [s.name, s]));
+  const endOffsets = {}, startOffsets = {};
+
+  function calcEndOffset(name, visited = new Set()) {
+    if (name in endOffsets) return endOffsets[name];
+    if (visited.has(name)) return 0;
+    visited.add(name);
+    const dependents = phaseNames.filter(n => deps[n]?.includes(name));
+    endOffsets[name] = dependents.length === 0
+      ? 0
+      : Math.min(...dependents.map(d => calcStartOffset(d, new Set(visited))));
+    return endOffsets[name];
+  }
+
+  function calcStartOffset(name, visited = new Set()) {
+    if (name in startOffsets) return startOffsets[name];
+    const end = calcEndOffset(name, visited);
+    const dur = (sectionMap[name]?.steps || []).reduce(
+      (sum, s) => sum + (parseInt(s.duration) || 0), 0
+    );
+    startOffsets[name] = end + dur;
+    return startOffsets[name];
+  }
+
+  sections.forEach(s => calcStartOffset(s.name));
+
+  const result = {};
+  let globalIdx = 0;
+  sections.forEach(section => {
+    const offset = startOffsets[section.name] || 0;
+    const sectionStart = new Date(target.getTime() - offset * 60000);
+    let stepMoment = sectionStart.getTime();
+    (section.steps || []).forEach(step => {
+      result[globalIdx] = new Date(stepMoment).toISOString();
+      stepMoment += (parseInt(step.duration) || 0) * 60000;
+      globalIdx++;
+    });
+  });
+
+  return result;
+}
+
 // ── Timeline für UI berechnen ───────────────────────────────
-// Erzeugt eine Timeline-Struktur für das Frontend
+// Erzeugt eine Timeline-Struktur für das Frontend.
+// scheduled_start: immer der geplante Backplan-Zeitpunkt (aus plannedAt rückwärts).
+// start: der tatsächliche Startzeitpunkt (nur für active/done Steps gesetzt).
 function buildUITimeline(sections, stepStates, stepTimestamps, plannedAt) {
   const steps = flattenSteps(sections);
-  const projectedEnd = calculateProjectedEnd(sections, stepStates, stepTimestamps);
   const now = Date.now();
+
+  // Geplante Startzeitpunkte aus dem Backplan (rückwärts von plannedAt)
+  const scheduledStarts = buildScheduledStarts(sections, plannedAt);
 
   return steps.map(s => {
     const state = stepStates[s.globalIdx] || 'locked';
@@ -459,6 +514,7 @@ function buildUITimeline(sections, stepStates, stepTimestamps, plannedAt) {
       duration_max: s.duration_max,
       state,
       start,
+      scheduled_start: scheduledStarts[s.globalIdx] || null,
       end,
       remaining,
       temperature: ts.temperature || null,

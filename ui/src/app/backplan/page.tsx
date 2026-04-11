@@ -270,10 +270,10 @@ export default function BackplanPage() {
                   : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/10 dark:text-white/60'
               }`}>{activeStep.phase}</span>
               <span className="text-[11px] text-[#A68B6A] dark:text-white/30 font-bold">
-  {activeStep.start
-    ? new Date(activeStep.start) <= currentTime
-      ? `seit ${formatSmartTime(new Date(activeStep.start))}`
-      : `ab ${formatSmartTime(new Date(activeStep.start))}`
+  {activeStep.scheduled_start
+    ? new Date(activeStep.scheduled_start) <= currentTime
+      ? `seit ${formatSmartTime(new Date(activeStep.scheduled_start))}`
+      : `ab ${formatSmartTime(new Date(activeStep.scheduled_start))}`
     : ''}
 </span>
             </div>
