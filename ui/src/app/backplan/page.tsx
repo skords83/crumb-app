@@ -269,7 +269,13 @@ export default function BackplanPage() {
                   ? 'bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/30'
                   : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/10 dark:text-white/60'
               }`}>{activeStep.phase}</span>
-              <span className="text-[11px] text-[#A68B6A] dark:text-white/30 font-bold">{activeStep.start ? `seit ${formatSmartTime(new Date(activeStep.start))}` : ''}</span>
+              <span className="text-[11px] text-[#A68B6A] dark:text-white/30 font-bold">
+  {activeStep.start
+    ? new Date(activeStep.start) <= currentTime
+      ? `seit ${formatSmartTime(new Date(activeStep.start))}`
+      : `ab ${formatSmartTime(new Date(activeStep.start))}`
+    : ''}
+</span>
             </div>
             <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-white/90 mb-3 leading-relaxed">{activeStep.instruction}</p>
             {remaining !== null && remaining > 0 && activeStep.type !== 'Aktion' && activeStep.type !== 'Kneten' && (
