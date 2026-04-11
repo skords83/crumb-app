@@ -9,6 +9,7 @@ import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
 import PlanModal from "@/components/PlanModal";
 import BakeHistory from '@/components/BakeHistory';
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
+import RecipeRhythmBar from "@/components/RecipeRhythmBar";
 
 // ── BÄCKERPROZENTE ──────────────────────────────────────────
 const isFlour = (name: string) => {
@@ -442,6 +443,11 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                 ))}
               </div>
             </div>
+          )}
+
+          {/* TAGESRHYTHMUS */}
+          {recipe.dough_sections?.length > 0 && (
+            <RecipeRhythmBar doughSections={recipe.dough_sections} />
           )}
 
           {/* SKALIERUNGS-STEPPER */}
