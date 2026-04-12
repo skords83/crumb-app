@@ -87,9 +87,43 @@ export default function BackplanPage() {
     return Math.max(0, Math.round((new Date(step.end).getTime() - currentTime.getTime()) / 1000));
   }, [currentTime]);
 
-  const sortedPhases = useMemo(() => getPhases(timeline).map(name => { const steps = timeline.filter(s => s.phase === name); const { done, total } = getPhaseProgress(timeline, name); return { name, steps, done, total, hasActive: steps.some(s => s.state === 'active' || s.state === 'soft_done'), allDone: done === total, allLocked: steps.every(s => s.state === 'locked') }; }), [timeline]);
+  const sortedPhases = useMemo(() => {
+    const phases = getPhases(timeline).map(name => {
+      const steps = timeline.filter(s => s.phase === name);
+      const { done, total } = getPhaseProgress(timeline, name);
+      const hasActive = steps.some(s => s.state === 'active' || s.state === 'soft_done');
+      const allDone = done === total;
+      const allLocked = steps.every(s => s.state === 'locked');
+      // Aktiver Schritt der Phase (falls vorhanden)
+      const activePhaseStep = steps.find(s => s.state === 'active' || s.state === 'soft_done');
+      const isActiveWaiting = hasActive && activePhaseStep != null && (activePhaseStep.type === 'Warten' || activePhaseStep.type === 'Ruhen' || activePhaseStep.type === 'Kühl');
+      const isActiveAction = hasActive && !isActiveWaiting;
+      return { name, steps, done, total, hasActive, allDone, allLocked, isActiveWaiting, isActiveAction };
+    });
+    // Sortierung: Aktive Aktion → Aktive Wartet → Noch nicht gestartet → Erledigt
+    return [...phases].sort((a, b) => {
+      const rank = (p: typeof a) => p.isActiveAction ? 0 : p.isActiveWaiting ? 1 : p.allDone ? 3 : 2;
+      return rank(a) - rank(b);
+    });
+  }, [timeline]);
 
-  useEffect(() => { if (!session) return; const ap = sortedPhases.find(p => p.hasActive); if (ap) { const k = `${session.id}-${ap.name}`; setOpenIngredients(prev => { if (prev.has(k)) return prev; const n = new Set(prev); n.add(k); return n; }); } }, [session?.id, sortedPhases]);
+  useEffect(() => {
+    if (!session) return;
+    setOpenIngredients(prev => {
+      const n = new Set(prev);
+      sortedPhases.forEach(p => {
+        const k = `${session.id}-${p.name}`;
+        if (p.isActiveAction) {
+          // Aktive Aktions-Phasen: Zutaten aufklappen
+          n.add(k);
+        } else if (p.isActiveWaiting) {
+          // Aktive Warte-Phasen: Zutaten einklappen — da ist nichts zu tun
+          n.delete(k);
+        }
+      });
+      return n;
+    });
+  }, [session?.id, sortedPhases]);
   useEffect(() => { if (activeCardRef.current) setTimeout(() => activeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300); }, [session?.id]);
 
   const getSec = (name: string) => session?.dough_sections?.find((s: any) => s.name === name);
@@ -367,16 +401,23 @@ export default function BackplanPage() {
           const isIO = openIngredients.has(ik);
           const doneS = phase.steps.filter(s => s.state === 'done');
           const pendS = phase.steps.filter(s => s.state !== 'done');
+          // Aktiver Warte-Schritt dieser Phase (für kompakte Anzeige)
+          const waitStep = phase.isActiveWaiting
+            ? phase.steps.find(s => s.state === 'active' || s.state === 'soft_done')
+            : null;
+          const waitRem = waitStep ? stepRemaining(waitStep) : null;
           return (
-            <div key={pIdx} className="mb-6">
+            <div key={pIdx} className={`mb-6 ${phase.allDone ? 'opacity-50' : ''}`}>
               {/* Phasen-Header */}
               <div className="flex items-center gap-3 mb-2 px-1">
                 <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 ${
-                  phase.hasActive
+                  phase.isActiveAction
                     ? 'bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/40'
-                    : phase.allDone
-                      ? 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400'
-                      : 'bg-[#EDE5D6] text-[#C4A484] dark:bg-white/[0.06] dark:text-white/25'
+                    : phase.isActiveWaiting
+                      ? 'bg-amber-100 text-amber-600 border border-amber-300/50 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/30'
+                      : phase.allDone
+                        ? 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400'
+                        : 'bg-[#EDE5D6] text-[#C4A484] dark:bg-white/[0.06] dark:text-white/25'
                 }`}>
                   {phase.allDone ? <Check size={13} /> : pIdx + 1}
                 </span>
@@ -385,6 +426,10 @@ export default function BackplanPage() {
                   : phase.allDone ? 'text-[#A68B6A] dark:text-white/40'
                   : 'text-[#2C1A0E] dark:text-white/80'
                 }`}>{phase.name}</span>
+                {/* Warte-Timer kompakt im Header */}
+                {phase.isActiveWaiting && waitRem !== null && waitRem > 0 && (
+                  <span className="text-[12px] font-bold text-amber-600 dark:text-amber-400 tabular-nums">{formatCountdown(waitRem)}</span>
+                )}
                 <span className="text-[11px] text-[#C4A484] dark:text-white/25 font-bold">{phase.done}/{phase.total}</span>
                 {ings.length > 0 && (
                   <button onClick={() => toggleIng(ik)} className="flex items-center gap-1 text-[10px] font-bold text-[#8B7355]/70 hover:text-[#8B7355] dark:text-[#C4A484]/70 dark:hover:text-[#C4A484] transition-colors">
@@ -405,8 +450,15 @@ export default function BackplanPage() {
                 </div>
               )}
 
-              {/* Erledigte Schritte inline */}
-              {doneS.length > 0 && !phase.allDone && (
+              {/* Warte-Phase: nur kompakter Hinweis, keine volle Schritt-Liste */}
+              {phase.isActiveWaiting && waitStep && (
+                <div className="ml-10 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200/50 dark:border-amber-400/15 text-[11px] text-amber-700 dark:text-amber-400">
+                  {waitStep.instruction}
+                </div>
+              )}
+
+              {/* Erledigte Schritte inline — nur wenn Phase nicht komplett erledigt */}
+              {!phase.isActiveWaiting && doneS.length > 0 && !phase.allDone && (
                 <div className="pl-10 mb-1.5">
                   {doneS.map((step: TimelineStep) => (
                     <div key={step.globalIdx} className="flex items-center gap-2 py-0.5">
@@ -418,46 +470,48 @@ export default function BackplanPage() {
                 </div>
               )}
 
-              {/* Offene Schritte */}
-              <div className="flex flex-col gap-1.5 pl-10">
-                {pendS.map((step: TimelineStep) => {
-                  const isA = step.state === 'active' || step.state === 'soft_done';
-                  const isL = step.state === 'locked';
-                  const isR = step.state === 'ready';
-                  const sRem = isA ? stepRemaining(step) : null;
-                  return (
-                    <div key={step.globalIdx} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
-                      isA
-                        ? 'border-2 border-[#8B7355]/30 bg-[#8B7355]/[0.06] dark:border-[#C4A484]/30 dark:bg-[#C4A484]/[0.08]'
-                        : isR
-                          ? 'border border-dashed border-[#D6C9B4] dark:border-white/15 bg-[#F5F0E8] dark:bg-white/[0.03]'
-                          : isL
-                            ? 'border border-[#EDE5D6] dark:border-white/[0.04] bg-transparent opacity-40'
-                            : 'border border-[#EDE5D6] dark:border-white/[0.06] bg-white dark:bg-white/[0.02]'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
-                        isA ? 'bg-[#8B7355] dark:bg-[#C4A484] animate-pulse'
-                        : isR ? 'bg-amber-500'
-                        : 'bg-[#D6C9B4] dark:bg-white/15'
-                      }`} />
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
-                        step.type === 'Backen' ? 'bg-red-500 text-white'
-                        : step.type === 'Aktion' || step.type === 'Kneten'
-                          ? 'bg-[#8B7355]/15 text-[#8B7355] border border-[#8B7355]/20 dark:bg-[#C4A484]/20 dark:text-[#C4A484] dark:border-[#C4A484]/20'
-                          : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30'
-                      } ${isL ? 'opacity-50' : ''}`}>{step.type}</span>
-                      <span className={`text-[12px] flex-1 leading-snug ${
-                        isL ? 'text-[#C4A484] dark:text-white/20'
-                        : isA ? 'text-[#2C1A0E] dark:text-white/90'
-                        : 'text-[#5C3D1E] dark:text-white/55'
-                      }`}>{step.instruction}</span>
-                      <span className={`text-[11px] font-bold flex-shrink-0 ${
-                        isA && sRem ? 'text-[#8B7355] dark:text-[#C4A484]' : 'text-[#D6C9B4] dark:text-white/20'
-                      }`}>{isA && sRem ? formatCountdown(sRem) : formatStepDuration(step)}</span>
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Offene Schritte — bei Warte-Phasen ausgeblendet */}
+              {!phase.isActiveWaiting && (
+                <div className="flex flex-col gap-1.5 pl-10">
+                  {pendS.map((step: TimelineStep) => {
+                    const isA = step.state === 'active' || step.state === 'soft_done';
+                    const isL = step.state === 'locked';
+                    const isR = step.state === 'ready';
+                    const sRem = isA ? stepRemaining(step) : null;
+                    return (
+                      <div key={step.globalIdx} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                        isA
+                          ? 'border-2 border-[#8B7355]/30 bg-[#8B7355]/[0.06] dark:border-[#C4A484]/30 dark:bg-[#C4A484]/[0.08]'
+                          : isR
+                            ? 'border border-dashed border-[#D6C9B4] dark:border-white/15 bg-[#F5F0E8] dark:bg-white/[0.03]'
+                            : isL
+                              ? 'border border-[#EDE5D6] dark:border-white/[0.04] bg-transparent opacity-40'
+                              : 'border border-[#EDE5D6] dark:border-white/[0.06] bg-white dark:bg-white/[0.02]'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
+                          isA ? 'bg-[#8B7355] dark:bg-[#C4A484] animate-pulse'
+                          : isR ? 'bg-amber-500'
+                          : 'bg-[#D6C9B4] dark:bg-white/15'
+                        }`} />
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
+                          step.type === 'Backen' ? 'bg-red-500 text-white'
+                          : step.type === 'Aktion' || step.type === 'Kneten'
+                            ? 'bg-[#8B7355]/15 text-[#8B7355] border border-[#8B7355]/20 dark:bg-[#C4A484]/20 dark:text-[#C4A484] dark:border-[#C4A484]/20'
+                            : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30'
+                        } ${isL ? 'opacity-50' : ''}`}>{step.type}</span>
+                        <span className={`text-[12px] flex-1 leading-snug ${
+                          isL ? 'text-[#C4A484] dark:text-white/20'
+                          : isA ? 'text-[#2C1A0E] dark:text-white/90'
+                          : 'text-[#5C3D1E] dark:text-white/55'
+                        }`}>{step.instruction}</span>
+                        <span className={`text-[11px] font-bold flex-shrink-0 ${
+                          isA && sRem ? 'text-[#8B7355] dark:text-[#C4A484]' : 'text-[#D6C9B4] dark:text-white/20'
+                        }`}>{isA && sRem ? formatCountdown(sRem) : formatStepDuration(step)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
