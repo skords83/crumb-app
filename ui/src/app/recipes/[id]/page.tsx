@@ -406,9 +406,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           <ScalerBar multiplier={multiplier} onChange={setMultiplier} />
 
           {/* PHASEN LOOP – Akkordeon */}
+          {(() => {
+            const parallelCount = (recipe.dough_sections || []).filter((s: any) => s.is_parallel).length;
+            return (
           <div className="space-y-3">
             {recipe.dough_sections?.map((section: any, sIdx: number) => {
-              const isParallel = !!section.is_parallel;
+              const isParallel = !!section.is_parallel && parallelCount > 1;
               const isOpen = openSections.has(sIdx);
               const flourBase = calcFlourBase(section.ingredients || []) * multiplier;
               const stepCount = section.steps?.length ?? 0;
@@ -554,6 +557,8 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               );
             })}
           </div>
+            );
+          })()}
 
         </div>
       </div>
