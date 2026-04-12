@@ -450,14 +450,32 @@ export default function BackplanPage() {
                 </div>
               )}
 
-              {/* Warte-Phase: nur kompakter Hinweis, keine volle Schritt-Liste */}
-              {phase.isActiveWaiting && waitStep && (
-                <div className="ml-10 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200/50 dark:border-amber-400/15 text-[11px] text-amber-700 dark:text-amber-400">
-                  {waitStep.instruction}
-                </div>
-              )}
+              {/* Warte-Phase: aktiver Schritt kompakt + kommende Schritte als gedimmte Preview */}
+              {phase.isActiveWaiting && waitStep && (() => {
+                const upcomingSteps = phase.steps.filter(s => s.state !== 'done' && s.globalIdx !== waitStep.globalIdx);
+                return (
+                  <div className="flex flex-col gap-1.5 pl-10">
+                    {/* Aktiver Warte-Schritt */}
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-200/50 dark:border-amber-400/15 bg-amber-50/50 dark:bg-amber-500/5">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-amber-400 dark:bg-amber-500 animate-pulse" />
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">{waitStep.type}</span>
+                      <span className="text-[12px] flex-1 leading-snug text-[#5C3D1E] dark:text-white/70">{waitStep.instruction}</span>
+                      {waitRem !== null && waitRem > 0 && <span className="text-[11px] font-bold flex-shrink-0 text-amber-600 dark:text-amber-400 tabular-nums">{formatCountdown(waitRem)}</span>}
+                    </div>
+                    {/* Kommende Schritte als gedimmte Preview */}
+                    {upcomingSteps.map((step: TimelineStep) => (
+                      <div key={step.globalIdx} className="flex items-start gap-2.5 px-3 py-2 rounded-xl border border-[#EDE5D6] dark:border-white/[0.04] bg-transparent opacity-35">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-[#D6C9B4] dark:bg-white/15" />
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30">{step.type}</span>
+                        <span className="text-[12px] flex-1 leading-snug text-[#C4A484] dark:text-white/30">{step.instruction}</span>
+                        <span className="text-[11px] font-bold flex-shrink-0 text-[#D6C9B4] dark:text-white/15">{formatStepDuration(step)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
-              {/* Erledigte Schritte inline — nur wenn Phase nicht komplett erledigt */}
+              {/* Erledigte Schritte inline — nur wenn Phase aktiv und nicht komplett erledigt */}
               {!phase.isActiveWaiting && doneS.length > 0 && !phase.allDone && (
                 <div className="pl-10 mb-1.5">
                   {doneS.map((step: TimelineStep) => (
@@ -470,7 +488,7 @@ export default function BackplanPage() {
                 </div>
               )}
 
-              {/* Offene Schritte — bei Warte-Phasen ausgeblendet */}
+              {/* Offene Schritte — nur bei nicht-wartenden Phasen */}
               {!phase.isActiveWaiting && (
                 <div className="flex flex-col gap-1.5 pl-10">
                   {pendS.map((step: TimelineStep) => {
