@@ -426,47 +426,6 @@ function formatClusterNotification(cluster, recipeTitle) {
   };
 }
 
-  // Nächster Schritt als Ausblick
-  const nextCluster = allClusters && clusterIndex < allClusters.length - 1
-    ? allClusters[clusterIndex + 1]
-    : null;
-  const nextTimeStr = nextCluster
-    ? nextCluster.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })
-    : null;
-  const nextLabel = nextCluster
-    ? (nextCluster.isBaking ? '🔥 Backen' : nextCluster.steps[0]?.instruction.substring(0, 25))
-    : null;
-  const outlookSuffix = nextLabel ? ` · Danach: ${nextLabel} um ${nextTimeStr}` : '';
-
-  if (cluster.isBaking) {
-    const step = cluster.steps[0];
-    return {
-      title: `🔥 Backen: ${step.instruction.substring(0, 50)}`,
-      message: `${recipeTitle} · ${step.phase} · Um ${startTime} Uhr · ${step.duration} Min${outlookSuffix}`,
-    };
-  }
-
-  if (cluster.steps.length === 1) {
-    const step = cluster.steps[0];
-    return {
-      title: `🔔 ${step.instruction.substring(0, 55)}`,
-      message: `${recipeTitle} · ${step.phase} · Um ${startTime} Uhr${outlookSuffix}`,
-    };
-  }
-
-  const stepNames = cluster.steps.map(s => {
-    const short = s.instruction.substring(0, 25);
-    return short.length < s.instruction.length ? short.replace(/\s+\S*$/, '') + '…' : short;
-  });
-  const summary = stepNames.length <= 3
-    ? stepNames.join(' → ')
-    : `${stepNames.slice(0, 2).join(' → ')} → +${stepNames.length - 2} weitere`;
-
-  return {
-    title: `🔔 ${cluster.steps.length} Schritte ab ${startTime}`,
-    message: `${recipeTitle} · ${summary} · ca. ${cluster.totalDuration} Min aktive Zeit${outlookSuffix}`,
-  };
-
 // ── Smart Vorlauf-Berechnung ─────────────────────────────────
 function calculateSmartVorlauf(cluster, allClusters, clusterIndex) {
   // Wie lange ist die Pause vor diesem Cluster?
