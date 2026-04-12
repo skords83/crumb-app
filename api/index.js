@@ -228,62 +228,6 @@ const sendNtfyNotification = async (title, message, tags = 'bread', priority = 4
   }
 };
 
-// ── Fix 4: Persistente Status-Notification ───────────────────
-// Eine einzelne Low-Priority-Notification die sich in-place aktualisiert.
-// Zeigt immer den nächsten anstehenden Schritt — kein Kanal-Spam.
-const STATUS_TOPIC_SUFFIX = '-status';
-let statusSequenceId = null; // ntfy sequence-ID für in-place Update
-
-const sendStatusNotification = async (recipeTitle, nextCluster, plannedAt) => {
-  try {
-    const topic = process.env.NTFY_TOPIC || 'crumb-backplan';
-    const statusTopic = topic + STATUS_TOPIC_SUFFIX;
-    const baseUrl = (process.env.NTFY_URL || 'http://ntfy.local').replace(/\/$/, '');
-
-    const now = new Date();
-    const minutesUntil = Math.round((nextCluster.start.getTime() - now.getTime()) / 60000);
-    const timeStr = nextCluster.start.toLocaleTimeString('de-DE', {
-      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
-    });
-
-    let countdownText;
-    if (minutesUntil <= 0) {
-      countdownText = 'Jetzt';
-    } else if (minutesUntil < 60) {
-      countdownText = `in ${minutesUntil} Min`;
-    } else {
-      const h = Math.floor(minutesUntil / 60);
-      const m = minutesUntil % 60;
-      countdownText = m > 0 ? `in ${h}h ${m}min` : `in ${h}h`;
-    }
-
-    const stepLabel = nextCluster.isBaking
-      ? '🔥 Backen'
-      : nextCluster.steps[0]?.instruction.substring(0, 40) || 'Nächster Schritt';
-
-    const title = `⏱ ${countdownText} · ${stepLabel}`;
-    const message = `${recipeTitle} · Um ${timeStr} Uhr`;
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
-    if (statusSequenceId) headers['X-Ntfy-Replace'] = statusSequenceId;
-
-    const payload = JSON.stringify({
-      topic: statusTopic,
-      title,
-      message,
-      tags: ['bread'],
-      priority: 2, // Low priority — kein Ton, kein Aufwachen
-    });
-
-    const response = await axios.post(baseUrl, payload, { headers });
-    // Sequence-ID aus Response merken für künftige In-place-Updates
-    if (response.data?.id) statusSequenceId = response.data.id;
-  } catch (err) {
-    console.error('❌ Status-Notification Fehler:', err.message);
-  }
-};
-
 const clearStatusNotification = async () => {
   if (!statusSequenceId) return;
   try {
@@ -468,10 +412,19 @@ function buildPreheatNotifications(clusters, recipeTitle, recipeId) {
 }
 
 // ── Cluster-Notification formatieren ────────────────────────
-function formatClusterNotification(cluster, recipeTitle, allClusters, clusterIndex) {
-  const startTime = cluster.start.toLocaleTimeString('de-DE', {
-    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
-  });
+function formatClusterNotification(cluster, recipeTitle) {
+  if (cluster.isBaking) {
+    const temp = extractTemp(cluster.steps[0].instruction);
+    return {
+      title: `🔥 ${recipeTitle}`,
+      message: temp ? `Ofen vorheizen auf ${temp}°C` : `Backen vorbereiten`,
+    };
+  }
+  return {
+    title: `🔔 ${recipeTitle}`,
+    message: `Nächster Schritt steht an`,
+  };
+}
 
   // Nächster Schritt als Ausblick
   const nextCluster = allClusters && clusterIndex < allClusters.length - 1
@@ -513,7 +466,6 @@ function formatClusterNotification(cluster, recipeTitle, allClusters, clusterInd
     title: `🔔 ${cluster.steps.length} Schritte ab ${startTime}`,
     message: `${recipeTitle} · ${summary} · ca. ${cluster.totalDuration} Min aktive Zeit${outlookSuffix}`,
   };
-}
 
 // ── Smart Vorlauf-Berechnung ─────────────────────────────────
 function calculateSmartVorlauf(cluster, allClusters, clusterIndex) {
@@ -534,24 +486,18 @@ function calculateSmartVorlauf(cluster, allClusters, clusterIndex) {
 const checkAndNotify = async () => {
   try {
     const result = await pool.query(
-      `SELECT r.*, u.email as user_email FROM recipes r JOIN users u ON r.user_id = u.id WHERE r.planned_at IS NOT NULL`
+      `SELECT r.* FROM recipes r WHERE r.planned_at IS NOT NULL`
     );
     const now = new Date();
-    let hasActiveBaking = false;
 
     for (const recipe of result.rows) {
       if (!recipe.dough_sections) continue;
       const timeline = calculateTimeline(recipe.planned_at, recipe.dough_sections);
       const clusters = buildActionClusters(timeline);
 
-      // Gibt es noch zukünftige Cluster?
-      const futureClusters = clusters.filter(c => c.end > now);
-      if (futureClusters.length > 0) hasActiveBaking = true;
-
       // 1) Vorheiz-Notifications (45 Min vor Backen)
       const preheatNotifs = buildPreheatNotifications(clusters, recipe.title, recipe.id);
       for (const pn of preheatNotifs) {
-        // Fix 1+2: inhaltsbasierte ID + Cooldown
         if (hasRecentlySent(pn.notifId)) continue;
         if (now >= pn.notifyAt && now < pn.deadline) {
           await sendNtfyNotification(pn.title, pn.message);
@@ -562,41 +508,25 @@ const checkAndNotify = async () => {
       // 2) Cluster-Notifications
       for (let i = 0; i < clusters.length; i++) {
         const cluster = clusters[i];
-
-        // Fix 3: Nur wichtige Cluster
         if (!isImportantCluster(cluster, clusters, i)) continue;
 
-        // Fix 1: Inhaltsbasierte ID
         const contentKey = cluster.isBaking
           ? `backen-${cluster.steps[0]?.phase}`
           : cluster.steps.map(s => s.instruction.substring(0, 20)).join('|');
         const notifId = buildNotifId(recipe.id, 'cluster', contentKey);
 
-        // Fix 2: Cooldown
         if (hasRecentlySent(notifId)) continue;
 
         const smartVorlauf = calculateSmartVorlauf(cluster, clusters, i);
         const notifyAt = new Date(cluster.start.getTime() - smartVorlauf * 60000);
 
         if (now >= notifyAt && now < cluster.start) {
-          const { title, message } = formatClusterNotification(cluster, recipe.title, clusters, i);
+          const { title, message } = formatClusterNotification(cluster, recipe.title);
           await sendNtfyNotification(title, message);
           markSent(notifId);
         }
       }
-
-      // Fix 4: Status-Notification aktualisieren
-      const nextCluster = clusters.find(c => c.start > now);
-      if (nextCluster) {
-        await sendStatusNotification(recipe.title, nextCluster, recipe.planned_at);
-      }
     }
-
-    // Fix 4: Wenn kein aktiver Backvorgang mehr → Status löschen
-    if (!hasActiveBaking && statusSequenceId) {
-      await clearStatusNotification();
-    }
-
   } catch (err) { console.error('❌ Check-Fehler:', err.message); }
 };
 
@@ -1000,14 +930,8 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Nicht gefunden' });
 
     const recipe = result.rows[0];
-
-    // Notifications für dieses Rezept aus dem Cache löschen
-    // → nächste checkAndNotify-Runde bewertet alle Cluster mit neuen Zeiten neu
-    // Fix 1+2: clearSentNotificationsForRecipe löscht Map-Einträge für dieses Rezept,
-    // aber der 15-Min-Cooldown verhindert sofortigen Spam bei sehr kurzem Zeitversatz.
     clearSentNotificationsForRecipe(id);
 
-    // Sofortige Notification bei early completion wenn nächster Cluster sehr bald
     if (recipe.dough_sections) {
       const timeline = calculateTimeline(newPlannedAt, recipe.dough_sections);
       const clusters = buildActionClusters(timeline);
@@ -1024,29 +948,17 @@ app.post('/api/recipes/:id/complete-step', async (req, res) => {
         }
       }
 
-      // Nächster wichtiger Cluster
-      const nextImportantCluster = clusters.find((c, i) =>
-        c.start > completedTime && c.start > now && isImportantCluster(c, clusters, i)
-      );
-
-      if (nextImportantCluster) {
-        const clusterIndex = clusters.indexOf(nextImportantCluster);
-        const smartVorlauf = calculateSmartVorlauf(nextImportantCluster, clusters, clusterIndex);
-        const minutesUntil = (nextImportantCluster.start.getTime() - now.getTime()) / 60000;
-
-        const contentKey = nextImportantCluster.isBaking
-          ? `backen-${nextImportantCluster.steps[0]?.phase}`
-          : nextImportantCluster.steps.map(s => s.instruction.substring(0, 20)).join('|');
+      // Nächster Cluster nach dem abgeschlossenen Schritt
+      const nextCluster = clusters.find(c => c.start > completedTime && c.start > now);
+      if (nextCluster) {
+        const minutesUntil = (nextCluster.start.getTime() - now.getTime()) / 60000;
+        const contentKey = `${nextCluster.steps[0].phase}-${nextCluster.steps[0].instruction.substring(0, 30)}`;
         const notifId = buildNotifId(id, 'cluster', contentKey);
-
-        if (minutesUntil >= 1 && minutesUntil < smartVorlauf && !hasRecentlySent(notifId)) {
-          const { title, message } = formatClusterNotification(nextImportantCluster, recipe.title, clusters, clusterIndex);
-          await sendNtfyNotification(`⏰ ${title}`, message);
+        if (minutesUntil >= 1 && minutesUntil < NTFY_VORLAUF && !hasRecentlySent(notifId)) {
+          const { title, message } = formatClusterNotification(nextCluster, recipe.title);
+          await sendNtfyNotification(title, message);
           markSent(notifId);
         }
-
-        // Status-Notification sofort aktualisieren
-        await sendStatusNotification(recipe.title, nextImportantCluster, newPlannedAt);
       }
     }
 
@@ -1163,39 +1075,39 @@ await initDB();
             [JSON.stringify(updatedStates), session.id]);
           for (const step of softDoneSteps) {
             const notifId = `bs-${session.id}-softdone-${step.globalIdx}`;
-            if (sentNotifications.has(notifId)) continue;
+            if (hasRecentlySent(notifId)) continue;
             await sendNtfyNotification(`⏱ ${step.instruction.substring(0, 50)}`,
               `${session.title} · Geplante Zeit abgelaufen — prüfe und bestätige`);
-            sentNotifications.add(notifId);
+            markSent(notifId);
           }
         }
         const gates = getPendingGates(sections, updatedStates);
         for (const gate of gates) {
           const notifId = `bs-${session.id}-gate-${gate.phase}`;
-          if (sentNotifications.has(notifId)) continue;
+          if (hasRecentlySent(notifId)) continue;
           await sendNtfyNotification(`🔓 ${gate.phase} kann starten`,
             `${session.title} · ${gate.dependencies.join(' + ')} fertig`);
-          sentNotifications.add(notifId);
+          markSent(notifId);
         }
         const steps = flattenSteps(sections);
         steps.forEach(step => {
           if (step.type === 'Backen' && updatedStates[step.globalIdx] === 'ready') {
             const notifId = `bs-${session.id}-preheat-${step.globalIdx}`;
-            if (!sentNotifications.has(notifId)) {
+            if (!hasRecentlySent(notifId)) {
               const temp = extractTemp(step.instruction);
               sendNtfyNotification(temp ? `🔥 Ofen auf ${temp}°C vorheizen` : `🔥 Ofen vorheizen`,
                 `${session.title} · Backen steht an`);
-              sentNotifications.add(notifId);
+              markSent(notifId);
             }
           }
           if (updatedStates[step.globalIdx] === 'soft_done') {
             const ts = timestamps[step.globalIdx];
             if (ts?.timer_end && (now.getTime() - ts.timer_end) / 60000 >= 30) {
               const notifId = `bs-${session.id}-overdue-${step.globalIdx}`;
-              if (!sentNotifications.has(notifId)) {
+              if (!hasRecentlySent(notifId)) {
                 sendNtfyNotification(`⚠️ ${step.phase} überfällig`,
                   `${session.title} · ${step.instruction.substring(0, 40)} — alles okay?`);
-                sentNotifications.add(notifId);
+                markSent(notifId);
               }
             }
           }
@@ -1210,23 +1122,4 @@ await initDB();
     await checkAndNotify();
     await checkBakeSessionNotifications();
   }, 60000);
-  // Status-Notification alle 15 Min auch ohne neue Schritt-Events aktualisieren
-  setInterval(async () => {
-    try {
-      const result = await pool.query(
-        'SELECT r.*, u.email as user_email FROM recipes r JOIN users u ON r.user_id = u.id WHERE r.planned_at IS NOT NULL'
-      );
-      const now = new Date();
-      for (const recipe of result.rows) {
-        if (!recipe.dough_sections) continue;
-        const timeline = calculateTimeline(recipe.planned_at, recipe.dough_sections);
-        const clusters = buildActionClusters(timeline);
-        const nextCluster = clusters.find(c => c.start > now);
-        if (nextCluster) {
-          await sendStatusNotification(recipe.title, nextCluster, recipe.planned_at);
-          break; // Nur für das erste aktive Rezept
-        }
-      }
-    } catch (err) { console.error('❌ Status-Update Fehler:', err.message); }
-  }, 15 * 60 * 1000);
 });
