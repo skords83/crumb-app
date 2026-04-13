@@ -146,35 +146,108 @@ function buildSummary(rows: SectionRow[], totalMin: number): string {
   return parts.join("  ·  ");
 }
 
+// ─── Visual time mapping ──────────────────────────────────────────────────────
+// Long rest segments get compressed visually. We map real-time to display-time
+// so that rest segments longer than REST_CAP are shown at REST_CAP width.
+// Action/bake segments keep their true proportional width.
+
+const REST_CAP = 90; // minutes — rests longer than this get capped visually
+
+function buildTimeMap(rows: SectionRow[], totalMin: number): {
+  toDisplay: (realMin: number) => number; // real minutes → display %
+  displayTotal: number;                   // total display units
+  squeezedSegs: Array<{ realStart: number; realEnd: number; displayStart: number; displayEnd: number }>;
+} {
+  // Collect all unique rest segments across all rows (by real start/end)
+  // We squeeze any contiguous real-time span where ALL rows are resting
+  // (i.e. no action/bake happening anywhere)
+  const resolution = 1; // 1-minute resolution
+  const active = new Uint8Array(totalMin + 1);
+  rows.forEach((row) => {
+    row.segments.forEach((seg) => {
+      if (seg.type !== "rest") {
+        for (let t = seg.start; t < seg.start + seg.dur; t++) active[t] = 1;
+      }
+    });
+  });
+
+  // Build mapping: list of [realStart, realEnd, displayDur] spans
+  type Span = { realStart: number; realEnd: number; isRest: boolean };
+  const spans: Span[] = [];
+  let spanStart = 0;
+  let inRest = !active[0];
+
+  for (let t = 1; t <= totalMin; t++) {
+    const nowRest = !active[t];
+    if (nowRest !== inRest || t === totalMin) {
+      spans.push({ realStart: spanStart, realEnd: t, isRest: inRest });
+      spanStart = t;
+      inRest = nowRest;
+    }
+  }
+
+  // Assign display durations
+  let displayTotal = 0;
+  const mappedSpans = spans.map((span) => {
+    const realDur = span.realEnd - span.realStart;
+    const displayDur = span.isRest ? Math.min(realDur, REST_CAP) : realDur;
+    const ds = displayTotal;
+    displayTotal += displayDur;
+    return { ...span, displayStart: ds, displayEnd: ds + displayDur };
+  });
+
+  const toDisplay = (realMin: number): number => {
+    // Find which span this real minute falls in
+    for (const span of mappedSpans) {
+      if (realMin >= span.realStart && realMin <= span.realEnd) {
+        const frac = (realMin - span.realStart) / (span.realEnd - span.realStart || 1);
+        return span.displayStart + frac * (span.displayEnd - span.displayStart);
+      }
+    }
+    return displayTotal;
+  };
+
+  const squeezedSegs = mappedSpans
+    .filter((s) => s.isRest && (s.realEnd - s.realStart) > REST_CAP)
+    .map((s) => ({ realStart: s.realStart, realEnd: s.realEnd, displayStart: s.displayStart, displayEnd: s.displayEnd }));
+
+  return { toDisplay, displayTotal, squeezedSegs };
+}
+
+// ─── Colors ───────────────────────────────────────────────────────────────────
+
 const ROW_COLORS = ["#f0a500", "#60a5fa", "#a78bfa", "#34d399", "#fb923c"];
 const BAKE_COLOR = "#c0392b";
-const LABEL_W = "5.5rem";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface TooltipInfo {
+interface TipState {
   visible: boolean;
-  segKey: string;
+  rowIdx: number;
+  segIdx: number;
   label: string;
   dur: number;
   type: PhaseSegment["type"];
   color: string;
+  leftPct: number; // position within track (0–100)
 }
 
 export default function RecipeRhythmBar({ doughSections }: { doughSections: any[] }) {
   const { rows, totalMin } = useMemo(() => buildRows(doughSections), [doughSections]);
   const summaryText = useMemo(() => buildSummary(rows, totalMin), [rows, totalMin]);
-  const [tip, setTip] = useState<TooltipInfo>({ visible: false, segKey: "", label: "", dur: 0, type: "action", color: "" });
+  const { toDisplay, displayTotal, squeezedSegs } = useMemo(
+    () => buildTimeMap(rows, totalMin),
+    [rows, totalMin]
+  );
+  const [tip, setTip] = useState<TipState | null>(null);
 
   if (!rows.length || totalMin === 0) return null;
 
-  // Grid interval: pick a round number so labels don't crowd
-  const gridInterval =
-    totalMin <= 180 ? 60
-    : totalMin <= 360 ? 120
-    : totalMin <= 720 ? 180
-    : 240;
+  const toPct = (realMin: number) => (toDisplay(realMin) / displayTotal) * 100;
 
+  // Grid interval based on real total duration, but placed via display coords
+  const gridInterval =
+    totalMin <= 180 ? 60 : totalMin <= 360 ? 120 : totalMin <= 720 ? 180 : 240;
   const gridLines: number[] = [];
   for (let t = gridInterval; t < totalMin; t += gridInterval) gridLines.push(t);
 
@@ -190,41 +263,71 @@ export default function RecipeRhythmBar({ doughSections }: { doughSections: any[
         Tagesrhythmus
       </h3>
 
-      {/* Gantt rows */}
+      {/* Track area — label + bar */}
       <div className="flex flex-col gap-[4px]">
         {rows.map((row, ri) => {
           const color = ROW_COLORS[ri % ROW_COLORS.length];
           return (
-            <div key={ri} className="flex items-center gap-2">
-              {/* Phase label */}
+            <div key={ri} className="flex items-center gap-2 group">
+              {/* Phase label — fixed 5.5rem */}
               <span
                 className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0 truncate text-right leading-none"
-                style={{ width: LABEL_W }}
+                style={{ width: "5.5rem" }}
                 title={row.name}
               >
                 {row.name}
               </span>
 
               {/* Track */}
-              <div className="relative flex-1 h-[14px] rounded bg-gray-100 dark:bg-gray-700/50">
+              <div className="relative flex-1 h-[14px] rounded bg-gray-100 dark:bg-gray-700/50 overflow-visible">
 
-                {/* Gridlines through track */}
+                {/* Squeeze markers — zigzag cut on squeezed rest zones */}
+                {squeezedSegs.map((sq, sqi) => {
+                  const leftPct = (sq.displayStart / displayTotal) * 100;
+                  const widthPct = ((sq.displayEnd - sq.displayStart) / displayTotal) * 100;
+                  return (
+                    <div
+                      key={sqi}
+                      className="absolute top-0 h-full bg-gray-100 dark:bg-gray-700/50"
+                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                    >
+                      {/* Left edge marker */}
+                      <div className="absolute left-0 top-0 h-full w-px bg-gray-300 dark:bg-gray-500 opacity-60" />
+                      {/* Right edge marker */}
+                      <div className="absolute right-0 top-0 h-full w-px bg-gray-300 dark:bg-gray-500 opacity-60" />
+                      {/* Diagonal lines to indicate compression */}
+                      <svg className="absolute inset-0 w-full h-full opacity-20" preserveAspectRatio="none">
+                        <defs>
+                          <pattern id={`hatch-${ri}-${sqi}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                            <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" strokeWidth="1.5" className="text-gray-500 dark:text-gray-400" />
+                          </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill={`url(#hatch-${ri}-${sqi})`} />
+                      </svg>
+                    </div>
+                  );
+                })}
+
+                {/* Gridlines */}
                 {gridLines.map((t) => (
                   <div
                     key={t}
-                    className="absolute top-0 h-full w-px pointer-events-none bg-gray-300/60 dark:bg-gray-500/40"
-                    style={{ left: `${(t / totalMin) * 100}%` }}
+                    className="absolute top-0 h-full w-px pointer-events-none bg-gray-300/50 dark:bg-gray-500/30"
+                    style={{ left: `${toPct(t)}%` }}
                   />
                 ))}
 
                 {/* Segments */}
                 {row.segments.map((seg, si) => {
-                  const segKey = `${ri}-${si}`;
+                  const left = toPct(seg.start);
+                  const right = toPct(seg.start + seg.dur);
+                  const width = Math.max(right - left, 0.4);
                   const isRest = seg.type === "rest";
                   const bgColor =
                     seg.type === "bake" ? BAKE_COLOR
                     : seg.type === "action" ? color
                     : undefined;
+
                   return (
                     <div
                       key={si}
@@ -234,32 +337,21 @@ export default function RecipeRhythmBar({ doughSections }: { doughSections: any[
                           ? "bg-black/[0.08] dark:bg-white/[0.07]"
                           : "cursor-default hover:brightness-125 transition-[filter] duration-100",
                       ].join(" ")}
-                      style={{
-                        left: `${(seg.start / totalMin) * 100}%`,
-                        width: `${Math.max((seg.dur / totalMin) * 100, 0.5)}%`,
-                        backgroundColor: bgColor,
-                      }}
+                      style={{ left: `${left}%`, width: `${width}%`, backgroundColor: bgColor }}
                       onMouseEnter={() =>
-                        !isRest && setTip({ visible: true, segKey, label: seg.label, dur: seg.dur, type: seg.type, color })
+                        !isRest &&
+                        setTip({ visible: true, rowIdx: ri, segIdx: si, label: seg.label, dur: seg.dur, type: seg.type, color, leftPct: left + width / 2 })
                       }
-                      onMouseLeave={() => setTip((p) => ({ ...p, visible: false }))}
+                      onMouseLeave={() => setTip(null)}
                     />
                   );
                 })}
 
-                {/* Inline tooltip — renders inside the track row so it never clips */}
-                {tip.visible && row.segments.some((_, si) => `${ri}-${si}` === tip.segKey) && (
+                {/* Tooltip — only on the row that owns it */}
+                {tip?.visible && tip.rowIdx === ri && (
                   <div
-                    className="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 pointer-events-none"
-                    style={{
-                      // nudge toward the hovered segment's center
-                      left: (() => {
-                        const segIdx = parseInt(tip.segKey.split("-")[1]);
-                        const seg = row.segments[segIdx];
-                        if (!seg) return "50%";
-                        return `${((seg.start + seg.dur / 2) / totalMin) * 100}%`;
-                      })(),
-                    }}
+                    className="absolute bottom-[calc(100%+7px)] z-20 pointer-events-none -translate-x-1/2"
+                    style={{ left: `${tip.leftPct}%` }}
                   >
                     <div className="bg-gray-900 dark:bg-gray-700 rounded-xl shadow-xl px-3 py-2 text-white whitespace-nowrap">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -269,9 +361,8 @@ export default function RecipeRhythmBar({ doughSections }: { doughSections: any[
                         />
                         <span className="text-[11px] font-semibold tabular-nums">{fmt(tip.dur)}</span>
                       </div>
-                      <span className="text-[11px] text-gray-300 max-w-[180px] block truncate">{tip.label}</span>
+                      <span className="text-[11px] text-gray-300 max-w-[200px] block truncate">{tip.label}</span>
                     </div>
-                    {/* Arrow */}
                     <div className="flex justify-center">
                       <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-gray-900 dark:border-t-gray-700" />
                     </div>
@@ -283,34 +374,23 @@ export default function RecipeRhythmBar({ doughSections }: { doughSections: any[
         })}
       </div>
 
-      {/* Time axis */}
-      <div
-        className="relative mt-1.5 h-4"
-        style={{ paddingLeft: `calc(${LABEL_W} + 0.5rem)` }}
-      >
-        {/* Start label */}
-        <span className="absolute left-[calc(5.5rem+0.5rem)] text-[10px] text-gray-400 dark:text-gray-500">
-          Start
-        </span>
-
-        {/* Intermediate labels */}
-        {gridLines.map((t) => {
-          const pct = (t / totalMin) * 100;
-          return (
+      {/* Time axis — purely flex, no absolute positioning */}
+      <div className="flex items-center mt-1.5" style={{ paddingLeft: "calc(5.5rem + 0.5rem)" }}>
+        <div className="relative flex-1">
+          <span className="absolute left-0 text-[10px] text-gray-400 dark:text-gray-500">Start</span>
+          {gridLines.map((t) => (
             <span
               key={t}
               className="absolute text-[10px] text-gray-300 dark:text-gray-600 -translate-x-1/2"
-              style={{ left: `calc(${LABEL_W} + 0.5rem + ${pct}% * (100% - ${LABEL_W} - 0.5rem) / 100)` }}
+              style={{ left: `${toPct(t)}%` }}
             >
               +{fmt(t)}
             </span>
-          );
-        })}
-
-        {/* End label */}
-        <span className="absolute right-0 text-[10px] text-gray-400 dark:text-gray-500">
-          +{fmt(totalMin)}
-        </span>
+          ))}
+          <span className="absolute right-0 text-[10px] text-gray-400 dark:text-gray-500">+{fmt(totalMin)}</span>
+          {/* spacer so the div has height */}
+          <span className="invisible text-[10px]">x</span>
+        </div>
       </div>
 
       {/* Summary */}
