@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { X, Clock, Minus, Plus } from "lucide-react";
+import { X, Clock, Minus, Plus, ChevronDown } from "lucide-react";
 import { calculateBackplan, calcTotalDuration } from "@/lib/backplan-utils";
 import { loadSettings, saveSettings, CrumbSettings } from "@/lib/crumb-settings";
 
@@ -176,7 +176,6 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
       ctx.strokeStyle = "rgba(96,130,210,0.25)"; ctx.lineWidth = 1;
       for (let s = cx1 - TH; s < cx2 + TH; s += 6) { ctx.beginPath(); ctx.moveTo(s, TT); ctx.lineTo(s + TH, TT + TH); ctx.stroke(); }
       ctx.restore();
-      if (cx2 - cx1 > 20) { const lx = (cx1 + cx2) / 2; ctx.fillStyle = "rgba(96,130,210,0.55)"; ctx.font = "11px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "center"; ctx.fillText("☽", lx, TT + TH / 2); }
     }
     ctx.restore(); ctx.globalAlpha = 1;
     ctx.fillStyle = "rgba(22,27,34,0.85)"; ctx.beginPath(); ctx.roundRect(blockX, TT, blockW, TH, 5); ctx.fill();
@@ -191,9 +190,6 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
     const gx = blockX + blockW / 2, gy = TT + TH / 2;
     ctx.strokeStyle = isDragging ? "rgba(196,164,132,0.7)" : "rgba(255,255,255,0.22)"; ctx.lineWidth = 1.5; ctx.lineCap = "round";
     [-4, 0, 4].forEach((dx) => { ctx.beginPath(); ctx.moveTo(gx + dx, gy - 4); ctx.lineTo(gx + dx, gy + 4); ctx.stroke(); });
-    ctx.font = "9px sans-serif"; ctx.fillStyle = "#C4A484"; ctx.textBaseline = "bottom";
-    ctx.textAlign = "left"; ctx.fillText(minToHHMM(planOffset), blockX + 2, TT);
-    ctx.textAlign = "right"; ctx.fillText(minToHHMM(planOffset + planDur), blockX + blockW - 2, TT);
     const step = totalMin <= 180 ? 30 : totalMin <= 480 ? 60 : totalMin <= 960 ? 120 : 240;
     const first = Math.ceil(viewStart / step) * step;
     for (let t = first; t <= viewStart + totalMin + step; t += step) { const x = (t - viewStart) / mpp; if (x < 0 || x > W) continue; ctx.strokeStyle = "#2d3440"; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(x, TICK_Y); ctx.lineTo(x, TICK_Y + 4); ctx.stroke(); ctx.fillStyle = "#484f58"; ctx.font = "10px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(minToHHMM(t), x, TICK_Y + 5); }
@@ -215,6 +211,16 @@ function TimelineCanvas({ phases, gaps, planDur, planOffset, scenario, sleepFrom
   );
 }
 
+// ─── Scenario icon ────────────────────────────────────────────────────────────
+
+function ScenarioIcon({ id, color }: { id: Scenario; color: string }) {
+  const c = color;
+  if (id === "jetzt") return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke={c} strokeWidth="1.1"/><path d="M7 4v3l2 1.2" stroke={c} strokeWidth="1.1" strokeLinecap="round"/></svg>;
+  if (id === "abend") return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10c1-3 5-5 10-3" stroke={c} strokeWidth="1.1" strokeLinecap="round"/><circle cx="7" cy="5" r="2.5" stroke={c} strokeWidth="1.1"/></svg>;
+  if (id === "morgen") return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v1M7 11v1M2 7H1M13 7h-1M3.5 3.5l.7.7M9.8 9.8l.7.7M3.5 10.5l.7-.7M9.8 4.2l.7-.7" stroke={c} strokeWidth="1.1" strokeLinecap="round"/><circle cx="7" cy="7" r="2.5" stroke={c} strokeWidth="1.1"/></svg>;
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 2a5 5 0 1 0 0 10A6.5 6.5 0 0 1 10 2z" stroke={c} strokeWidth="1.1" strokeLinecap="round"/></svg>;
+}
+
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 
 export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanModalProps) {
@@ -231,11 +237,13 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const [pickerError, setPickerError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [freieZeitOpen, setFreieZeitOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       const s = loadSettings(); setSettings(s); setMultiplier(1); setManualHint(""); setPickerTarget(null); setDayOffset(0);
       setPlanOffset(snapTo(nowMin(), s.snapMin, true)); setScenario("jetzt"); setIsSubmitting(false); setSubmitError("");
+      setFreieZeitOpen(false);
     }
   }, [isOpen]);
 
@@ -278,20 +286,32 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const morgenNote = (() => { if (dayOffset > 0) return ""; const s = morgenZiel - planDur; return (s <= nowMin() ? s + 1440 : s) >= 2 * 1440 ? "→ übermorgen früh" : ""; })();
   const nachtNote = !isNachtAvailable ? (((sleepTo + 1440 - sleepFrom) % 1440) < 30 ? "Schlaffenster zu kurz" : "keine langen Ruhephasen") : "";
 
-  // ─── confirm (GEÄNDERT: erstellt bake_session wenn kein onConfirm) ────────
+  const scenarioMeta: Record<Exclude<Scenario, "manuell">, { label: string; sub: string; note: string }> = {
+    jetzt:  { label: dayOffset === 0 ? "Jetzt" : "Frühestmöglich", sub: dayOffset === 0 ? "so früh wie möglich" : `fertig um ${minToHHMM(morgenZiel)}`, note: "" },
+    abend:  { label: "Abend",            sub: `fertig um ${minToHHMM(abendZiel)}`,                  note: abendNote },
+    morgen: { label: "Nächster Morgen",  sub: `fertig um ${minToHHMM(morgenZiel)}`,                 note: morgenNote },
+    nacht:  { label: "Schlaf schonen",   sub: "längste Pause ins Schlaffenster",                    note: nachtNote },
+  };
+
+  const activeScenario = scenario === "manuell" ? null : scenarioMeta[scenario];
+
+  // ─── Freie-Zeit derived ───────────────────────────────────────────────────
+  const visibleGaps = showFreieZeit ? gaps.filter(g => g.end - g.start >= minFreieZeit) : [];
+  const nightGapCount = visibleGaps.filter(g => {
+    const absStart = ((planStart + g.start) % 1440 + 1440) % 1440;
+    return inSleepWindow(absStart, sleepFrom, sleepTo);
+  }).length;
+
+  // ─── confirm ─────────────────────────────────────────────────────────────
   const handleConfirm = async () => {
     if (!canConfirm) return;
     const endDate = absMinToDate(planStart + planDur);
     const target = toLocalISOString(endDate);
-
-    // Legacy: wenn onConfirm übergeben wird, alte Logik
     if (onConfirm) {
       const timeline = calculateBackplan(target, recipe?.dough_sections ?? []);
       onConfirm(target, multiplier, timeline, timeline);
       return;
     }
-
-    // Neu: bake_session erstellen
     setIsSubmitting(true);
     setSubmitError("");
     try {
@@ -312,24 +332,13 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
 
   if (!isOpen || !recipe) return null;
 
-  const iconColor = (id: Scenario) => scenario === id ? "#C4A484" : "#8b949e";
-  const scenarioCards: { id: Scenario; label: string; sub: string; note: string }[] = [
-    { id: "jetzt", label: dayOffset === 0 ? "Jetzt" : "Frühestmöglich", sub: dayOffset === 0 ? "so früh wie möglich" : `fertig um ${minToHHMM(morgenZiel)}`, note: "" },
-    { id: "abend", label: "Abend", sub: `fertig um ${minToHHMM(abendZiel)}`, note: abendNote },
-    { id: "morgen", label: "Nächster Morgen", sub: `fertig um ${minToHHMM(morgenZiel)}`, note: morgenNote },
-    { id: "nacht", label: "Schlaf schonen", sub: "längste Pause ins Schlaffenster", note: nachtNote },
-  ];
-  const ScenarioIcon = ({ id }: { id: Scenario }) => {
-    const c = iconColor(id);
-    if (id === "jetzt") return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke={c} strokeWidth="1.1"/><path d="M7 4v3l2 1.2" stroke={c} strokeWidth="1.1" strokeLinecap="round"/></svg>;
-    if (id === "abend") return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10c1-3 5-5 10-3" stroke={c} strokeWidth="1.1" strokeLinecap="round"/><circle cx="7" cy="5" r="2.5" stroke={c} strokeWidth="1.1"/></svg>;
-    if (id === "morgen") return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v1M7 11v1M2 7H1M13 7h-1M3.5 3.5l.7.7M9.8 9.8l.7.7M3.5 10.5l.7-.7M9.8 4.2l.7-.7" stroke={c} strokeWidth="1.1" strokeLinecap="round"/><circle cx="7" cy="7" r="2.5" stroke={c} strokeWidth="1.1"/></svg>;
-    return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 2a5 5 0 1 0 0 10A6.5 6.5 0 0 1 10 2z" stroke={c} strokeWidth="1.1" strokeLinecap="round"/></svg>;
-  };
+  const SCENARIOS: Exclude<Scenario, "manuell">[] = ["jetzt", "abend", "morgen", "nacht"];
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div className="relative bg-[#161b22] rounded-[1.75rem] w-full max-w-[440px] shadow-2xl overflow-hidden max-h-[92svh] flex flex-col border border-[#30363d]" onClick={(e) => e.stopPropagation()}>
+
+        {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-0 flex-shrink-0">
           <div className="flex items-center gap-2 bg-[#21262d] border border-[#30363d] rounded-full px-3 py-1">
             <Clock size={12} className="text-[#8b949e]" />
@@ -344,6 +353,8 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
         <div className="h-px bg-[#21262d] flex-shrink-0" />
 
         <div className="overflow-y-auto flex-1">
+
+          {/* Menge */}
           <div className="px-4 py-3">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Menge</span>
@@ -355,8 +366,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             </div>
           </div>
           <div className="h-px bg-[#21262d]" />
+
+          {/* Planung */}
           <div className="px-4 py-4">
             <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-3">Wann soll's fertig sein?</p>
+
+            {/* Tag-Picker */}
             <div className="grid grid-cols-7 gap-1 mb-3">
               {Array.from({ length: 7 }, (_, i) => { const isActive = dayOffset === i; const info = dayPickerInfo(i); return (
                 <button key={i} onClick={() => { setDayOffset(i); const newStart = computeScenarioStart(scenario === "manuell" ? "jetzt" : scenario, i); setPlanOffset(newStart); if (scenario === "manuell") setScenario("jetzt"); setManualHint(""); }}
@@ -365,49 +380,125 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
                   <span className={`text-[9px] leading-tight ${isActive ? "text-[#C4A484]/70" : "text-[#484f58]"}`}>{info.date}</span>
                 </button>); })}
             </div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {scenarioCards.map((sc) => { const isActive = scenario === sc.id; const isDisabled = sc.id === "nacht" && !isNachtAvailable; const isManual = scenario === "manuell"; return (
-                <div key={sc.id} onClick={() => !isDisabled && activateScenario(sc.id)}
-                  className={["rounded-xl px-3 py-2 flex items-center gap-2.5 transition-colors select-none", isDisabled ? "bg-[#21262d] border border-[#30363d] opacity-35 cursor-not-allowed" : isActive ? "bg-[rgba(196,164,132,0.07)] border border-[#C4A484] cursor-pointer" : isManual ? "bg-[#21262d] border border-[#30363d] opacity-50 cursor-pointer hover:opacity-75 hover:border-[#484f58]" : "bg-[#21262d] border border-[#30363d] cursor-pointer hover:border-[#484f58]"].join(" ")}>
-                  <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? "bg-[rgba(196,164,132,0.15)]" : "bg-[#2d333b]"}`}><ScenarioIcon id={sc.id} /></div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[12px] font-semibold text-[#e6edf3] leading-snug">{sc.label}</span>
-                    <span className={`text-[10px] leading-snug ${isActive ? "text-[#C4A484]" : "text-[#8b949e]"}`}>{sc.sub}</span>
-                    {sc.note && <span className={`text-[10px] leading-snug ${sc.id === "nacht" ? "text-[#f85149]" : "text-[#e3b341]"}`}>{sc.note}</span>}
-                  </div>
-                </div>); })}
+
+            {/* A: Segmented scenario control */}
+            <div className="grid grid-cols-4 gap-0.5 bg-[#21262d] rounded-xl p-1 mb-2">
+              {SCENARIOS.map((id) => {
+                const isActive = scenario === id;
+                const isDisabled = id === "nacht" && !isNachtAvailable;
+                const meta = scenarioMeta[id];
+                return (
+                  <button
+                    key={id}
+                    onClick={() => !isDisabled && activateScenario(id)}
+                    disabled={isDisabled}
+                    className={[
+                      "flex flex-col items-center gap-1 py-2 px-1 rounded-lg transition-colors",
+                      isDisabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer",
+                      isActive ? "bg-[rgba(196,164,132,0.15)]" : "hover:bg-[#2d333b]",
+                    ].join(" ")}
+                  >
+                    <ScenarioIcon id={id} color={isActive ? "#C4A484" : "#8b949e"} />
+                    <span className={`text-[9px] leading-tight whitespace-nowrap ${isActive ? "text-[#C4A484]" : "text-[#8b949e]"}`}>{meta.label}</span>
+                  </button>
+                );
+              })}
             </div>
-            <div className="flex items-baseline justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="flex flex-col items-start"><span className="text-base font-semibold text-[#C4A484] leading-tight">{minToHHMM(planStart)}</span><span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart)}</span></div>
-                <span className="text-sm text-[#484f58]">→</span>
-                <div className="flex flex-col items-start"><span className="text-base font-semibold text-[#C4A484] leading-tight">{minToHHMM(planStart + planDur)}</span><span className="text-[10px] text-[#8b949e] leading-tight h-[14px]">{dayLabel(planStart + planDur)}</span></div>
+
+            {/* Aktives Szenario: Detail-Zeile */}
+            {activeScenario && (
+              <div className="flex items-center justify-between bg-[rgba(196,164,132,0.05)] border border-[rgba(196,164,132,0.18)] rounded-xl px-3 py-2 mb-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#C4A484]">{activeScenario.label}</span>
+                  <span className="text-[10px] text-[#C4A484]/60">{activeScenario.sub}</span>
+                  {activeScenario.note && <span className="text-[10px] text-[#e3b341]">{activeScenario.note}</span>}
+                </div>
               </div>
-              <span className="text-xs text-[#484f58]">{totalHours}h {totalMins}m</span>
-            </div>
+            )}
+            {scenario === "manuell" && (
+              <div className="flex items-center justify-between bg-[rgba(196,164,132,0.05)] border border-[rgba(196,164,132,0.18)] rounded-xl px-3 py-2 mb-3">
+                <span className="text-[10px] text-[#484f58]">Manuell angepasst</span>
+                <button onClick={() => activateScenario("jetzt")} className="text-[10px] text-[#C4A484] hover:text-[#D6B896] underline underline-offset-2 transition-colors">Zurücksetzen</button>
+              </div>
+            )}
+
+            {/* Timeline */}
             <div className="bg-[#0d1117] border border-[#30363d] rounded-lg px-3 pt-2.5 pb-2">
+
+              {/* C: Start/Ende Labels direkt über der Timeline */}
+              <div className="flex items-end justify-between mb-1.5">
+                <div className="flex flex-col items-start">
+                  <span className="text-base font-semibold text-[#C4A484] leading-tight">{minToHHMM(planStart)}</span>
+                  <span className="text-[10px] text-[#8b949e] leading-tight">{dayLabel(planStart)}</span>
+                </div>
+                <span className="text-xs text-[#484f58] mb-0.5">{totalHours}h {totalMins}m</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-base font-semibold text-[#C4A484] leading-tight">{minToHHMM(planStart + planDur)}</span>
+                  <span className="text-[10px] text-[#8b949e] leading-tight">{dayLabel(planStart + planDur)}</span>
+                </div>
+              </div>
+
+              {/* Legende */}
               <div className="flex gap-3 mb-2 flex-wrap">
                 {[...new Set(phases.map((p) => p.teig))].map((teig, i) => (<div key={teig} className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: TEIG_COLORS[teig] || "#C4A484" }} /><span className="text-[10px] text-[#8b949e]">{recipe?.dough_sections?.[i]?.name || (i === 0 ? "Hauptteig" : `Teig ${i + 1}`)}</span></div>))}
                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: "rgba(34,197,94,0.5)" }} /><span className="text-[10px] text-[#8b949e]">Freie Zeit</span></div>
-                {scenario === "nacht" && <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: "rgba(96,130,210,0.35)", border: "0.5px solid rgba(96,130,210,0.5)" }} /><span className="text-[10px] text-[#8b949e]">Nachtruhe</span></div>}
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm" style={{ background: "rgba(96,130,210,0.35)", border: "0.5px solid rgba(96,130,210,0.5)" }} /><span className="text-[10px] text-[#8b949e]">Nachtruhe</span></div>
               </div>
+
               <TimelineCanvas phases={phases} gaps={gaps} planDur={planDur} planOffset={planOffset} scenario={scenario} sleepFrom={sleepFrom} sleepTo={sleepTo} onOffsetChange={handleOffsetChange} snapMin={snapMin} />
+
               {warning && (<div className={`flex items-center gap-1.5 mt-1.5 text-[11px] ${warning.level === "error" ? "text-[#f85149]" : "text-[#e3b341]"}`}><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L11 10H1L6 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/><path d="M6 5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="6" cy="8.5" r="0.6" fill="currentColor"/></svg>{warning.text}</div>)}
-              {manualHint && !warning && (<div className="flex items-center justify-center gap-1.5 mt-1.5"><span className="text-[10px] text-[#484f58]">Manuell angepasst —</span><button onClick={() => { activateScenario(scenario === "manuell" ? "jetzt" : scenario); }} className="text-[10px] text-[#C4A484] hover:text-[#D6B896] underline underline-offset-2 transition-colors">Zurücksetzen</button></div>)}
             </div>
           </div>
-          {showFreieZeit && gaps.filter(g => g.end - g.start >= minFreieZeit).length > 0 && (
-            <div className="px-4 pb-2">
-              <p className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest mb-2">Freie Zeit</p>
-              <div className="flex flex-col gap-1.5">
-                {gaps.filter(g => g.end - g.start >= minFreieZeit).map((g, i) => { const absStart = planStart + g.start; const absEnd = planStart + g.end; const dur = g.end - g.start; const gapAbsStart = ((absStart % 1440) + 1440) % 1440; const night = inSleepWindow(gapAbsStart, sleepFrom, sleepTo); const durText = dur < 60 ? `${dur} min` : `${Math.floor(dur/60)}h${dur%60>0?' '+dur%60+'m':''}`; return (
-                  <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)]">
-                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#22c55e]" />
-                    <span className="text-[12px] text-[#e6edf3]">{minToHHMM(absStart)} – {minToHHMM(absEnd)}{night ? " ☽" : ""}</span>
-                    <span className="text-[11px] ml-auto flex-shrink-0 text-[#22c55e]">{durText}</span>
-                  </div>); })}
-              </div>
-            </div>
+
+          {/* B: Freie Zeit — kollapsierbar */}
+          {showFreieZeit && visibleGaps.length > 0 && (
+            <>
+              <div className="h-px bg-[#21262d]" />
+              <button
+                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#21262d]/40 transition-colors"
+                onClick={() => setFreieZeitOpen(o => !o)}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Freie Zeit</span>
+                  <span className={`text-[10px] rounded-full px-2 py-0.5 ${
+                    nightGapCount > 0
+                      ? "text-[#f85149] bg-[rgba(248,81,73,0.1)]"
+                      : "text-[#22c55e] bg-[rgba(34,197,94,0.1)]"
+                  }`}>
+                    {visibleGaps.length} Slot{visibleGaps.length !== 1 ? "s" : ""}
+                    {nightGapCount > 0 ? ` · ${nightGapCount} in Nachtruhe` : ""}
+                  </span>
+                </div>
+                <ChevronDown
+                  size={14}
+                  className={`text-[#484f58] transition-transform duration-200 ${freieZeitOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {freieZeitOpen && (
+                <div className="px-4 pb-3 flex flex-col gap-1.5">
+                  {visibleGaps.map((g, i) => {
+                    const absStart = planStart + g.start;
+                    const absEnd = planStart + g.end;
+                    const dur = g.end - g.start;
+                    const gapAbsStart = ((absStart % 1440) + 1440) % 1440;
+                    const night = inSleepWindow(gapAbsStart, sleepFrom, sleepTo);
+                    const durText = dur < 60 ? `${dur} min` : `${Math.floor(dur/60)}h${dur%60>0?' '+dur%60+'m':''}`;
+                    return (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                        night
+                          ? "bg-[rgba(248,81,73,0.06)] border-[rgba(248,81,73,0.2)]"
+                          : "bg-[rgba(34,197,94,0.06)] border-[rgba(34,197,94,0.2)]"
+                      }`}>
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${night ? "bg-[#f85149]" : "bg-[#22c55e]"}`} />
+                        <span className="text-[12px] text-[#e6edf3]">{minToHHMM(absStart)} – {minToHHMM(absEnd)}</span>
+                        <span className={`text-[11px] ml-auto flex-shrink-0 ${night ? "text-[#f85149]" : "text-[#22c55e]"}`}>{durText}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
 
