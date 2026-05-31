@@ -306,6 +306,64 @@ function performTransition(sections, stepStates, stepTimestamps, stepIndex, acti
     timestamps[stepIndex].temperature = parseFloat(extraData.temperature);
   }
 
+  // ── Action: undo ─────────────────────────────────────────
+  // Macht den zuletzt abgeschlossenen Schritt einer Phase rückgängig.
+  // Erlaubt nur wenn der aktuelle Step ein Warten-Step ist (active oder soft_done).
+  // Typischer Fall: User hat versehentlich einen Aktions-Step als "Erledigt" markiert,
+  // woraufhin automatisch die Wartephase gestartet wurde.
+  else if (action === 'undo') {
+    // Nur erlaubt wenn der aktuelle Step active oder soft_done ist
+    if (currentState !== 'active' && currentState !== 'soft_done') {
+      return { error: `Undo nicht möglich: Step ${stepIndex} hat Status "${currentState}"`, states, timestamps, sideEffects };
+    }
+
+    // Nur für Warte-Steps erlaubt (Aktion zurückzurollen ist zu komplex/riskant)
+    if (!isWaitStep(step)) {
+      return { error: `Undo nur für Warte-Schritte möglich`, states, timestamps, sideEffects };
+    }
+
+    // Aktuellen Warte-Step zurück auf locked
+    states[stepIndex] = 'locked';
+    delete timestamps[stepIndex];
+
+    // Vorherigen done-Step der gleichen Phase finden und zurücksetzen
+    const phaseSteps = steps.filter(s => s.phase === step.phase);
+    const prevDoneSteps = phaseSteps
+      .filter(s => s.globalIdx < stepIndex && states[s.globalIdx] === 'done')
+      .sort((a, b) => b.globalIdx - a.globalIdx); // absteigend → letzter zuerst
+
+    if (prevDoneSteps.length > 0) {
+      const prevStep = prevDoneSteps[0];
+      // Aktions-Step: zurück auf active
+      if (isActionStep(prevStep)) {
+        states[prevStep.globalIdx] = 'active';
+        // Timestamps bereinigen: completed_at und actual_duration entfernen, started_at behalten
+        if (timestamps[prevStep.globalIdx]) {
+          delete timestamps[prevStep.globalIdx].completed_at;
+          delete timestamps[prevStep.globalIdx].actual_duration;
+          delete timestamps[prevStep.globalIdx].auto_completed;
+          // started_at neu setzen falls nicht vorhanden
+          if (!timestamps[prevStep.globalIdx].started_at) {
+            timestamps[prevStep.globalIdx] = { started_at: now, planned_duration: prevStep.duration * 60 };
+          }
+        } else {
+          timestamps[prevStep.globalIdx] = { started_at: now, planned_duration: prevStep.duration * 60 };
+        }
+      }
+      // Auto-completed Schritte davor ebenfalls zurücksetzen
+      phaseSteps
+        .filter(s => s.globalIdx < prevStep.globalIdx && states[s.globalIdx] === 'done' && stepTimestamps[s.globalIdx]?.auto_completed)
+        .forEach(s => {
+          states[s.globalIdx] = 'active';
+          if (timestamps[s.globalIdx]) {
+            delete timestamps[s.globalIdx].completed_at;
+            delete timestamps[s.globalIdx].actual_duration;
+            delete timestamps[s.globalIdx].auto_completed;
+          }
+        });
+    }
+  }
+
   else {
     return { error: `Unbekannte Action: ${action}`, states, timestamps, sideEffects };
   }
