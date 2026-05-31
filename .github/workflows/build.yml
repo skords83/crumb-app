@@ -1,8 +1,10 @@
 name: Build and Push Docker Images
+
 on:
   push:
     branches:
       - main
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,13 +14,13 @@ jobs:
     env:
       REGISTRY: ghcr.io
       IMAGE_PREFIX: ghcr.io/skords83/crumb-app
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Login to ghcr.io
-        run: |
-          echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u skords83 --password-stdin
+        run: echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u skords83 --password-stdin
 
       - name: Build and push UI
         run: |
