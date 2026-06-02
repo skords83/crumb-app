@@ -393,61 +393,82 @@ export default function BackplanPage() {
           if (phase.isActiveWaiting && activePhaseStep) {
             const upcomingSteps = phase.steps.filter(s => s.state !== 'done' && s.globalIdx !== activePhaseStep.globalIdx);
             return (
-              <div key={pIdx} className="mb-4 rounded-2xl border border-amber-200/60 dark:border-amber-400/15 bg-amber-50/40 dark:bg-amber-500/[0.04] p-4">
-                {/* Header */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 bg-amber-100 text-amber-600 border border-amber-300/50 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/30">
-                    {pIdx + 1}
-                  </span>
-                  <span className="text-[13px] font-extrabold flex-1 text-[#2C1A0E] dark:text-white/80">{phase.name}</span>
-                  {waitRem !== null && waitRem > 0 && (
-                    <span className="text-[12px] font-bold text-amber-600 dark:text-amber-400 tabular-nums">{formatCountdown(waitRem)}</span>
-                  )}
-                  <span className="text-[11px] text-[#C4A484] dark:text-white/25 font-bold">{phase.done}/{phase.total}</span>
-                </div>
-
-                {/* Zutaten als Chips — kompakt, kein Toggle nötig */}
-                {IngChips}
-
-                {/* Aktiver Warte-Schritt */}
-                <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-200/50 dark:border-amber-400/15 bg-amber-50/50 dark:bg-amber-500/5 mb-1.5">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-amber-400 dark:bg-amber-500 animate-pulse" />
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">{activePhaseStep.type}</span>
-                  <span className="text-[12px] flex-1 leading-snug text-[#5C3D1E] dark:text-white/70">{activePhaseStep.instruction}</span>
-                  {waitRem !== null && waitRem > 0 && (
-                    <span className="text-[11px] font-bold flex-shrink-0 text-amber-600 dark:text-amber-400 tabular-nums">{formatCountdown(waitRem)}</span>
-                  )}
-                </div>
-
-                {/* Kommende Schritte als gedimmte Preview */}
-                {upcomingSteps.map((step: TimelineStep) => (
-                  <div key={step.globalIdx} className="flex items-start gap-2.5 px-3 py-2 rounded-xl border border-[#EDE5D6] dark:border-white/[0.04] bg-transparent opacity-35 mb-1">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-[#D6C9B4] dark:bg-white/15" />
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30">{step.type}</span>
-                    <span className="text-[12px] flex-1 leading-snug text-[#C4A484] dark:text-white/30">{step.instruction}</span>
-                    <span className="text-[11px] font-bold flex-shrink-0 text-[#D6C9B4] dark:text-white/15">{formatStepDuration(step)}</span>
+              <React.Fragment key={pIdx}>
+                {/* Erledigte Schritte — außerhalb der Card, hauchdünn */}
+                {doneSteps.length > 0 && (
+                  <div className="mb-1 pl-1 flex flex-col gap-0.5">
+                    {doneSteps.map((step: TimelineStep) => (
+                      <div key={step.globalIdx} className="flex items-center gap-2 py-0.5 opacity-30">
+                        <Check size={10} className="text-[#8B7355] dark:text-[#C4A484] flex-shrink-0" />
+                        <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] line-through flex-1 truncate">{step.instruction}</span>
+                        <span className="text-[10px] text-[#D6C9B4] dark:text-white/15 flex-shrink-0">{formatStepDuration(step)}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
 
-                {/* Aktions-Buttons + Undo */}
-                <div className="flex gap-2 mt-3">
-                  <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
-                    className="flex-1 py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">
-                    Fertig (Teig reif)
-                  </button>
-                  <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'extend_timer', { minutes: 15 })}
-                    className="px-4 py-3 rounded-xl bg-[#EDE5D6] dark:bg-white/10 text-[#5C3D1E] dark:text-white/60 font-bold text-[12px]">
-                    +15 Min
+                {/* Aktive Card — nur Header + Zutaten-Chips + aktiver Warte-Schritt + Buttons */}
+                <div className="mb-2 rounded-2xl border border-amber-200/60 dark:border-amber-400/15 bg-amber-50/40 dark:bg-amber-500/[0.04] p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 bg-amber-100 text-amber-600 border border-amber-300/50 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/30">
+                      {pIdx + 1}
+                    </span>
+                    <span className="text-[13px] font-extrabold flex-1 text-[#2C1A0E] dark:text-white/80">{phase.name}</span>
+                    {waitRem !== null && waitRem > 0 && (
+                      <span className="text-[12px] font-bold text-amber-600 dark:text-amber-400 tabular-nums">{formatCountdown(waitRem)}</span>
+                    )}
+                    <span className="text-[11px] text-[#C4A484] dark:text-white/25 font-bold">{phase.done}/{phase.total}</span>
+                  </div>
+
+                  {IngChips}
+
+                  {/* Aktiver Warte-Schritt */}
+                  <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-200/50 dark:border-amber-400/15 bg-amber-50/50 dark:bg-amber-500/5 mb-3">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-amber-400 dark:bg-amber-500 animate-pulse" />
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">{activePhaseStep.type}</span>
+                    <span className="text-[12px] flex-1 leading-snug text-[#5C3D1E] dark:text-white/70">{activePhaseStep.instruction}</span>
+                    {waitRem !== null && waitRem > 0 && (
+                      <span className="text-[11px] font-bold flex-shrink-0 text-amber-600 dark:text-amber-400 tabular-nums">{formatCountdown(waitRem)}</span>
+                    )}
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-2">
+                    <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
+                      className="flex-1 py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">
+                      Fertig (Teig reif)
+                    </button>
+                    <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'extend_timer', { minutes: 15 })}
+                      className="px-4 py-3 rounded-xl bg-[#EDE5D6] dark:bg-white/10 text-[#5C3D1E] dark:text-white/60 font-bold text-[12px]">
+                      +15 Min
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => transition(session.id, activePhaseStep.globalIdx, 'undo')}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-semibold text-[#A68B6A] dark:text-white/25 hover:text-[#8B7355] dark:hover:text-white/50 hover:bg-[#EDE5D6] dark:hover:bg-white/[0.04] transition-colors"
+                  >
+                    <RotateCcw size={12} /> Schritt zurück
                   </button>
                 </div>
-                {/* Undo-Button: dezent, immer sichtbar solange Wartephase läuft */}
-                <button
-                  onClick={() => transition(session.id, activePhaseStep.globalIdx, 'undo')}
-                  className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-semibold text-[#A68B6A] dark:text-white/25 hover:text-[#8B7355] dark:hover:text-white/50 hover:bg-[#EDE5D6] dark:hover:bg-white/[0.04] transition-colors"
-                >
-                  <RotateCcw size={12} /> Schritt zurück
-                </button>
-              </div>
+
+                {/* Kommende Schritte — außerhalb der Card, gedimmt */}
+                {upcomingSteps.length > 0 && (
+                  <div className="mb-4 pl-1 flex flex-col gap-0.5">
+                    {upcomingSteps.map((step: TimelineStep) => (
+                      <div key={step.globalIdx} className="flex items-center gap-2 py-0.5 opacity-30">
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#D6C9B4] dark:bg-white/20" />
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 ${
+                          step.type === 'Backen' ? 'bg-red-500/20 text-red-700 dark:text-red-400'
+                          : step.type === 'Warten' || step.type === 'Ruhen' || step.type === 'Kühl' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                          : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30'
+                        }`}>{step.type}</span>
+                        <span className="text-[11px] text-[#A68B6A] dark:text-white/30 flex-1 truncate">{step.instruction}</span>
+                        <span className="text-[10px] font-bold text-[#D6C9B4] dark:text-white/15 flex-shrink-0">{formatStepDuration(step)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </React.Fragment>
             );
           }
 
@@ -471,99 +492,104 @@ export default function BackplanPage() {
               );
             }
 
-            const upcomingSteps = pendingSteps.filter((s: TimelineStep) => s.state !== 'active' && s.state !== 'soft_done');
-
             return (
-              <React.Fragment key={pIdx}>
+              <div key={pIdx} className="mb-4 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/40">
+                      {pIdx + 1}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${
+                      isBaking ? 'bg-red-500 text-white'
+                      : 'bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/30'
+                    }`}>{phase.name}</span>
+                    {ings.length > 0 && (
+                      <button onClick={() => toggleIng(ik)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-[#8B7355]/70 hover:text-[#8B7355] dark:text-[#C4A484]/70 dark:hover:text-[#C4A484] transition-colors">
+                        <Filter size={11} /> {ings.length} Zutaten {isIO ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-[#A68B6A] dark:text-white/30 font-bold">
+                    {activePhaseStep.scheduled_start
+                      ? new Date(activePhaseStep.scheduled_start) <= currentTime
+                        ? `seit ${formatSmartTime(new Date(activePhaseStep.scheduled_start))}`
+                        : `ab ${formatSmartTime(new Date(activePhaseStep.scheduled_start))}`
+                      : ''}
+                  </span>
+                </div>
 
-                {/* ── Erledigte Schritte — außerhalb der Card, hauchdünn ── */}
+                {/* Zutaten-Liste aufgeklappt */}
+                {IngList}
+
+                {/* Erledigte Schritte dieser Phase */}
                 {doneSteps.length > 0 && (
-                  <div className="mb-1 pl-1 flex flex-col gap-0.5">
+                  <div className="mb-2">
                     {doneSteps.map((step: TimelineStep) => (
-                      <div key={step.globalIdx} className="flex items-center gap-2 py-0.5 opacity-30">
-                        <Check size={10} className="text-[#8B7355] dark:text-[#C4A484] flex-shrink-0" />
-                        <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] line-through flex-1 truncate">{step.instruction}</span>
+                      <div key={step.globalIdx} className="flex items-center gap-2 py-0.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#8B7355]/30 dark:bg-[#C4A484]/40 flex-shrink-0" />
+                        <span className="text-[11px] text-[#C4A484] dark:text-white/20 line-through flex-1 truncate">{step.instruction}</span>
                         <span className="text-[10px] text-[#D6C9B4] dark:text-white/15 flex-shrink-0">{formatStepDuration(step)}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* ── Aktive Card — Header + Zutaten + aktiver Schritt + Button ── */}
-                <div className="mb-2 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/40">
-                        {pIdx + 1}
-                      </span>
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide ${
-                        isBaking ? 'bg-red-500 text-white'
-                        : 'bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/30'
-                      }`}>{phase.name}</span>
-                      {ings.length > 0 && (
-                        <button onClick={() => toggleIng(ik)}
-                          className="flex items-center gap-1 text-[10px] font-bold text-[#8B7355]/70 hover:text-[#8B7355] dark:text-[#C4A484]/70 dark:hover:text-[#C4A484] transition-colors">
-                          <Filter size={11} /> {ings.length} Zutaten {isIO ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                        </button>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-[#A68B6A] dark:text-white/30 font-bold">
-                      {activePhaseStep.scheduled_start
-                        ? new Date(activePhaseStep.scheduled_start) <= currentTime
-                          ? `seit ${formatSmartTime(new Date(activePhaseStep.scheduled_start))}`
-                          : `ab ${formatSmartTime(new Date(activePhaseStep.scheduled_start))}`
-                        : ''}
-                    </span>
-                  </div>
-
-                  {IngList}
-
-                  {/* Aktiver Schritt */}
-                  <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl mb-3 border-2 border-[#8B7355]/25 bg-[#8B7355]/[0.05] dark:border-[#C4A484]/25 dark:bg-[#C4A484]/[0.06]">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-[#8B7355] dark:bg-[#C4A484] animate-pulse" />
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
-                      isBaking ? 'bg-red-500 text-white'
-                      : 'bg-[#8B7355]/15 text-[#8B7355] border border-[#8B7355]/20 dark:bg-[#C4A484]/20 dark:text-[#C4A484] dark:border-[#C4A484]/20'
-                    }`}>{activePhaseStep.type}</span>
-                    <span className="text-[13px] font-semibold flex-1 leading-snug text-[#2C1A0E] dark:text-white/90">{activePhaseStep.instruction}</span>
-                    <span className="text-[11px] font-bold flex-shrink-0 text-[#8B7355] dark:text-[#C4A484]">
-                      {sRem ? formatCountdown(sRem) : formatStepDuration(activePhaseStep)}
-                    </span>
-                  </div>
-
-                  {/* Button */}
-                  {isBaking ? (
-                    <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
-                      className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">
-                      Raus aus dem Ofen
-                    </button>
-                  ) : (
-                    <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
-                      className="w-full py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">
-                      Erledigt
-                    </button>
-                  )}
+                {/* Aktiver Schritt + kommende Schritte */}
+                <div className="flex flex-col gap-1.5 mb-3">
+                  {pendingSteps.map((step: TimelineStep) => {
+                    const isA = step.state === 'active' || step.state === 'soft_done';
+                    const isL = step.state === 'locked';
+                    const isR = step.state === 'ready';
+                    const sRemStep = isA ? stepRemaining(step) : null;
+                    return (
+                      <div key={step.globalIdx} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
+                        isA
+                          ? 'border-2 border-[#8B7355]/30 bg-[#8B7355]/[0.06] dark:border-[#C4A484]/30 dark:bg-[#C4A484]/[0.08]'
+                          : isR
+                            ? 'border border-dashed border-[#D6C9B4] dark:border-white/15 bg-[#F5F0E8] dark:bg-white/[0.03]'
+                            : isL
+                              ? 'border border-[#EDE5D6] dark:border-white/[0.04] bg-transparent opacity-40'
+                              : 'border border-[#EDE5D6] dark:border-white/[0.06] bg-white dark:bg-white/[0.02]'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
+                          isA ? 'bg-[#8B7355] dark:bg-[#C4A484] animate-pulse'
+                          : isR ? 'bg-amber-500'
+                          : 'bg-[#D6C9B4] dark:bg-white/15'
+                        }`} />
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
+                          step.type === 'Backen' ? 'bg-red-500 text-white'
+                          : step.type === 'Aktion' || step.type === 'Kneten'
+                            ? 'bg-[#8B7355]/15 text-[#8B7355] border border-[#8B7355]/20 dark:bg-[#C4A484]/20 dark:text-[#C4A484] dark:border-[#C4A484]/20'
+                            : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30'
+                        } ${isL ? 'opacity-50' : ''}`}>{step.type}</span>
+                        <span className={`text-[12px] flex-1 leading-snug ${
+                          isL ? 'text-[#C4A484] dark:text-white/20'
+                          : isA ? 'text-[#2C1A0E] dark:text-white/90'
+                          : 'text-[#5C3D1E] dark:text-white/55'
+                        }`}>{step.instruction}</span>
+                        <span className={`text-[11px] font-bold flex-shrink-0 ${
+                          isA && sRemStep ? 'text-[#8B7355] dark:text-[#C4A484]' : 'text-[#D6C9B4] dark:text-white/20'
+                        }`}>{isA && sRemStep ? formatCountdown(sRemStep) : formatStepDuration(step)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {/* ── Kommende Schritte — außerhalb der Card, gedimmt ── */}
-                {upcomingSteps.length > 0 && (
-                  <div className="mb-4 pl-1 flex flex-col gap-0.5">
-                    {upcomingSteps.map((step: TimelineStep) => (
-                      <div key={step.globalIdx} className="flex items-center gap-2 py-0.5 opacity-30">
-                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#D6C9B4] dark:bg-white/20" />
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 ${
-                          step.type === 'Backen' ? 'bg-red-500/20 text-red-700 dark:text-red-400'
-                          : step.type === 'Warten' || step.type === 'Ruhen' || step.type === 'Kühl' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
-                          : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30'
-                        }`}>{step.type}</span>
-                        <span className="text-[11px] text-[#A68B6A] dark:text-white/30 flex-1 truncate">{step.instruction}</span>
-                        <span className="text-[10px] font-bold text-[#D6C9B4] dark:text-white/15 flex-shrink-0">{formatStepDuration(step)}</span>
-                      </div>
-                    ))}
-                  </div>
+                {/* Aktions-Button */}
+                {isBaking ? (
+                  <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
+                    className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">
+                    Raus aus dem Ofen
+                  </button>
+                ) : (
+                  <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
+                    className="w-full py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">
+                    Erledigt
+                  </button>
                 )}
-
-              </React.Fragment>
+              </div>
             );
           }
 
