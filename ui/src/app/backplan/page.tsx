@@ -140,10 +140,12 @@ export default function BackplanPage() {
       const isSoftDone = activePhaseStep?.state === 'soft_done';
       const isBaking = activePhaseStep?.type === 'Backen';
 
-      // Zutaten-Relevanz: gibt es noch ungemachte Aktion-Schritte in dieser Phase?
-      const hasUpcomingActionSteps = steps.some(s =>
-        s.state !== 'done' && ACTION_TYPES.has(s.type)
+      // Zutaten sind nur in der "Misch-Phase" relevant — bevor die erste Warte- oder Back-Phase done ist.
+      // Sobald geruht/gebacken wurde, sind die Zutaten verarbeitet und Mengen nicht mehr nötig.
+      const hasPassedRest = steps.some(s =>
+        s.state === 'done' && (WAIT_TYPES.has(s.type) || s.type === 'Backen')
       );
+      const ingredientsRelevant = !hasPassedRest;
 
       // Urgency-Berechnung für Wartephasen
       const waitRem = activePhaseStep && activePhaseStep.end
@@ -156,7 +158,7 @@ export default function BackplanPage() {
       return {
         name, steps, done, total, hasActive, allDone, allLocked,
         isActiveWaiting, isActiveAction, isSoftDone, isBaking,
-        activePhaseStep, hasUpcomingActionSteps, urgency, waitRem
+        activePhaseStep, ingredientsRelevant, urgency, waitRem
       };
     });
 
@@ -183,15 +185,15 @@ export default function BackplanPage() {
       const n = new Set(prev);
       sortedPhases.forEach(p => {
         const k = `${session.id}-${p.name}`;
-        if (p.hasActive && p.hasUpcomingActionSteps) {
+        if (p.hasActive && p.ingredientsRelevant) {
           n.add(k);
-        } else if (p.hasActive && !p.hasUpcomingActionSteps) {
+        } else if (p.hasActive && !p.ingredientsRelevant) {
           n.delete(k);
         }
       });
       return n;
     });
-  }, [session?.id, sortedPhases.map(p => `${p.name}:${p.hasUpcomingActionSteps}:${p.hasActive}`).join('|')]);
+  }, [session?.id, sortedPhases.map(p => `${p.name}:${p.ingredientsRelevant}:${p.hasActive}`).join('|')]);
 
   const getSec = (name: string) => session?.dough_sections?.find((s: any) => s.name === name);
 
@@ -434,7 +436,7 @@ export default function BackplanPage() {
 
           // Zutaten-Block (kompakt-kollabiert oder voll aufgeklappt)
           const IngredientsSection = ings.length === 0 ? null : (
-            !phase.hasUpcomingActionSteps ? (
+            !phase.ingredientsRelevant ? (
               // Kollabiert
               <button
                 onClick={() => toggleIng(ik)}
@@ -703,7 +705,7 @@ export default function BackplanPage() {
             </React.Fragment>
           );
         })}
-
+        
         {multiplier !== 1 && (
           <div className="mt-2 text-center">
             <span className="text-[10px] font-bold text-[#8B7355] dark:text-[#C4A484] bg-[#8B7355]/10 dark:bg-[#C4A484]/10 px-3 py-1 rounded-lg">{multiplier}x Menge</span>
