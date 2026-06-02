@@ -472,7 +472,6 @@ export default function BackplanPage() {
             }
 
             const upcomingSteps = pendingSteps.filter((s: TimelineStep) => s.state !== 'active' && s.state !== 'soft_done');
-            const sRem = stepRemaining(activePhaseStep);
 
             return (
               <React.Fragment key={pIdx}>
@@ -490,9 +489,8 @@ export default function BackplanPage() {
                   </div>
                 )}
 
-                {/* ── Aktive Card — nur Header + Zutaten + aktiver Schritt + Button ── */}
+                {/* ── Aktive Card — Header + Zutaten + aktiver Schritt + Button ── */}
                 <div className="mb-2 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
-                  {/* Header */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 bg-[#8B7355]/20 text-[#8B7355] border border-[#8B7355]/30 dark:bg-[#C4A484]/30 dark:text-[#C4A484] dark:border-[#C4A484]/40">
@@ -518,10 +516,9 @@ export default function BackplanPage() {
                     </span>
                   </div>
 
-                  {/* Zutaten aufgeklappt */}
                   {IngList}
 
-                  {/* Aktiver Schritt — die einzige Zeile in der Card */}
+                  {/* Aktiver Schritt */}
                   <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl mb-3 border-2 border-[#8B7355]/25 bg-[#8B7355]/[0.05] dark:border-[#C4A484]/25 dark:bg-[#C4A484]/[0.06]">
                     <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-[#8B7355] dark:bg-[#C4A484] animate-pulse" />
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
