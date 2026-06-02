@@ -146,12 +146,10 @@ export default function BackplanPage() {
       const isSoftDone = activePhaseStep?.state === 'soft_done';
       const isBaking = activePhaseStep?.type === 'Backen';
 
-      // Zutaten sind nur in der "Misch-Phase" relevant — bevor die erste Warte- oder Back-Phase done ist.
-      // Sobald geruht/gebacken wurde, sind die Zutaten verarbeitet und Mengen nicht mehr nötig.
-      const hasPassedRest = steps.some(s =>
-        s.state === 'done' && (WAIT_TYPES.has(s.type) || s.type === 'Backen')
-      );
-      const ingredientsRelevant = !hasPassedRest;
+      // Zutaten sind nur am Anfang einer Phase relevant — beim Abwiegen.
+      // Sobald irgendein Schritt der Phase erledigt ist, hat der Baker alles bereit
+      // und braucht die Mengen nicht mehr prominent.
+      const ingredientsRelevant = steps.every(s => s.state !== 'done');
 
       // Urgency-Berechnung für Wartephasen
       const waitRem = activePhaseStep && activePhaseStep.end
@@ -473,9 +471,9 @@ export default function BackplanPage() {
                   </div>
                 </button>
                 {isIO && (
-                  <div className="px-3 pb-2.5 pt-0.5">
+                  <div className="px-3 pb-2.5 pt-0.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                     {ings.map((ing: any, iIdx: number) => (
-                      <div key={iIdx} className="flex justify-between text-[11px] py-1.5 border-b border-[#EDE5D6] dark:border-white/[0.05] last:border-0">
+                      <div key={iIdx} className="flex justify-between text-[11px] py-1 border-b border-[#EDE5D6]/60 dark:border-white/[0.04] last:border-0 sm:[&:nth-last-child(2):nth-child(odd)]:border-0">
                         <span className="text-[#5C3D1E]/80 dark:text-white/55">{ing.name}</span>
                         <span className="font-bold text-[#2C1A0E] dark:text-white/85">
                           {ing.amount ? `${scaleAmount(ing.amount, multiplier)} ${String(ing.amount||'').includes(ing.unit) ? '' : ing.unit||''}` : ''}
