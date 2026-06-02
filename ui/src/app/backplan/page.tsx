@@ -374,7 +374,7 @@ export default function BackplanPage() {
           // ── SOFT_DONE Phase (Zeit abgelaufen, warte auf Bestätigung) ──
           if (isSoftDone && activePhaseStep) {
             return (
-              <div key={pIdx} ref={activeCardRef} className="mb-4 rounded-2xl border-2 border-amber-400/40 dark:border-amber-400/30 bg-amber-50 dark:bg-amber-500/5 p-5">
+              <div key={pIdx} className="mb-4 rounded-2xl border-2 border-amber-400/40 dark:border-amber-400/30 bg-amber-50 dark:bg-amber-500/5 p-5">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">{phase.name}</span>
                   <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">Zeit abgelaufen</span>
@@ -473,7 +473,8 @@ export default function BackplanPage() {
             }
 
             return (
-              <div key={pIdx} ref={activeCardRef} className="mb-4 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
+              <React.Fragment key={pIdx}>
+              <div className="mb-4 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -516,46 +517,24 @@ export default function BackplanPage() {
                   </div>
                 )}
 
-                {/* Aktiver Schritt + kommende Schritte */}
-                <div className="flex flex-col gap-1.5 mb-3">
-                  {pendingSteps.map((step: TimelineStep) => {
-                    const isA = step.state === 'active' || step.state === 'soft_done';
-                    const isL = step.state === 'locked';
-                    const isR = step.state === 'ready';
-                    const sRemStep = isA ? stepRemaining(step) : null;
-                    return (
-                      <div key={step.globalIdx} className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
-                        isA
-                          ? 'border-2 border-[#8B7355]/30 bg-[#8B7355]/[0.06] dark:border-[#C4A484]/30 dark:bg-[#C4A484]/[0.08]'
-                          : isR
-                            ? 'border border-dashed border-[#D6C9B4] dark:border-white/15 bg-[#F5F0E8] dark:bg-white/[0.03]'
-                            : isL
-                              ? 'border border-[#EDE5D6] dark:border-white/[0.04] bg-transparent opacity-40'
-                              : 'border border-[#EDE5D6] dark:border-white/[0.06] bg-white dark:bg-white/[0.02]'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
-                          isA ? 'bg-[#8B7355] dark:bg-[#C4A484] animate-pulse'
-                          : isR ? 'bg-amber-500'
-                          : 'bg-[#D6C9B4] dark:bg-white/15'
-                        }`} />
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
-                          step.type === 'Backen' ? 'bg-red-500 text-white'
-                          : step.type === 'Aktion' || step.type === 'Kneten'
-                            ? 'bg-[#8B7355]/15 text-[#8B7355] border border-[#8B7355]/20 dark:bg-[#C4A484]/20 dark:text-[#C4A484] dark:border-[#C4A484]/20'
-                            : 'bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30'
-                        } ${isL ? 'opacity-50' : ''}`}>{step.type}</span>
-                        <span className={`text-[12px] flex-1 leading-snug ${
-                          isL ? 'text-[#C4A484] dark:text-white/20'
-                          : isA ? 'text-[#2C1A0E] dark:text-white/90'
-                          : 'text-[#5C3D1E] dark:text-white/55'
-                        }`}>{step.instruction}</span>
-                        <span className={`text-[11px] font-bold flex-shrink-0 ${
-                          isA && sRemStep ? 'text-[#8B7355] dark:text-[#C4A484]' : 'text-[#D6C9B4] dark:text-white/20'
-                        }`}>{isA && sRemStep ? formatCountdown(sRemStep) : formatStepDuration(step)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* Nur der aktive Schritt */}
+                {(() => {
+                  const activeStep = pendingSteps.find((s: TimelineStep) => s.state === 'active' || s.state === 'soft_done');
+                  const sRemStep = activeStep ? stepRemaining(activeStep) : null;
+                  if (!activeStep) return null;
+                  return (
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl mb-3 border-2 border-[#8B7355]/30 bg-[#8B7355]/[0.06] dark:border-[#C4A484]/30 dark:bg-[#C4A484]/[0.08]">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5 bg-[#8B7355] dark:bg-[#C4A484] animate-pulse" />
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${
+                        activeStep.type === 'Backen' ? 'bg-red-500 text-white'
+                        : 'bg-[#8B7355]/15 text-[#8B7355] border border-[#8B7355]/20 dark:bg-[#C4A484]/20 dark:text-[#C4A484] dark:border-[#C4A484]/20'
+                      }`}>{activeStep.type}</span>
+                      <span className="text-[12px] flex-1 leading-snug text-[#2C1A0E] dark:text-white/90">{activeStep.instruction}</span>
+                      {sRemStep !== null && <span className="text-[11px] font-bold flex-shrink-0 text-[#8B7355] dark:text-[#C4A484]">{formatCountdown(sRemStep)}</span>}
+                      {sRemStep === null && <span className="text-[11px] font-bold flex-shrink-0 text-[#D6C9B4] dark:text-white/20">{formatStepDuration(activeStep)}</span>}
+                    </div>
+                  );
+                })()}
 
                 {/* Aktions-Button */}
                 {isBaking ? (
@@ -570,6 +549,25 @@ export default function BackplanPage() {
                   </button>
                 )}
               </div>
+
+              {/* Kommende Schritte — außerhalb der Card, kompakt und gedimmt */}
+              {(() => {
+                const upcomingSteps = pendingSteps.filter((s: TimelineStep) => s.state !== 'active' && s.state !== 'soft_done');
+                if (upcomingSteps.length === 0) return null;
+                return (
+                  <div className="mb-4 pl-3 flex flex-col gap-1">
+                    {upcomingSteps.map((step: TimelineStep) => (
+                      <div key={step.globalIdx} className="flex items-start gap-2 py-1 opacity-35">
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 bg-[#D6C9B4] dark:bg-white/15" />
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 bg-[#EDE5D6] text-[#A68B6A] dark:bg-white/[0.06] dark:text-white/30">{step.type}</span>
+                        <span className="text-[11px] flex-1 leading-snug text-[#A68B6A] dark:text-white/30 truncate">{step.instruction}</span>
+                        <span className="text-[10px] font-bold flex-shrink-0 text-[#D6C9B4] dark:text-white/15">{formatStepDuration(step)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </React.Fragment>
             );
           }
 
