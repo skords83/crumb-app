@@ -128,10 +128,12 @@ export default function BackplanPage() {
     const phases = getPhases(timeline).map(name => {
       const steps = timeline.filter(s => s.phase === name);
       const { done, total } = getPhaseProgress(timeline, name);
-      const hasActive = steps.some(s => s.state === 'active' || s.state === 'soft_done');
+      const activeOrSoftDone = steps.find(s => s.state === 'active' || s.state === 'soft_done');
+      const readyStep = steps.find(s => s.state === 'ready');
+      const activePhaseStep = activeOrSoftDone || readyStep || null;
+      const hasActive = activePhaseStep != null;
       const allDone = done === total;
       const allLocked = steps.every(s => s.state === 'locked');
-      const activePhaseStep = steps.find(s => s.state === 'active' || s.state === 'soft_done');
       const isActiveWaiting = hasActive && activePhaseStep != null &&
         WAIT_TYPES.has(activePhaseStep.type);
       const isActiveAction = hasActive && !isActiveWaiting;
@@ -404,14 +406,25 @@ export default function BackplanPage() {
           }
 
           // ── Aktive Phasen brauchen den activeStep ──
+          // Edge-case: keine active/soft_done/ready Schritte aber auch nicht allDone/allLocked
+          // → Phase wartet auf einen Gate oder Vorgänger. Zeige zumindest was los ist.
           if (!activePhaseStep) {
+            const lockedSteps = phase.steps.filter(s => s.state === 'locked');
+            const nextStep = lockedSteps[0];
             return (
-              <div key={pIdx} className="mb-2 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-transparent border border-[#EDE5D6] dark:border-white/[0.04] opacity-50">
+              <div key={pIdx} className="mb-2 flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-transparent border border-dashed border-[#D6C9B4] dark:border-white/[0.06] opacity-65">
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 bg-[#EDE5D6] text-[#C4A484] dark:bg-white/[0.06] dark:text-white/25">
                   {pIdx + 1}
                 </span>
-                <span className="text-[11px] font-semibold text-[#A68B6A] dark:text-white/30 flex-1">{phase.name}</span>
-                <span className="text-[10px] text-[#C4A484] dark:text-white/20">wartet</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-semibold text-[#5C3D1E] dark:text-white/45 truncate">{phase.name}</div>
+                  {nextStep && (
+                    <div className="text-[10px] text-[#A68B6A] dark:text-white/30 truncate">
+                      Pausiert · {phase.done}/{phase.total} erledigt · nächstes: {nextStep.instruction}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px] text-[#C4A484] dark:text-white/20 flex-shrink-0">wartet</span>
               </div>
             );
           }
