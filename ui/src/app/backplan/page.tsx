@@ -59,6 +59,7 @@ export default function BackplanPage() {
   const [finishModalId, setFinishModalId] = useState<number | null>(null);
   const [finishNotes, setFinishNotes] = useState('');
   const [openIngredients, setOpenIngredients] = useState<Set<string>>(new Set());
+  const [openDoneSteps, setOpenDoneSteps] = useState<Set<string>>(new Set());
 
   const loadSessions = useCallback(async () => {
     try {
@@ -109,6 +110,11 @@ export default function BackplanPage() {
   };
 
   const toggleIng = (key: string) => setOpenIngredients(prev => {
+    const n = new Set(prev);
+    n.has(key) ? n.delete(key) : n.add(key);
+    return n;
+  });
+  const toggleDoneSteps = (key: string) => setOpenDoneSteps(prev => {
     const n = new Set(prev);
     n.has(key) ? n.delete(key) : n.add(key);
     return n;
@@ -482,16 +488,34 @@ export default function BackplanPage() {
             )
           );
 
-          // Erledigte Schritte als hauchdünne Zeilen
+          // Erledigte Schritte — standardmäßig kollabiert, ein Tap zum Aufklappen
+          const doneKey = `${session.id}-${phase.name}-done`;
+          const doneOpen = openDoneSteps.has(doneKey);
           const DoneStepsList = doneSteps.length > 0 && (
-            <div className="mb-1 pl-1 flex flex-col gap-0.5">
-              {doneSteps.map((step: TimelineStep) => (
-                <div key={step.globalIdx} className="flex items-center gap-2 py-0.5 opacity-30">
-                  <Check size={10} className="text-[#8B7355] dark:text-[#C4A484] flex-shrink-0" />
-                  <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] line-through flex-1 truncate">{step.instruction}</span>
-                  <span className="text-[10px] text-[#D6C9B4] dark:text-white/15 flex-shrink-0">{formatStepDuration(step)}</span>
+            <div className="mb-1">
+              <button
+                onClick={() => toggleDoneSteps(doneKey)}
+                className="w-full flex items-center gap-2 px-2 py-1 rounded opacity-50 hover:opacity-80 transition-opacity"
+              >
+                <Check size={10} className="text-[#8B7355] dark:text-[#C4A484] flex-shrink-0" />
+                <span className="text-[10px] text-[#8B7355] dark:text-[#C4A484] flex-1 text-left">
+                  {doneSteps.length} {doneSteps.length === 1 ? 'Schritt' : 'Schritte'} erledigt
+                </span>
+                {doneOpen
+                  ? <ChevronUp size={11} className="text-[#8B7355]/60 dark:text-[#C4A484]/60" />
+                  : <ChevronDown size={11} className="text-[#8B7355]/60 dark:text-[#C4A484]/60" />}
+              </button>
+              {doneOpen && (
+                <div className="pl-1 flex flex-col gap-0.5 mt-0.5">
+                  {doneSteps.map((step: TimelineStep) => (
+                    <div key={step.globalIdx} className="flex items-center gap-2 py-0.5 opacity-30">
+                      <Check size={10} className="text-[#8B7355] dark:text-[#C4A484] flex-shrink-0" />
+                      <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] line-through flex-1 truncate">{step.instruction}</span>
+                      <span className="text-[10px] text-[#D6C9B4] dark:text-white/15 flex-shrink-0">{formatStepDuration(step)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           );
 
@@ -516,14 +540,18 @@ export default function BackplanPage() {
             </div>
           );
 
-          const undoButton = (
+          // Undo: zielt auf den letzten erledigten Schritt — der wird im Backend rückgängig gemacht
+          const lastDoneStep = doneSteps.length > 0
+            ? doneSteps.reduce((acc, s) => s.globalIdx > acc.globalIdx ? s : acc, doneSteps[0])
+            : null;
+          const undoButton = lastDoneStep ? (
             <button
-              onClick={() => transition(session.id, activePhaseStep.globalIdx, 'undo')}
+              onClick={() => transition(session.id, lastDoneStep.globalIdx, 'undo')}
               className="mt-1.5 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-semibold text-[#A68B6A]/70 dark:text-white/20 hover:text-[#8B7355] dark:hover:text-white/50 hover:bg-[#EDE5D6]/50 dark:hover:bg-white/[0.04] transition-colors"
             >
               <RotateCcw size={11} /> Schritt zurück
             </button>
-          );
+          ) : null;
 
           // ── SOFT_DONE — Bestätigung nötig, höchste Priorität ──
           if (phase.isSoftDone) {
@@ -705,7 +733,7 @@ export default function BackplanPage() {
             </React.Fragment>
           );
         })}
-        
+
         {multiplier !== 1 && (
           <div className="mt-2 text-center">
             <span className="text-[10px] font-bold text-[#8B7355] dark:text-[#C4A484] bg-[#8B7355]/10 dark:bg-[#C4A484]/10 px-3 py-1 rounded-lg">{multiplier}x Menge</span>
