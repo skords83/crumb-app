@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronDown, ChevronUp, Clock, Check, Sun, Filter, RotateCcw } from 'lucide-react';
 import { type BakeSession, type TimelineStep, type PhaseGate, formatSmartTime, formatCountdown, formatDuration, formatStepDuration, getProgress, getPhases, getPhaseProgress } from '@/lib/backplan-utils';
@@ -40,6 +40,7 @@ export default function BackplanPage() {
   const [finishModalId, setFinishModalId] = useState<number | null>(null);
   const [finishNotes, setFinishNotes] = useState('');
   const [openIngredients, setOpenIngredients] = useState<Set<string>>(new Set());
+  const activeCardRef = useRef<HTMLDivElement>(null);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -373,7 +374,7 @@ export default function BackplanPage() {
           // ── SOFT_DONE Phase (Zeit abgelaufen, warte auf Bestätigung) ──
           if (isSoftDone && activePhaseStep) {
             return (
-              <div key={pIdx} className="mb-4 rounded-2xl border-2 border-amber-400/40 dark:border-amber-400/30 bg-amber-50 dark:bg-amber-500/5 p-5">
+              <div key={pIdx} ref={activeCardRef} className="mb-4 rounded-2xl border-2 border-amber-400/40 dark:border-amber-400/30 bg-amber-50 dark:bg-amber-500/5 p-5">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">{phase.name}</span>
                   <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">Zeit abgelaufen</span>
@@ -472,7 +473,7 @@ export default function BackplanPage() {
             }
 
             return (
-              <div key={pIdx} className="mb-4 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
+              <div key={pIdx} ref={activeCardRef} className="mb-4 rounded-2xl border-2 border-[#8B7355]/30 dark:border-[#C4A484]/30 bg-[#8B7355]/[0.06] dark:bg-[#C4A484]/[0.08] p-5">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
