@@ -42,6 +42,9 @@ export default function BackplanPage() {
   const [openIngredients, setOpenIngredients] = useState<Set<string>>(new Set());
   const activeCardRef = useRef<HTMLDivElement>(null);
 
+  // Der aktive Aktionsschritt — für den Sticky-Button unten
+  const [stickyAction, setStickyAction] = useState<{ sid: number; stepIdx: number; label: string; color: string } | null>(null);
+
   const loadSessions = useCallback(async () => {
     try {
       const res = await fetch(`${API}/bake-sessions/active`, { headers: authHeaders() });
@@ -158,8 +161,31 @@ export default function BackplanPage() {
   }, [session?.id, sortedPhases]);
 
   useEffect(() => {
-    if (activeCardRef.current) setTimeout(() => activeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+    if (activeCardRef.current) setTimeout(() => activeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
   }, [session?.id]);
+
+  // ── Sticky-Button-Daten aus aktiver Phase ableiten ──
+  useEffect(() => {
+    if (!session) { setStickyAction(null); return; }
+    // soft_done nimmt Vorrang
+    const sdPhase = sortedPhases.find(p => p.isSoftDone && p.activePhaseStep);
+    if (sdPhase && sdPhase.activePhaseStep) {
+      setStickyAction({ sid: session.id, stepIdx: sdPhase.activePhaseStep.globalIdx, label: 'Ja, fertig', color: 'bg-[#8B7355] hover:bg-[#7A6347]' });
+      return;
+    }
+    const actPhase = sortedPhases.find(p => p.isActiveAction && p.activePhaseStep);
+    if (actPhase && actPhase.activePhaseStep) {
+      const isBaking = actPhase.activePhaseStep.type === 'Backen';
+      setStickyAction({
+        sid: session.id,
+        stepIdx: actPhase.activePhaseStep.globalIdx,
+        label: isBaking ? 'Raus aus dem Ofen' : 'Erledigt',
+        color: isBaking ? 'bg-red-500 hover:bg-red-600' : 'bg-[#8B7355] hover:bg-[#7A6347]'
+      });
+      return;
+    }
+    setStickyAction(null);
+  }, [session, sortedPhases]);
 
   const getSec = (name: string) => session?.dough_sections?.find((s: any) => s.name === name);
 
@@ -182,7 +208,8 @@ export default function BackplanPage() {
   const projectedEnd = session.projected_end ? new Date(session.projected_end) : null;
 
   return (
-    <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] pb-32 transition-colors duration-200">
+    <>
+    <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] pb-28 transition-colors duration-200">
 
       {/* ── Finish Modal ── */}
       {finishModalId !== null && (() => {
@@ -561,18 +588,7 @@ export default function BackplanPage() {
                   })}
                 </div>
 
-                {/* Aktions-Button */}
-                {isBaking ? (
-                  <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
-                    className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] active:scale-[0.98]">
-                    Raus aus dem Ofen
-                  </button>
-                ) : (
-                  <button onClick={() => transition(session.id, activePhaseStep.globalIdx, 'complete')}
-                    className="w-full py-3 rounded-xl bg-[#8B7355] hover:bg-[#7A6347] text-white font-bold text-[13px] active:scale-[0.98]">
-                    Erledigt
-                  </button>
-                )}
+                {/* Button sitzt im Sticky Footer unten — hier kein Button mehr */}
               </div>
             );
           }
@@ -617,5 +633,20 @@ export default function BackplanPage() {
 
       </div>
     </div>
+
+    {/* ── Sticky Action Button ── */}
+    {stickyAction && (
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#F5F0E8]/90 dark:bg-[#0F172A]/90 backdrop-blur-md border-t border-[#D6C9B4] dark:border-white/[0.07] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="max-w-3xl mx-auto">
+          <button
+            onClick={() => transition(stickyAction.sid, stickyAction.stepIdx, 'complete')}
+            className={`w-full py-3.5 rounded-2xl text-white font-extrabold text-[14px] tracking-wide active:scale-[0.98] transition-all shadow-lg ${stickyAction.color}`}
+          >
+            {stickyAction.label}
+          </button>
+        </div>
+      </div>
+    )}
+  </>
   );
 }
