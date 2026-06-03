@@ -15,6 +15,7 @@ const {
   getPendingGates,
   buildUITimeline,
 } = require('./bake-engine');
+const { evaluateAndDispatch } = require('./notification-engine');
 
 // Pool wird vom Parent-Module injiziert
 let pool;
@@ -202,11 +203,23 @@ router.post('/:id/transition', async (req, res) => {
     const timeline = buildUITimeline(sections, states, timestamps, session.planned_at);
     const gates = getPendingGates(sections, states);
 
-    // Notification Side-Effects verarbeiten
-    for (const effect of sideEffects) {
-      if (effect.type === 'gate_ready') {
-        // Könnte hier ntfy auslösen — wird im checkAndNotify abgehandelt
-      }
+    // Notifications direkt nach Transition auswerten und versenden.
+    // Idempotent: doppelte Versendung wird über sent_notifications-Tabelle verhindert.
+    // Der 60s-Sweep läuft parallel als Safety-Net.
+    try {
+      await evaluateAndDispatch(
+        pool,
+        {
+          id: session.id,
+          user_id: req.user.userId,
+          title: session.title,
+          step_states: states,
+          step_timestamps: timestamps,
+        },
+        sections
+      );
+    } catch (e) {
+      console.error('Notification-Dispatch nach Transition fehlgeschlagen:', e.message);
     }
 
     res.json({

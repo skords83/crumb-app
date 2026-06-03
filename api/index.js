@@ -13,7 +13,8 @@ const { v4: uuidv4 } = require('uuid');
 const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 const { categorizeRecipe } = require('./categorize');
 const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
-const { checkSoftDone, getPendingGates, calculateProjectedEnd, flattenSteps } = require('./bake-engine');
+const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
+const { evaluateAndDispatch, cleanupOldNotifications } = require('./notification-engine');
 
 const app = express();
 
@@ -155,6 +156,17 @@ await pool.query(migratePlannedAtType);
       );`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_active ON bake_sessions(user_id) WHERE finished_at IS NULL;`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_recipe ON bake_sessions(recipe_id, finished_at DESC);`);
+      // ── Sent Notifications: DB-basierte Dedup für Notification-Versand ──
+      await pool.query(`CREATE TABLE IF NOT EXISTS sent_notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        session_id INTEGER REFERENCES bake_sessions(id) ON DELETE CASCADE,
+        notification_id TEXT NOT NULL,
+        sent_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, notification_id)
+      );`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_sent_notifs_session ON sent_notifications(session_id);`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_sent_notifs_sent_at ON sent_notifications(sent_at);`);
       console.log("✅ Datenbank bereit");
       return;
     } catch (err) {
@@ -167,87 +179,8 @@ await pool.query(migratePlannedAtType);
 };
 
 // ============================================================
-// NTFY LOGIK & TIMELINE BERECHNUNG
+// TIMELINE-BERECHNUNG (für planned_timeline Speicherung)
 // ============================================================
-
-// sentNotifications: Map von notifId → Zeitstempel des letzten Sendens (ms)
-// Statt eines einfachen Set speichern wir den Sendezeitpunkt für Cooldown-Prüfung
-const sentNotifications = new Map();
-
-// Mindestabstand zwischen zwei Notifications zum gleichen inhaltlichen Schritt (Fix 2)
-const MIN_NOTIF_COOLDOWN_MS = 15 * 60 * 1000; // 15 Minuten
-
-const NTFY_VORLAUF = parseInt(process.env.NTFY_VORLAUF) || 5;
-
-// ── Fix 1: Inhaltsbasierte Notification-ID ──────────────────
-// Basiert auf Phasenname + Schrittinhalt (normiert), NICHT auf Timestamp.
-// Dadurch erzeugt eine Timeline-Neuberechnung mit minimal verschobener
-// Uhrzeit keine neue Notification.
-function buildNotifId(recipeId, type, contentKey) {
-  // contentKey: stabiler Inhaltsbeschreiber (z.B. Phasenname + erste 30 Zeichen Anweisung)
-  const normalized = contentKey
-    .toLowerCase()
-    .replace(/[^a-z0-9äöüß]/g, '-')
-    .replace(/-+/g, '-')
-    .substring(0, 60);
-  return `${recipeId}-${type}-${normalized}`;
-}
-
-// ── Fix 2: Cooldown-Prüfung ─────────────────────────────────
-function hasRecentlySent(notifId) {
-  const lastSent = sentNotifications.get(notifId);
-  if (!lastSent) return false;
-  return (Date.now() - lastSent) < MIN_NOTIF_COOLDOWN_MS;
-}
-
-function markSent(notifId) {
-  sentNotifications.set(notifId, Date.now());
-}
-
-function clearSentNotificationsForRecipe(recipeId) {
-  for (const key of sentNotifications.keys()) {
-    if (key.startsWith(`${recipeId}-`)) sentNotifications.delete(key);
-  }
-}
-
-// ── Basis ntfy-Sender ────────────────────────────────────────
-const sendNtfyNotification = async (title, message, tags = 'bread', priority = 4, extraHeaders = {}) => {
-  try {
-    const topic = process.env.NTFY_TOPIC || 'crumb-backplan';
-    const baseUrl = (process.env.NTFY_URL || 'http://ntfy.local').replace(/\/$/, '');
-    const shortTitle = title.length > 60
-      ? title.slice(0, 60).replace(/\s+\S*$/, '') + '…'
-      : title;
-    const payload = JSON.stringify({ topic, title: shortTitle, message, tags: [tags], priority });
-    const headers = { 'Content-Type': 'application/json', ...extraHeaders };
-    if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
-    await axios.post(baseUrl, payload, { headers });
-    console.log(`🔔 Notification gesendet: ${shortTitle}`);
-  } catch (err) {
-    console.error('❌ ntfy Fehler:', err.message);
-  }
-};
-
-const clearStatusNotification = async () => {
-  if (!statusSequenceId) return;
-  try {
-    const topic = process.env.NTFY_TOPIC || 'crumb-backplan';
-    const statusTopic = topic + STATUS_TOPIC_SUFFIX;
-    const baseUrl = (process.env.NTFY_URL || 'http://ntfy.local').replace(/\/$/, '');
-    const headers = { 'Content-Type': 'application/json' };
-    if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
-    await axios.post(baseUrl, JSON.stringify({
-      topic: statusTopic,
-      title: '✅ Backen abgeschlossen',
-      message: 'Kein aktiver Backvorgang',
-      tags: ['white_check_mark'],
-      priority: 1,
-    }), { headers });
-    statusSequenceId = null;
-  } catch (err) {
-    console.error('❌ clearStatus Fehler:', err.message);
-  }
-};
 
 // ── Timeline-Berechnung ──────────────────────────────────────
 const calculateTimeline = (plannedAt, sections) => {
@@ -309,185 +242,6 @@ const calculateTimeline = (plannedAt, sections) => {
   return timeline;
 };
 
-// ── Aktions-Cluster bilden ───────────────────────────────────
-function buildActionClusters(timeline) {
-  const clusters = [];
-  let current = null;
-
-  for (const step of timeline) {
-    if (step.type === 'Warten' || step.type === 'Kühl' || step.type === 'Ruhen') {
-      if (current) { clusters.push(current); current = null; }
-      continue;
-    }
-
-    if (step.type === 'Backen') {
-      if (current) { clusters.push(current); current = null; }
-      clusters.push({
-        start: step.start,
-        end: step.end,
-        steps: [step],
-        totalDuration: step.duration,
-        isBaking: true,
-      });
-      continue;
-    }
-
-    if (!current) {
-      current = { start: step.start, end: step.end, steps: [step], totalDuration: step.duration, isBaking: false };
-    } else {
-      current.steps.push(step);
-      current.end = step.end;
-      current.totalDuration += step.duration;
-    }
-  }
-  if (current) clusters.push(current);
-  return clusters;
-}
-
-// ── Fix 3: Nur wichtige Cluster benachrichtigen ──────────────
-// Kriterien für "benachrichtigungswürdig":
-// - Backen-Cluster: immer
-// - Cluster mit aktiver Handlung (kneten, formen, falten, einschießen, …)
-// - Cluster der mindestens 2 Aktionsschritte enthält
-// - Cluster nach einer langen Pause (>= 30 Min Wartezeit davor)
-const IMPORTANT_KEYWORDS = [
-  'kneten', 'falten', 'formen', 'wirken', 'einschießen', 'einschneiden',
-  'schwaden', 'stürzen', 'dehnen', 'vorformen', 'aufarbeiten', 'portionieren',
-  'mischen', 'autolyse', 'vermengen', 'verkneten', 'rundwirken', 'langwirken',
-];
-
-function isImportantCluster(cluster, allClusters, clusterIndex) {
-  if (cluster.isBaking) return true;
-  if (cluster.steps.length >= 2) return true;
-
-  const instruction = (cluster.steps[0]?.instruction || '').toLowerCase();
-  if (IMPORTANT_KEYWORDS.some(kw => instruction.includes(kw))) return true;
-
-  // Nach langer Pause (>= 30 Min) immer benachrichtigen
-  if (clusterIndex > 0) {
-    const prevCluster = allClusters[clusterIndex - 1];
-    const pauseMs = cluster.start.getTime() - prevCluster.end.getTime();
-    if (pauseMs >= 30 * 60 * 1000) return true;
-  }
-
-  // Erster Cluster des Tages immer
-  if (clusterIndex === 0) return true;
-
-  return false;
-}
-
-// ── Vorheiz-Notifications ────────────────────────────────────
-const PREHEAT_VORLAUF = 45;
-
-function extractTemp(instruction) {
-  const match = instruction.match(/(\d{2,3})\s*°\s*C?|(\d{2,3})\s*[Gg]rad/);
-  return match ? (match[1] || match[2]) : null;
-}
-
-function buildPreheatNotifications(clusters, recipeTitle, recipeId) {
-  const notifications = [];
-  for (const cluster of clusters) {
-    if (!cluster.isBaking) continue;
-    const step = cluster.steps[0];
-    const preheatTime = new Date(cluster.start.getTime() - PREHEAT_VORLAUF * 60000);
-    const temp = extractTemp(step.instruction);
-
-    // Fix 1: Inhaltsbasierte ID — nicht timestamp-abhängig
-    const contentKey = `preheat-${cluster.steps[0]?.phase || 'backen'}-${temp || 'x'}`;
-    const notifId = buildNotifId(recipeId, 'preheat', contentKey);
-
-    const backTimeStr = cluster.start.toLocaleTimeString('de-DE', {
-      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin'
-    });
-
-    notifications.push({
-      notifId,
-      notifyAt: preheatTime,
-      deadline: cluster.start,
-      title: temp ? `🔥 Ofen vorheizen auf ${temp}°C` : `🔥 Ofen vorheizen`,
-      message: `${recipeTitle} · Backen startet um ${backTimeStr} Uhr`,
-    });
-  }
-  return notifications;
-}
-
-// ── Cluster-Notification formatieren ────────────────────────
-function formatClusterNotification(cluster, recipeTitle) {
-  if (cluster.isBaking) {
-    const temp = extractTemp(cluster.steps[0].instruction);
-    return {
-      title: `🔥 ${recipeTitle}`,
-      message: temp ? `Ofen vorheizen auf ${temp}°C` : `Backen vorbereiten`,
-    };
-  }
-  return {
-    title: `🔔 ${recipeTitle}`,
-    message: `Nächster Schritt steht an`,
-  };
-}
-
-// ── Smart Vorlauf-Berechnung ─────────────────────────────────
-function calculateSmartVorlauf(cluster, allClusters, clusterIndex) {
-  // Wie lange ist die Pause vor diesem Cluster?
-  if (clusterIndex === 0) return NTFY_VORLAUF;
-  const prevCluster = allClusters[clusterIndex - 1];
-  const pauseMin = (cluster.start.getTime() - prevCluster.end.getTime()) / 60000;
-
-  // Skalierung: kurze Pause → kurzer Vorlauf, lange Pause → langer Vorlauf
-  if (pauseMin < 15) return 3;
-  if (pauseMin < 30) return 5;
-  if (pauseMin < 60) return 8;
-  if (pauseMin < 120) return 12;
-  return 20;
-}
-
-// ── Haupt-Notification-Schleife ──────────────────────────────
-const checkAndNotify = async () => {
-  try {
-    const result = await pool.query(
-      `SELECT r.* FROM recipes r WHERE r.planned_at IS NOT NULL`
-    );
-    const now = new Date();
-
-    for (const recipe of result.rows) {
-      if (!recipe.dough_sections) continue;
-      const timeline = calculateTimeline(recipe.planned_at, recipe.dough_sections);
-      const clusters = buildActionClusters(timeline);
-
-      // 1) Vorheiz-Notifications (45 Min vor Backen)
-      const preheatNotifs = buildPreheatNotifications(clusters, recipe.title, recipe.id);
-      for (const pn of preheatNotifs) {
-        if (hasRecentlySent(pn.notifId)) continue;
-        if (now >= pn.notifyAt && now < pn.deadline) {
-          await sendNtfyNotification(pn.title, pn.message);
-          markSent(pn.notifId);
-        }
-      }
-
-      // 2) Cluster-Notifications
-      for (let i = 0; i < clusters.length; i++) {
-        const cluster = clusters[i];
-        if (!isImportantCluster(cluster, clusters, i)) continue;
-
-        const contentKey = cluster.isBaking
-          ? `backen-${cluster.steps[0]?.phase}`
-          : cluster.steps.map(s => s.instruction.substring(0, 20)).join('|');
-        const notifId = buildNotifId(recipe.id, 'cluster', contentKey);
-
-        if (hasRecentlySent(notifId)) continue;
-
-        const smartVorlauf = calculateSmartVorlauf(cluster, clusters, i);
-        const notifyAt = new Date(cluster.start.getTime() - smartVorlauf * 60000);
-
-        if (now >= notifyAt && now < cluster.start) {
-          const { title, message } = formatClusterNotification(cluster, recipe.title);
-          await sendNtfyNotification(title, message);
-          markSent(notifId);
-        }
-      }
-    }
-  } catch (err) { console.error('❌ Check-Fehler:', err.message); }
-};
 
 // ============================================================
 // AUTH ROUTES
@@ -850,11 +604,6 @@ app.patch('/api/recipes/:id', async (req, res) => {
         }
       }
 
-      // planned_at auf null → Notifications aufräumen
-      if (!planned_at) {
-        clearSentNotificationsForRecipe(id);
-      }
-
       result = await pool.query(
   "UPDATE recipes SET planned_at=$1, planned_timeline=$2, multiplier=$3 WHERE id=$4 AND user_id=$5 RETURNING *",
   [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, multiplier ?? 1, id, req.user.userId]
@@ -868,64 +617,6 @@ app.patch('/api/recipes/:id', async (req, res) => {
     if (!result || result.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: "Patch-Fehler" }); }
-});
-
-// ============================================================
-// COMPLETE STEP (Early completion + ntfy reschedule)
-// ============================================================
-app.post('/api/recipes/:id/complete-step', async (req, res) => {
-  const { id } = req.params;
-  const { stepIndex, completedAt, newPlannedAt } = req.body;
-
-  if (stepIndex === undefined || !completedAt || !newPlannedAt) {
-    return res.status(400).json({ error: 'stepIndex, completedAt und newPlannedAt erforderlich' });
-  }
-
-  try {
-    const result = await pool.query(
-      'UPDATE recipes SET planned_at=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
-      [newPlannedAt, id, req.user.userId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Nicht gefunden' });
-
-    const recipe = result.rows[0];
-    clearSentNotificationsForRecipe(id);
-
-    if (recipe.dough_sections) {
-      const timeline = calculateTimeline(newPlannedAt, recipe.dough_sections);
-      const clusters = buildActionClusters(timeline);
-      const now = new Date();
-      const completedTime = new Date(completedAt);
-
-      // Vorheiz-Notifications prüfen
-      const preheatNotifs = buildPreheatNotifications(clusters, recipe.title, id);
-      for (const pn of preheatNotifs) {
-        if (hasRecentlySent(pn.notifId)) continue;
-        if (now >= pn.notifyAt && now < pn.deadline) {
-          await sendNtfyNotification(pn.title, pn.message);
-          markSent(pn.notifId);
-        }
-      }
-
-      // Nächster Cluster nach dem abgeschlossenen Schritt
-      const nextCluster = clusters.find(c => c.start > completedTime && c.start > now);
-      if (nextCluster) {
-        const minutesUntil = (nextCluster.start.getTime() - now.getTime()) / 60000;
-        const contentKey = `${nextCluster.steps[0].phase}-${nextCluster.steps[0].instruction.substring(0, 30)}`;
-        const notifId = buildNotifId(id, 'cluster', contentKey);
-        if (minutesUntil >= 1 && minutesUntil < NTFY_VORLAUF && !hasRecentlySent(notifId)) {
-          const { title, message } = formatClusterNotification(nextCluster, recipe.title);
-          await sendNtfyNotification(title, message);
-          markSent(notifId);
-        }
-      }
-    }
-
-    res.json({ ok: true, newPlannedAt });
-  } catch (err) {
-    console.error('❌ complete-step Fehler:', err.message);
-    res.status(500).json({ error: err.message });
-  }
 });
 
 // ============================================================
@@ -991,7 +682,6 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
       return res.status(404).json({ error: 'Rezept nicht gefunden' });
     }
 
-    clearSentNotificationsForRecipe(id);
     res.json({ ok: true, recipe: result.rows[0] });
   } catch (err) {
     console.error('❌ plan-night/save Fehler:', err.message);
@@ -999,13 +689,23 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
   }
 });
 
-app.get('/api/ntfy/status', (req, res) => {
-  res.json({
-    ntfy_url: process.env.NTFY_URL || 'http://ntfy.local',
-    topic: process.env.NTFY_TOPIC || 'crumb-backplan',
-    gesendete_notifications: sentNotifications.size,
-    status_sequence_id: statusSequenceId,
-  });
+app.get('/api/ntfy/status', async (req, res) => {
+  try {
+    const sentCount = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM sent_notifications WHERE sent_at > NOW() - INTERVAL \'24 hours\''
+    );
+    const activeSessions = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM bake_sessions WHERE finished_at IS NULL'
+    );
+    res.json({
+      ntfy_url: process.env.NTFY_URL || 'http://ntfy.local',
+      topic: process.env.NTFY_TOPIC || 'crumb-backplan',
+      gesendete_notifications_24h: sentCount.rows[0].n,
+      active_sessions: activeSessions.rows[0].n,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================================
@@ -1014,71 +714,58 @@ app.get('/api/ntfy/status', (req, res) => {
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Backend läuft auf Port ${PORT}`);
-await initDB();
-  
-  // Bake-Session Notifications (soft_done, gates, preheat, overdue)
-  const checkBakeSessionNotifications = async () => {
+  await initDB();
+
+  // ── Notification-Sweep ───────────────────────────────────
+  // Iteriert über aktive Bake-Sessions, prüft soft_done-Übergänge
+  // (Warten-Timer abgelaufen) und ruft den Notification-Evaluator auf.
+  // Dispatch geht über DB-Dedup (sent_notifications) und ntfy-Transport.
+  // State-Transitions durch User-Aktionen triggern parallel den gleichen
+  // Evaluator direkt im bake-sessions Router — der Sweep ist das Safety-Net.
+  const notificationSweep = async () => {
     try {
       const result = await pool.query(
-        `SELECT bs.*, r.title, r.dough_sections FROM bake_sessions bs
-         JOIN recipes r ON r.id = bs.recipe_id WHERE bs.finished_at IS NULL`
+        `SELECT bs.*, r.title, r.dough_sections
+         FROM bake_sessions bs
+         JOIN recipes r ON r.id = bs.recipe_id
+         WHERE bs.finished_at IS NULL`
       );
-      const now = new Date();
       for (const session of result.rows) {
         const sections = session.dough_sections || [];
         const states = session.step_states || {};
         const timestamps = session.step_timestamps || {};
+
+        // Soft-Done Check: Warten-Timer abgelaufen?
         const { states: updatedStates, softDoneSteps } = checkSoftDone(sections, states, timestamps);
         if (softDoneSteps.length > 0) {
-          await pool.query('UPDATE bake_sessions SET step_states = $1 WHERE id = $2',
-            [JSON.stringify(updatedStates), session.id]);
-          for (const step of softDoneSteps) {
-            const notifId = `bs-${session.id}-softdone-${step.globalIdx}`;
-            if (hasRecentlySent(notifId)) continue;
-            await sendNtfyNotification(`⏱ ${step.instruction.substring(0, 50)}`,
-              `${session.title} · Geplante Zeit abgelaufen — prüfe und bestätige`);
-            markSent(notifId);
-          }
+          await pool.query(
+            'UPDATE bake_sessions SET step_states = $1 WHERE id = $2',
+            [JSON.stringify(updatedStates), session.id]
+          );
         }
-        const gates = getPendingGates(sections, updatedStates);
-        for (const gate of gates) {
-          const notifId = `bs-${session.id}-gate-${gate.phase}`;
-          if (hasRecentlySent(notifId)) continue;
-          await sendNtfyNotification(`🔓 ${gate.phase} kann starten`,
-            `${session.title} · ${gate.dependencies.join(' + ')} fertig`);
-          markSent(notifId);
-        }
-        const steps = flattenSteps(sections);
-        steps.forEach(step => {
-          if (step.type === 'Backen' && updatedStates[step.globalIdx] === 'ready') {
-            const notifId = `bs-${session.id}-preheat-${step.globalIdx}`;
-            if (!hasRecentlySent(notifId)) {
-              const temp = extractTemp(step.instruction);
-              sendNtfyNotification(temp ? `🔥 Ofen auf ${temp}°C vorheizen` : `🔥 Ofen vorheizen`,
-                `${session.title} · Backen steht an`);
-              markSent(notifId);
-            }
-          }
-          if (updatedStates[step.globalIdx] === 'soft_done') {
-            const ts = timestamps[step.globalIdx];
-            if (ts?.timer_end && (now.getTime() - ts.timer_end) / 60000 >= 30) {
-              const notifId = `bs-${session.id}-overdue-${step.globalIdx}`;
-              if (!hasRecentlySent(notifId)) {
-                sendNtfyNotification(`⚠️ ${step.phase} überfällig`,
-                  `${session.title} · ${step.instruction.substring(0, 40)} — alles okay?`);
-                markSent(notifId);
-              }
-            }
-          }
-        });
+
+        // Projected End neu berechnen (für UI)
         const projectedEnd = calculateProjectedEnd(sections, updatedStates, timestamps);
-        await pool.query('UPDATE bake_sessions SET projected_end = $1 WHERE id = $2', [projectedEnd, session.id]);
+        await pool.query(
+          'UPDATE bake_sessions SET projected_end = $1 WHERE id = $2',
+          [projectedEnd, session.id]
+        );
+
+        // Notifications auswerten und versenden (idempotent, DB-Dedup)
+        await evaluateAndDispatch(pool, { ...session, step_states: updatedStates }, sections);
       }
-    } catch (err) { console.error('❌ bake-session Check-Fehler:', err.message); }
+    } catch (err) {
+      console.error('❌ Notification-Sweep Fehler:', err.message);
+    }
   };
 
-  setInterval(async () => {
-    await checkAndNotify();
-    await checkBakeSessionNotifications();
-  }, 60000);
+  // Erster Sweep direkt beim Start (für Sessions, die einen Restart überdauert haben)
+  await notificationSweep();
+
+  // Cleanup alter Notification-Einträge (24h nach Session-Ende, 7 Tage absolut)
+  await cleanupOldNotifications(pool);
+
+  // Sweep alle 60s, Cleanup alle 6h
+  setInterval(notificationSweep, 60 * 1000);
+  setInterval(() => cleanupOldNotifications(pool), 6 * 60 * 60 * 1000);
 });
