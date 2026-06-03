@@ -43,13 +43,10 @@ self.addEventListener('fetch', event => {
   // Chrome-Extensions etc. ignorieren
   if (!url.protocol.startsWith('http')) return;
 
-  // API-Calls: Network First mit Cache-Fallback
-  // NACHHER:
+  // API-Calls NICHT cachen – sie sind personalisiert, gefiltert
+  // und sollten immer frisch vom Server kommen.
   if (url.pathname.startsWith('/api/')) {
-      // API-Calls NICHT cachen – sie sind personalisiert, gefiltert
-      // und sollten immer frisch vom Server kommen.
-      // Offline-Fallback für die Rezeptliste bleibt via Navigation-Cache erhalten.
-      return; // → Browser handled den fetch normal, kein SW-Eingriff
+    return; // → Browser handled den fetch normal, kein SW-Eingriff
   }
 
   // Bilder (eigene Uploads + Unsplash): Cache First
@@ -72,6 +69,64 @@ self.addEventListener('fetch', event => {
     event.respondWith(networkFirst(request, STATIC_CACHE, 60 * 60 * 24));
     return;
   }
+});
+
+// ── Push: vom Server gesendete Web-Push-Nachricht ────────────
+// Payload-Format (vom api/notification-engine.js):
+//   { title, body, tag, url, type }
+// Browser-Spec: showNotification MUSS bei jedem push event aufgerufen werden,
+// sonst zeigt der Browser eine generische "Diese Seite wurde aktualisiert"-Warnung.
+// Deshalb: harter Fallback selbst bei kaputter/leerer Payload.
+self.addEventListener('push', event => {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      payload = { title: 'Crumb', body: event.data.text() };
+    }
+  }
+
+  const title = payload.title || 'Crumb';
+  const options = {
+    body: payload.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: payload.tag || undefined,        // gleiche tag → ersetzt die alte Notif
+    renotify: false,                       // nicht erneut vibrieren bei Tag-Match
+    data: {
+      url: payload.url || '/backplan',
+      type: payload.type || null,
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ── NotificationClick: Tap auf eine Push-Notification ────────
+// Fokussiert vorhandenes Crumb-Tab und navigiert zur Ziel-URL,
+// oder öffnet ein neues Fenster.
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/backplan';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      for (const client of clients) {
+        try {
+          const u = new URL(client.url);
+          if (u.origin === self.location.origin) {
+            return client.focus().then(c => {
+              if (c && 'navigate' in c && u.pathname !== targetUrl) {
+                return c.navigate(targetUrl).catch(() => {});
+              }
+            });
+          }
+        } catch {}
+      }
+      return self.clients.openWindow(targetUrl);
+    })
+  );
 });
 
 // ── Strategien ────────────────────────────────────────────────

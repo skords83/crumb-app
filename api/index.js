@@ -13,8 +13,9 @@ const { v4: uuidv4 } = require('uuid');
 const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 const { categorizeRecipe } = require('./categorize');
 const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
+const { router: pushRouter, setPool: setPushPool } = require('./push');
 const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
-const { evaluateAndDispatch, cleanupOldNotifications } = require('./notification-engine');
+const { evaluateAndDispatch, cleanupOldNotifications, initWebPush } = require('./notification-engine');
 
 const app = express();
 
@@ -60,6 +61,7 @@ const upload = multer({ storage });
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // Keine erzwungene UTC-Timezone
 setBakeSessionsPool(pool);
+setPushPool(pool);
 
 // Öffentliche Base-URL für generierte Datei-URLs.
 // Traefik terminiert TLS → req.protocol ist intern immer "http".
@@ -167,6 +169,18 @@ await pool.query(migratePlannedAtType);
       );`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_sent_notifs_session ON sent_notifications(session_id);`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_sent_notifs_sent_at ON sent_notifications(sent_at);`);
+      // ── Push Subscriptions: Web Push Endpoints pro User/Gerät ──
+      await pool.query(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        last_used_at TIMESTAMP
+      );`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);`);
       console.log("✅ Datenbank bereit");
       return;
     } catch (err) {
@@ -267,6 +281,9 @@ app.use('/api', (req, res, next) => {
 
 // ── Bake Sessions Router ──
 app.use('/api/bake-sessions', bakeSessionsRouter);
+
+// ── Push Subscriptions Router ──
+app.use('/api/push', pushRouter);
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
@@ -715,6 +732,7 @@ const PORT = 5000;
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Backend läuft auf Port ${PORT}`);
   await initDB();
+  initWebPush();
 
   // ── Notification-Sweep ───────────────────────────────────
   // Iteriert über aktive Bake-Sessions, prüft soft_done-Übergänge

@@ -12,10 +12,37 @@
 // ============================================================
 
 const axios = require('axios');
+const webpush = require('web-push');
 const { flattenSteps, getPendingGates, isWaitStep, isBakeStep } = require('./bake-engine');
 
 // ── Konfiguration ────────────────────────────────────────────
 const OVERDUE_THRESHOLD_MIN = 30; // Minuten nach Timer-Ende bis "überfällig"
+
+// ── VAPID-Setup für Web Push ─────────────────────────────────
+// Wird einmalig beim Boot aus index.js aufgerufen.
+// Wenn VAPID-Keys fehlen, wird Web Push deaktiviert (ntfy läuft weiter).
+let webPushEnabled = false;
+function initWebPush() {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn('⚠️  VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY fehlen — Web Push deaktiviert');
+    webPushEnabled = false;
+    return false;
+  }
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || 'mailto:admin@crumb.local',
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    );
+    webPushEnabled = true;
+    console.log('✅ Web Push konfiguriert');
+    return true;
+  } catch (err) {
+    console.error('❌ Web Push Init Fehler:', err.message);
+    webPushEnabled = false;
+    return false;
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 function extractTemp(instruction) {
@@ -146,16 +173,62 @@ async function sendNtfy(title, message, tags, priority) {
   }
 }
 
-// ── sendNotification ─────────────────────────────────────────
-// Transport-Wrapper. Heute: nur ntfy. Später kommt parallel
-// Web-Push pro User dazu (basierend auf push_subscriptions).
-async function sendNotification(pool, userId, candidate) {
-  // Heute: globales ntfy-Topic (alle User)
-  await sendNtfy(candidate.title, candidate.message, candidate.tags, candidate.priority);
+// ── Transport: Web Push (per User) ───────────────────────────
+// Iteriert über alle Subscriptions des Users und sendet die Notification.
+// Bei expired Subscriptions (404/410): automatisches Cleanup in der DB.
+async function sendWebPushToUser(pool, userId, candidate) {
+  if (!webPushEnabled || !pool || !userId) return;
+  try {
+    const subs = await pool.query(
+      'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
+      [userId]
+    );
+    if (subs.rows.length === 0) return;
 
-  // Hier später ergänzen:
-  // const subs = await pool.query('SELECT * FROM push_subscriptions WHERE user_id = $1', [userId]);
-  // for (const sub of subs.rows) { await sendWebPush(sub, candidate); }
+    const payload = JSON.stringify({
+      title: candidate.title,
+      body: candidate.message,
+      tag: candidate.notificationId,
+      url: '/backplan',
+      type: candidate.type,
+    });
+
+    for (const sub of subs.rows) {
+      const subscription = {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.p256dh, auth: sub.auth },
+      };
+      try {
+        await webpush.sendNotification(subscription, payload, { TTL: 3600 });
+        // Last-used Stamp aktualisieren (fire-and-forget)
+        pool.query(
+          'UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = $1',
+          [sub.id]
+        ).catch(() => {});
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          // Subscription beim Push-Service abgelaufen → aus DB entfernen
+          await pool.query('DELETE FROM push_subscriptions WHERE id = $1', [sub.id]);
+          console.log(`🗑  Push-Sub abgelaufen (${err.statusCode}), gelöscht: id=${sub.id}`);
+        } else {
+          console.error(`❌ Web-Push Fehler (${err.statusCode || 'no-status'}):`, err.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('❌ sendWebPushToUser Fehler:', err.message);
+  }
+}
+
+// ── sendNotification ─────────────────────────────────────────
+// Transport-Wrapper. Beide Channels parallel:
+//   1. ntfy (Legacy, globales Topic)
+//   2. Web Push (per User, falls Subscriptions vorhanden)
+async function sendNotification(pool, userId, candidate) {
+  await Promise.all([
+    sendNtfy(candidate.title, candidate.message, candidate.tags, candidate.priority),
+    sendWebPushToUser(pool, userId, candidate),
+  ]);
 }
 
 // ── dispatch ─────────────────────────────────────────────────
@@ -224,4 +297,5 @@ module.exports = {
   sendNotification,
   cleanupOldNotifications,
   extractTemp,
+  initWebPush,
 };
