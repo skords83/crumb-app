@@ -74,6 +74,8 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 // ── Toggle Component ─────────────────────────────────────────
+// Dark-Mode: OFF = bg-white/10 (subtil), ON = #8B7355 (springt raus).
+// Matches Navigation.tsx-Konvention.
 function Toggle({ on, onChange, disabled = false }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
@@ -81,7 +83,7 @@ function Toggle({ on, onChange, disabled = false }: { on: boolean; onChange: (v:
       onClick={() => !disabled && onChange(!on)}
       disabled={disabled}
       className={`relative w-[42px] h-[24px] rounded-full flex-shrink-0 transition-colors ${
-        on ? 'bg-[#8B7355]' : 'bg-gray-300 dark:bg-gray-600'
+        on ? 'bg-[#8B7355]' : 'bg-[#D6C9B4] dark:bg-white/10'
       } ${disabled ? 'opacity-40' : 'cursor-pointer'}`}
       aria-pressed={on}
     >
@@ -103,11 +105,11 @@ function Slider({
 }) {
   const percent = max > min ? Math.round(((value - min) / (max - min)) * 100) : 0;
   return (
-    <div className={`mt-3 pt-3 border-t border-[#F0EBE3] dark:border-gray-700 ${disabled ? 'opacity-40' : ''}`}>
+    <div className={`mt-3 pt-3 border-t border-[#F0EBE3] dark:border-white/10 ${disabled ? 'opacity-40' : ''}`}>
       <div className="flex items-center gap-3">
         <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] font-medium min-w-[60px]">{label}</span>
         <div className="flex-1 relative h-[18px] flex items-center">
-          <div className="absolute inset-x-0 h-1 bg-[#F0EBE3] dark:bg-gray-700 rounded-full" />
+          <div className="absolute inset-x-0 h-1 bg-[#F0EBE3] dark:bg-white/5 rounded-full" />
           <div
             className="absolute h-1 bg-[#8B7355] rounded-full"
             style={{ width: `${percent}%` }}
@@ -124,7 +126,7 @@ function Slider({
             style={{ left: `calc(${percent}% - 7px)` }}
           />
         </div>
-        <span className="text-[12px] font-bold text-[#2C1A0E] dark:text-gray-100 tabular-nums min-w-[48px] text-right">
+        <span className="text-[12px] font-bold text-[#2C1A0E] dark:text-white/90 tabular-nums min-w-[48px] text-right">
           {value} {suffix}
         </span>
       </div>
@@ -141,13 +143,13 @@ function TriggerCard({
   disabled?: boolean; children?: React.ReactNode;
 }) {
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-2xl border border-[#E5DCC5] dark:border-gray-700 p-4 transition-opacity ${disabled ? 'opacity-50' : ''}`}>
+    <div className={`bg-white dark:bg-gray-900 rounded-2xl border border-[#E5DCC5] dark:border-white/10 p-4 transition-opacity ${disabled ? 'opacity-50' : ''}`}>
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-          <Icon size={18} className="text-[#8B7355]" />
+        <div className="w-9 h-9 rounded-xl bg-[#F5F0E8] dark:bg-white/5 flex items-center justify-center flex-shrink-0">
+          <Icon size={18} className="text-[#8B7355] dark:text-[#C4A484]" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-gray-100 leading-tight">{title}</p>
+          <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-white/90 leading-tight">{title}</p>
           <p className="text-[11px] text-[#8B7355] dark:text-[#C4A484] mt-0.5">{description}</p>
         </div>
         <Toggle on={enabled} onChange={onToggle} disabled={disabled} />
@@ -226,6 +228,13 @@ export default function NotificationsSettingsPage() {
       }
     }, 350);
   }, []);
+
+  // ── "gespeichert"-Indikator nach 2s auto-clearen ──
+  useEffect(() => {
+    if (!savedAt) return;
+    const t = setTimeout(() => setSavedAt(null), 2000);
+    return () => clearTimeout(t);
+  }, [savedAt]);
 
   const update = (patch: Partial<Settings>) => {
     setSettings((prev) => {
@@ -323,7 +332,7 @@ export default function NotificationsSettingsPage() {
 
         {/* Error */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-300 text-sm flex items-center gap-2">
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-400/30 rounded-xl text-red-600 dark:text-red-300 text-sm flex items-center gap-2">
             <AlertCircle size={16} /> {error}
           </div>
         )}
@@ -335,18 +344,18 @@ export default function NotificationsSettingsPage() {
         ) : (
           <>
             {/* ── Master Card ── */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#E5DCC5] dark:border-gray-700 p-4 flex items-center gap-3">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-[#E5DCC5] dark:border-white/10 p-4 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#8B7355] flex items-center justify-center flex-shrink-0">
                 <Bell size={20} className="text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-gray-100 leading-tight">
+                <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-white/90 leading-tight">
                   Push-Benachrichtigungen
                 </p>
                 <p className="text-[11px] text-[#8B7355] dark:text-[#C4A484] mt-0.5">
                   {settings.master_enabled ? 'Aktiv' : 'Deaktiviert'}
                   {saving && ' · speichert…'}
-                  {!saving && savedAt && Date.now() - savedAt < 2000 && ' · gespeichert'}
+                  {!saving && savedAt && ' · gespeichert'}
                 </p>
               </div>
               <Toggle
@@ -357,8 +366,8 @@ export default function NotificationsSettingsPage() {
 
             {/* ── Push-Status für dieses Gerät ── */}
             {pushStatus && (
-              <div className="mt-3 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-[#E5DCC5]/60 dark:border-gray-700/60 p-3 flex items-center gap-3">
-                <Smartphone size={16} className="text-[#8B7355] flex-shrink-0" />
+              <div className="mt-3 bg-white/60 dark:bg-gray-900/60 rounded-xl border border-[#E5DCC5]/60 dark:border-white/10 p-3 flex items-center gap-3">
+                <Smartphone size={16} className="text-[#8B7355] dark:text-[#C4A484] flex-shrink-0" />
                 <p className="text-[12px] text-[#8B7355] dark:text-[#C4A484] flex-1">
                   {pushStatus.subscribed
                     ? 'Dieses Gerät empfängt Push'
@@ -370,7 +379,7 @@ export default function NotificationsSettingsPage() {
                   <button
                     onClick={enablePush}
                     disabled={pushBusy}
-                    className="text-[12px] font-semibold text-[#8B7355] hover:text-[#2C1A0E] transition-colors disabled:opacity-50"
+                    className="text-[12px] font-semibold text-[#8B7355] dark:text-[#C4A484] hover:text-[#2C1A0E] dark:hover:text-white transition-colors disabled:opacity-50"
                   >
                     Aktivieren
                   </button>
@@ -442,13 +451,13 @@ export default function NotificationsSettingsPage() {
             {/* ── Stille Stunden ── */}
             <SectionLabel>Stille Stunden</SectionLabel>
 
-            <div className={`bg-white dark:bg-gray-800 rounded-2xl border border-[#E5DCC5] dark:border-gray-700 p-4 transition-opacity ${allDisabled ? 'opacity-50' : ''}`}>
+            <div className={`bg-white dark:bg-gray-900 rounded-2xl border border-[#E5DCC5] dark:border-white/10 p-4 transition-opacity ${allDisabled ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#F5F0E8] dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                  <Moon size={18} className="text-[#8B7355]" />
+                <div className="w-9 h-9 rounded-xl bg-[#F5F0E8] dark:bg-white/5 flex items-center justify-center flex-shrink-0">
+                  <Moon size={18} className="text-[#8B7355] dark:text-[#C4A484]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-gray-100 leading-tight">
+                  <p className="text-[14px] font-semibold text-[#2C1A0E] dark:text-white/90 leading-tight">
                     Nachtruhe
                   </p>
                   <p className="text-[11px] text-[#8B7355] dark:text-[#C4A484] mt-0.5">
@@ -462,20 +471,20 @@ export default function NotificationsSettingsPage() {
                 />
               </div>
               {settings.quiet_enabled && !allDisabled && (
-                <div className="mt-3 pt-3 border-t border-[#F0EBE3] dark:border-gray-700 flex items-center gap-3">
+                <div className="mt-3 pt-3 border-t border-[#F0EBE3] dark:border-white/10 flex items-center gap-3">
                   <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] font-medium">Von</span>
                   <input
                     type="time"
                     value={settings.quiet_start}
                     onChange={(e) => update({ quiet_start: e.target.value })}
-                    className="px-3 py-1.5 rounded-lg bg-[#F5F0E8] dark:bg-gray-700 text-[#2C1A0E] dark:text-gray-100 text-[13px] font-semibold border-0 focus:outline-none focus:ring-2 focus:ring-[#8B7355]/40"
+                    className="px-3 py-1.5 rounded-lg bg-[#F5F0E8] dark:bg-white/5 text-[#2C1A0E] dark:text-white/90 text-[13px] font-semibold border-0 focus:outline-none focus:ring-2 focus:ring-[#8B7355]/40"
                   />
                   <span className="text-[11px] text-[#8B7355] dark:text-[#C4A484] font-medium">bis</span>
                   <input
                     type="time"
                     value={settings.quiet_end}
                     onChange={(e) => update({ quiet_end: e.target.value })}
-                    className="px-3 py-1.5 rounded-lg bg-[#F5F0E8] dark:bg-gray-700 text-[#2C1A0E] dark:text-gray-100 text-[13px] font-semibold border-0 focus:outline-none focus:ring-2 focus:ring-[#8B7355]/40"
+                    className="px-3 py-1.5 rounded-lg bg-[#F5F0E8] dark:bg-white/5 text-[#2C1A0E] dark:text-white/90 text-[13px] font-semibold border-0 focus:outline-none focus:ring-2 focus:ring-[#8B7355]/40"
                   />
                 </div>
               )}
@@ -485,7 +494,7 @@ export default function NotificationsSettingsPage() {
             <button
               onClick={sendTest}
               disabled={pushBusy || !pushStatus?.subscribed}
-              className="w-full mt-6 py-3 rounded-2xl border border-dashed border-[#8B7355] text-[#8B7355] text-[13px] font-semibold flex items-center justify-center gap-2 hover:bg-[#F5F0E8] dark:hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full mt-6 py-3 rounded-2xl border border-dashed border-[#8B7355] dark:border-[#C4A484]/50 text-[#8B7355] dark:text-[#C4A484] text-[13px] font-semibold flex items-center justify-center gap-2 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {pushBusy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               Test-Push senden
