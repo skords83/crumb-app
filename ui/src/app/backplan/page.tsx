@@ -443,20 +443,34 @@ export default function BackplanPage() {
 
           // Zutaten-Block (kompakt-kollabiert oder voll aufgeklappt)
           const IngredientsSection = ings.length === 0 ? null : (
-            !phase.ingredientsRelevant ? (
-              // Kollabiert
-              <button
-                onClick={() => toggleIng(ik)}
-                className="mb-1.5 w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-transparent border border-[#EDE5D6] dark:border-white/[0.05] opacity-60 hover:opacity-100 transition-opacity"
-              >
-                <span className="text-[10px] font-semibold text-[#A68B6A] dark:text-white/35">
-                  {ings.length} Zutaten · {phase.name}
-                </span>
-                <span className="text-[10px] text-[#8B7355]/60 dark:text-[#C4A484]/50 flex items-center gap-1">
-                  {isIO ? <>einklappen <ChevronUp size={10} /></> : <>einblenden <ChevronDown size={10} /></>}
-                </span>
-              </button>
-            ) : (
+!phase.ingredientsRelevant ? (
+  // Kollabiert — aber manuell aufklappbar
+  <div className="mb-1.5">
+    <button
+      onClick={() => toggleIng(ik)}
+      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-transparent border border-[#EDE5D6] dark:border-white/[0.05] opacity-60 hover:opacity-100 transition-opacity"
+    >
+      <span className="text-[10px] font-semibold text-[#A68B6A] dark:text-white/35">
+        {ings.length} Zutaten · {phase.name}
+      </span>
+      <span className="text-[10px] text-[#8B7355]/60 dark:text-[#C4A484]/50 flex items-center gap-1">
+        {isIO ? <>einklappen <ChevronUp size={10} /></> : <>einblenden <ChevronDown size={10} /></>}
+      </span>
+    </button>
+    {isIO && (
+      <div className="px-3 pb-2.5 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 rounded-b-lg border border-t-0 border-[#EDE5D6] dark:border-white/[0.05] bg-white/40 dark:bg-white/[0.02]">
+        {ings.map((ing: any, iIdx: number) => (
+          <div key={iIdx} className="flex justify-between text-[11px] py-1 border-b border-[#EDE5D6]/60 dark:border-white/[0.04] last:border-0 sm:[&:nth-last-child(2):nth-child(odd)]:border-0">
+            <span className="text-[#5C3D1E]/80 dark:text-white/55">{ing.name}</span>
+            <span className="font-bold text-[#2C1A0E] dark:text-white/85">
+              {ing.amount ? `${scaleAmount(ing.amount, multiplier)} ${String(ing.amount||'').includes(ing.unit) ? '' : ing.unit||''}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+) : (
               // Aufgeklappt — Standard wenn noch Aktion-Schritte kommen
               <div className="mb-2 rounded-xl bg-white/60 dark:bg-white/[0.03] border border-[#D6C9B4] dark:border-white/[0.07] overflow-hidden">
                 <button
