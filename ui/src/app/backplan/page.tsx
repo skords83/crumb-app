@@ -545,9 +545,9 @@ export default function BackplanPage() {
           const lastDoneStep = doneSteps.length > 0
             ? doneSteps.reduce((acc, s) => s.globalIdx > acc.globalIdx ? s : acc, doneSteps[0])
             : null;
-          const undoButton = lastDoneStep ? (
+          const undoButton = lastDoneStep && activePhaseStep && WAIT_TYPES.has(activePhaseStep.type) ? (
             <button
-              onClick={() => transition(session.id, lastDoneStep.globalIdx, 'undo')}
+              onClick={() => transition(session.id, activePhaseStep.globalIdx, 'undo')}
               className="mt-1.5 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-semibold text-[#A68B6A]/70 dark:text-white/20 hover:text-[#8B7355] dark:hover:text-white/50 hover:bg-[#EDE5D6]/50 dark:hover:bg-white/[0.04] transition-colors"
             >
               <RotateCcw size={11} /> Schritt zurück
