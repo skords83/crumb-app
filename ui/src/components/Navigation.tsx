@@ -4,12 +4,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search, BedDouble, AlarmClock, Flame, Bell } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, Download, Search, Settings, Bell, KeyRound, Flame } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
-import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
 import { calculateBackplan, parseLocalDate } from '@/lib/backplan-utils';
-import PushNotificationsToggle from '@/components/PushNotificationsToggle';
 
 type PlanPhase = 'idle' | 'planned' | 'upcoming' | 'active' | 'baking';
 interface SmartStatus { phase: PlanPhase; label: string; sublabel?: string; recipeName?: string; pulse: boolean; }
@@ -59,31 +57,18 @@ export default function Navigation() {
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showBakersPercent, setShowBakersPercent] = useState(false);
-  const [showPlanSettings, setShowPlanSettings] = useState(false);
-  const [sleepFromStr, setSleepFromStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.sleepFrom));
-  const [sleepToStr, setSleepToStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.sleepTo));
-  const [abendStr, setAbendStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.abendZiel));
-  const [morgenStr, setMorgenStr] = useState(() => minToHHMM(SETTINGS_DEFAULTS.morgenZiel));
-  const [snapMin, setSnapMin] = useState(SETTINGS_DEFAULTS.snapMin);
-  const [showFreieZeit, setShowFreieZeit] = useState(SETTINGS_DEFAULTS.showFreieZeit);
-  const [minFreieZeit, setMinFreieZeit] = useState(SETTINGS_DEFAULTS.minFreieZeit);
 
   const isAuthPage = ['/login','/register','/forgot-password','/reset-password'].includes(pathname);
 
   useEffect(() => {
     setMounted(true);
     setDarkMode(document.documentElement.classList.contains('dark'));
-    const s=loadSettings();
-    setShowBakersPercent(!!s.showBakersPercent);
-    setSleepFromStr(minToHHMM(s.sleepFrom)); setSleepToStr(minToHHMM(s.sleepTo));
-    setAbendStr(minToHHMM(s.abendZiel)); setMorgenStr(minToHHMM(s.morgenZiel));
-    setSnapMin(s.snapMin); setShowFreieZeit(s.showFreieZeit??true); setMinFreieZeit(s.minFreieZeit??30);
+    const saved = localStorage.getItem('theme');
+    if(saved==='dark') { setDarkMode(true); document.documentElement.classList.add('dark'); }
+    else if(saved==='light') { setDarkMode(false); document.documentElement.classList.remove('dark'); }
   }, []);
 
   const toggleTheme = () => { setDarkMode(!darkMode); document.documentElement.classList.toggle('dark'); localStorage.setItem('theme',!darkMode?'dark':'light'); };
-  const toggleBakersPercent = () => { const next=!showBakersPercent; setShowBakersPercent(next); saveSettings({showBakersPercent:next}); };
-  const savePlanSetting = (field: string, value: string|number) => { if(typeof value==='string')saveSettings({[field]:hhmmToMin(value)}); else saveSettings({[field]:value}); };
 
   useEffect(() => {
     if(isAuthPage)return;
@@ -111,6 +96,8 @@ export default function Navigation() {
       </div>
     </Link>
   ):null;
+
+  const isSettingsPage = pathname.startsWith('/settings') || pathname.startsWith('/profile');
 
   return (
     <>
@@ -146,6 +133,7 @@ export default function Navigation() {
               {mounted&&darkMode?<Sun size={18} className="text-[#8B7355] dark:text-white/60"/>:<Moon size={18} className="text-[#8B7355] dark:text-white/60"/>}
             </button>
 
+            {/* ── USER MENU ── */}
             <div className="relative">
               <button onClick={()=>setShowUserMenu(!showUserMenu)} className="flex items-center gap-2 p-2 rounded-full bg-[#8B7355]/10 dark:bg-white/10 hover:bg-[#8B7355]/15 dark:hover:bg-white/15 transition-colors border border-[#D6C9B4] dark:border-transparent">
                 <div className="w-6 h-6 rounded-full bg-[#8B7355] flex items-center justify-center text-white text-xs font-bold">{user?.username?user.username.slice(0,2).toUpperCase():'?'}</div>
@@ -154,54 +142,60 @@ export default function Navigation() {
               {showUserMenu&&(
                 <>
                   <div className="fixed inset-0 z-40" onClick={()=>setShowUserMenu(false)}/>
-                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#D6C9B4] dark:border-white/10 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-[#EDE5D6] dark:border-white/10">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1a1008] rounded-xl shadow-xl border border-[#D6C9B4] dark:border-white/10 py-1.5 z-50">
+                    {/* Header */}
+                    <div className="px-4 py-2.5 border-b border-[#EDE5D6] dark:border-white/10">
                       <p className="text-sm font-bold text-[#2C1A0E] dark:text-white/90">{user?.username||'Benutzer'}</p>
                       <p className="text-xs text-[#A68B6A] dark:text-white/40">{user?.email}</p>
                     </div>
-                    <button onClick={toggleBakersPercent} className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors border-b border-[#EDE5D6] dark:border-white/10">
-                      <div className="flex items-center gap-3"><Percent size={15} className={showBakersPercent?'text-[#8B7355]':'text-[#C4A484] dark:text-white/30'}/>Bäckerprozente</div>
-                      <div className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${showBakersPercent?'bg-[#8B7355]':'bg-[#D6C9B4] dark:bg-white/10'}`}><div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showBakersPercent?'translate-x-4':'translate-x-0.5'}`}/></div>
-                    </button>
-                    <button onClick={()=>setShowPlanSettings(!showPlanSettings)} className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors border-b border-[#EDE5D6] dark:border-white/10">
-                      <div className="flex items-center gap-3"><BedDouble size={15} className="text-[#C4A484] dark:text-white/30"/>Backplan-Einstellungen</div>
-                      <span className="text-xs text-[#C4A484] dark:text-white/30">{showPlanSettings?'▲':'▼'}</span>
-                    </button>
-                    {showPlanSettings&&(
-                      <div className="px-4 py-3 border-b border-[#EDE5D6] dark:border-white/10 space-y-3 bg-[#F5F0E8] dark:bg-white/5">
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1.5"><Moon size={11} className="text-[#C4A484] dark:text-white/30"/><span className="text-[11px] font-semibold text-[#A68B6A] dark:text-white/30 uppercase tracking-wider">Nachtruhe</span></div>
-                          <div className="flex items-center gap-2">
-                            <input type="time" value={sleepFromStr} onChange={(e)=>{setSleepFromStr(e.target.value);savePlanSetting('sleepFrom',e.target.value);}} className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-[#D6C9B4] dark:border-white/10 bg-white dark:bg-white/5 text-[#2C1A0E] dark:text-white/80 outline-none focus:border-[#8B7355]"/>
-                            <span className="text-[#D6C9B4] text-sm">–</span>
-                            <input type="time" value={sleepToStr} onChange={(e)=>{setSleepToStr(e.target.value);savePlanSetting('sleepTo',e.target.value);}} className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-[#D6C9B4] dark:border-white/10 bg-white dark:bg-white/5 text-[#2C1A0E] dark:text-white/80 outline-none focus:border-[#8B7355]"/>
-                          </div>
+
+                    {/* Nav-Links */}
+                    <div className="py-1">
+                      <Link
+                        href="/settings"
+                        onClick={()=>setShowUserMenu(false)}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-[#F5F0E8] dark:hover:bg-white/5 ${isSettingsPage?'text-[#8B7355] dark:text-[#C4A484]':'text-[#5C3D1E] dark:text-white/70'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Settings size={15} className={isSettingsPage?'text-[#8B7355]':'text-[#C4A484] dark:text-white/30'}/>
+                          Einstellungen
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1.5"><AlarmClock size={11} className="text-[#C4A484] dark:text-white/30"/><span className="text-[11px] font-semibold text-[#A68B6A] dark:text-white/30 uppercase tracking-wider">Zielzeiten</span></div>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2"><span className="text-xs text-[#A68B6A] dark:text-white/30 w-20 flex-shrink-0">Abend fertig</span><input type="time" value={abendStr} onChange={(e)=>{setAbendStr(e.target.value);savePlanSetting('abendZiel',e.target.value);}} className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-[#D6C9B4] dark:border-white/10 bg-white dark:bg-white/5 text-[#2C1A0E] dark:text-white/80 outline-none focus:border-[#8B7355]"/></div>
-                            <div className="flex items-center gap-2"><span className="text-xs text-[#A68B6A] dark:text-white/30 w-20 flex-shrink-0">Morgen fertig</span><input type="time" value={morgenStr} onChange={(e)=>{setMorgenStr(e.target.value);savePlanSetting('morgenZiel',e.target.value);}} className="flex-1 px-2 py-1.5 text-sm rounded-lg border border-[#D6C9B4] dark:border-white/10 bg-white dark:bg-white/5 text-[#2C1A0E] dark:text-white/80 outline-none focus:border-[#8B7355]"/></div>
-                          </div>
+                        <ChevronDown size={12} className="-rotate-90 text-[#C4A484] dark:text-white/20"/>
+                      </Link>
+                      <Link
+                        href="/settings?tab=notifications"
+                        onClick={()=>setShowUserMenu(false)}
+                        className="flex items-center justify-between px-4 py-2.5 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Bell size={15} className="text-[#C4A484] dark:text-white/30"/>
+                          Benachrichtigungen
                         </div>
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1.5"><Clock size={11} className="text-[#C4A484] dark:text-white/30"/><span className="text-[11px] font-semibold text-[#A68B6A] dark:text-white/30 uppercase tracking-wider">Snap-Granularität</span></div>
-                          <div className="flex gap-1.5">{[0,5,15,30].map(v=><button key={v} onClick={()=>{setSnapMin(v);saveSettings({snapMin:v});}} className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${snapMin===v?'bg-[#8B7355] border-[#8B7355] text-white':'border-[#D6C9B4] dark:border-white/10 text-[#A68B6A] dark:text-white/40 bg-white dark:bg-transparent hover:border-[#8B7355]/40'}`}>{v===0?'aus':`${v} min`}</button>)}</div>
+                        <ChevronDown size={12} className="-rotate-90 text-[#C4A484] dark:text-white/20"/>
+                      </Link>
+                      <Link
+                        href="/settings?tab=security"
+                        onClick={()=>setShowUserMenu(false)}
+                        className="flex items-center justify-between px-4 py-2.5 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors border-b border-[#EDE5D6] dark:border-white/10"
+                      >
+                        <div className="flex items-center gap-3">
+                          <KeyRound size={15} className="text-[#C4A484] dark:text-white/30"/>
+                          Passwort ändern
                         </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-1.5"><Clock size={11} className="text-[#C4A484] dark:text-white/30"/><span className="text-[11px] font-semibold text-[#A68B6A] dark:text-white/30 uppercase tracking-wider">Freizeit-Liste</span></div>
-                            <div onClick={()=>{const next=!showFreieZeit;setShowFreieZeit(next);saveSettings({showFreieZeit:next});}} className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${showFreieZeit?'bg-[#8B7355]':'bg-[#D6C9B4] dark:bg-white/10'}`}><div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showFreieZeit?'translate-x-4':'translate-x-0.5'}`}/></div>
-                          </div>
-                          {showFreieZeit&&<div><span className="text-xs text-[#A68B6A] dark:text-white/30 block mb-1.5">Mindestdauer</span><div className="flex gap-1.5">{[15,30,60].map(v=><button key={v} onClick={()=>{setMinFreieZeit(v);saveSettings({minFreieZeit:v});}} className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors ${minFreieZeit===v?'bg-[#8B7355] border-[#8B7355] text-white':'border-[#D6C9B4] dark:border-white/10 text-[#A68B6A] dark:text-white/40 bg-white dark:bg-transparent hover:border-[#8B7355]/40'}`}>{v<60?`${v} min`:'1 h'}</button>)}</div></div>}
-                        </div>
-                        <button onClick={()=>{const d=SETTINGS_DEFAULTS;saveSettings({sleepFrom:d.sleepFrom,sleepTo:d.sleepTo,abendZiel:d.abendZiel,morgenZiel:d.morgenZiel,snapMin:d.snapMin,showFreieZeit:d.showFreieZeit,minFreieZeit:d.minFreieZeit});setSleepFromStr(minToHHMM(d.sleepFrom));setSleepToStr(minToHHMM(d.sleepTo));setAbendStr(minToHHMM(d.abendZiel));setMorgenStr(minToHHMM(d.morgenZiel));setSnapMin(d.snapMin);setShowFreieZeit(d.showFreieZeit);setMinFreieZeit(d.minFreieZeit);}} className="text-[11px] text-[#A68B6A] dark:text-white/30 hover:text-[#5C3D1E] dark:hover:text-white/60 underline">Auf Standardwerte zurücksetzen</button>
-                      </div>
-                    )}
-                    <PushNotificationsToggle />
-                    <Link href="/profile/notifications" onClick={()=>setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"><Bell size={16} className="text-[#C4A484] dark:text-white/30"/>Benachrichtigungen</Link>
-                    <Link href="/profile" onClick={()=>setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"><KeyRound size={16} className="text-[#C4A484] dark:text-white/30"/>Passwort ändern</Link>
-                    <button onClick={()=>{setShowUserMenu(false);logout();}} className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"><LogOut size={16}/>Abmelden</button>
+                        <ChevronDown size={12} className="-rotate-90 text-[#C4A484] dark:text-white/20"/>
+                      </Link>
+                    </div>
+
+                    {/* Abmelden */}
+                    <div className="py-1">
+                      <button
+                        onClick={()=>{setShowUserMenu(false);logout();}}
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut size={15}/>
+                        Abmelden
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -225,6 +219,11 @@ export default function Navigation() {
               </Link>
             );
           })}
+          {/* Settings-Link in mobile nav */}
+          <Link href="/settings" className={`flex flex-col items-center gap-1 transition-colors px-4 ${pathname.startsWith('/settings')||pathname.startsWith('/profile')?'text-[#8B7355] dark:text-[#C4A484]':'text-[#C4A484] dark:text-white/35'}`}>
+            <Settings size={22} strokeWidth={2}/>
+            <span className="text-[10px] font-medium">Profil</span>
+          </Link>
           {canInstall&&<button onClick={install} className="flex flex-col items-center gap-1 text-[#8B7355] dark:text-[#C4A484] px-4"><Download size={22} strokeWidth={2}/><span className="text-[10px] font-medium">Installieren</span></button>}
         </div>
       </nav>
