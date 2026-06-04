@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronDown, ChevronUp, Clock, Check, Sun, Filter, RotateCcw } from 'lucide-react';
+import PushPermissionBanner from '@/components/PushPermissionBanner';
 import { type BakeSession, type TimelineStep, type PhaseGate, formatSmartTime, formatCountdown, formatDuration, formatStepDuration, getProgress, getPhases, getPhaseProgress } from '@/lib/backplan-utils';
 
 const API = process.env.NEXT_PUBLIC_API_URL;
@@ -341,6 +342,8 @@ export default function BackplanPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 pt-4">
+
+        <PushPermissionBanner />
 
         {/* ── Gate-Cards ── */}
         {gates.map(gate => (

@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
 import { calculateBackplan, parseLocalDate } from '@/lib/backplan-utils';
+import PushNotificationsToggle from '@/components/PushNotificationsToggle';
 
 type PlanPhase = 'idle' | 'planned' | 'upcoming' | 'active' | 'baking';
 interface SmartStatus { phase: PlanPhase; label: string; sublabel?: string; recipeName?: string; pulse: boolean; }
@@ -197,6 +198,7 @@ export default function Navigation() {
                         <button onClick={()=>{const d=SETTINGS_DEFAULTS;saveSettings({sleepFrom:d.sleepFrom,sleepTo:d.sleepTo,abendZiel:d.abendZiel,morgenZiel:d.morgenZiel,snapMin:d.snapMin,showFreieZeit:d.showFreieZeit,minFreieZeit:d.minFreieZeit});setSleepFromStr(minToHHMM(d.sleepFrom));setSleepToStr(minToHHMM(d.sleepTo));setAbendStr(minToHHMM(d.abendZiel));setMorgenStr(minToHHMM(d.morgenZiel));setSnapMin(d.snapMin);setShowFreieZeit(d.showFreieZeit);setMinFreieZeit(d.minFreieZeit);}} className="text-[11px] text-[#A68B6A] dark:text-white/30 hover:text-[#5C3D1E] dark:hover:text-white/60 underline">Auf Standardwerte zurücksetzen</button>
                       </div>
                     )}
+                    <PushNotificationsToggle />
                     <Link href="/profile" onClick={()=>setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"><KeyRound size={16} className="text-[#C4A484] dark:text-white/30"/>Passwort ändern</Link>
                     <button onClick={()=>{setShowUserMenu(false);logout();}} className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"><LogOut size={16}/>Abmelden</button>
                   </div>
