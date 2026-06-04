@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, Download, Search, Settings, Bell, KeyRound, Flame } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, Download, Search, Settings, Flame } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { calculateBackplan, parseLocalDate } from '@/lib/backplan-utils';
@@ -142,7 +142,7 @@ export default function Navigation() {
               {showUserMenu&&(
                 <>
                   <div className="fixed inset-0 z-40" onClick={()=>setShowUserMenu(false)}/>
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1a1008] rounded-xl shadow-xl border border-[#D6C9B4] dark:border-white/10 py-1.5 z-50">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#D6C9B4] dark:border-white/10 py-1.5 z-50">
                     {/* Header */}
                     <div className="px-4 py-2.5 border-b border-[#EDE5D6] dark:border-white/10">
                       <p className="text-sm font-bold text-[#2C1A0E] dark:text-white/90">{user?.username||'Benutzer'}</p>
@@ -154,33 +154,11 @@ export default function Navigation() {
                       <Link
                         href="/settings"
                         onClick={()=>setShowUserMenu(false)}
-                        className={`flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-[#F5F0E8] dark:hover:bg-white/5 ${isSettingsPage?'text-[#8B7355] dark:text-[#C4A484]':'text-[#5C3D1E] dark:text-white/70'}`}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-[#F5F0E8] dark:hover:bg-white/5 border-b border-[#EDE5D6] dark:border-white/10 ${isSettingsPage?'text-[#8B7355] dark:text-[#C4A484]':'text-[#5C3D1E] dark:text-white/70'}`}
                       >
                         <div className="flex items-center gap-3">
                           <Settings size={15} className={isSettingsPage?'text-[#8B7355]':'text-[#C4A484] dark:text-white/30'}/>
                           Einstellungen
-                        </div>
-                        <ChevronDown size={12} className="-rotate-90 text-[#C4A484] dark:text-white/20"/>
-                      </Link>
-                      <Link
-                        href="/settings?tab=notifications"
-                        onClick={()=>setShowUserMenu(false)}
-                        className="flex items-center justify-between px-4 py-2.5 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Bell size={15} className="text-[#C4A484] dark:text-white/30"/>
-                          Benachrichtigungen
-                        </div>
-                        <ChevronDown size={12} className="-rotate-90 text-[#C4A484] dark:text-white/20"/>
-                      </Link>
-                      <Link
-                        href="/settings?tab=security"
-                        onClick={()=>setShowUserMenu(false)}
-                        className="flex items-center justify-between px-4 py-2.5 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors border-b border-[#EDE5D6] dark:border-white/10"
-                      >
-                        <div className="flex items-center gap-3">
-                          <KeyRound size={15} className="text-[#C4A484] dark:text-white/30"/>
-                          Passwort ändern
                         </div>
                         <ChevronDown size={12} className="-rotate-90 text-[#C4A484] dark:text-white/20"/>
                       </Link>

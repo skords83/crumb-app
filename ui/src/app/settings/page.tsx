@@ -473,7 +473,7 @@ function SettingsPageContent() {
 
   return (
     <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] pt-[73px] md:pt-[73px] pb-24 md:pb-8">
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="max-w-3xl mx-auto px-4 pt-4 pb-8">
 
         {/* Back button */}
         <button
@@ -490,14 +490,16 @@ function SettingsPageContent() {
         <div className="flex gap-6 items-start">
 
           {/* ── Sidebar ── */}
-          <aside className="hidden md:block w-44 flex-shrink-0">
-            <nav className="bg-white dark:bg-white/[0.03] rounded-2xl border border-[#EDE5D6] dark:border-white/[0.07] overflow-hidden">
+          <aside className="hidden md:block w-52 flex-shrink-0">
+            <nav className="bg-white dark:bg-white/[0.03] rounded-2xl border border-[#EDE5D6] dark:border-white/[0.07]">
               {TABS.map((tab, i) => (
                 <button
                   key={tab.id}
                   onClick={() => updateTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors text-left ${
-                    i < TABS.length - 1 ? 'border-b border-[#EDE5D6] dark:border-white/[0.07]' : ''
+                    i === 0 ? 'rounded-t-2xl' : ''
+                  } ${
+                    i === TABS.length - 1 ? 'rounded-b-2xl' : 'border-b border-[#EDE5D6] dark:border-white/[0.07]'
                   } ${
                     activeTab === tab.id
                       ? 'bg-[#F5F0E8] dark:bg-[#8B7355]/15 text-[#8B7355] dark:text-[#C4A484] font-medium'
