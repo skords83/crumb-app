@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Link as LinkIcon, Edit3, X, AlertCircle, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import { LinkIcon, Edit3, X, AlertCircle, Loader2 } from 'lucide-react';
 import RecipeForm from '@/components/RecipeForm';
 import SaveButton from '@/components/SaveButton';
 import ImageSelectModal from '@/components/ImageSelectModal';
@@ -218,10 +217,6 @@ export default function NewRecipePage() {
   return (
     <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] text-[#2C1A0E] dark:text-white transition-colors duration-200">
       <div className="max-w-6xl mx-auto px-6 pt-8 pb-20">
-
-        <Link href="/" className="inline-flex items-center gap-2 text-[#A68B6A] dark:text-white/40 hover:text-[#2C1A0E] dark:hover:text-white mb-6 font-medium text-sm transition-colors">
-          <ArrowLeft size={18} /> Zurück zur Bibliothek
-        </Link>
 
         {/* Tab-Switcher */}
         <div className="bg-[#EDE5D6] dark:bg-white/[0.05] p-1.5 rounded-2xl inline-flex w-full mb-8 border border-[#D6C9B4] dark:border-white/[0.07]">
