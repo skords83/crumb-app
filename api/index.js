@@ -14,6 +14,7 @@ const { authenticateToken, login, register, verify, requestPasswordReset, resetP
 const { categorizeRecipe } = require('./categorize');
 const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
 const { router: pushRouter, setPool: setPushPool } = require('./push');
+const { router: notificationSettingsRouter, setPool: setNotificationSettingsPool } = require('./notification-settings');
 const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
 const { evaluateAndDispatch, cleanupOldNotifications, initWebPush } = require('./notification-engine');
 
@@ -62,6 +63,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // Keine erzwungene UTC-Timezone
 setBakeSessionsPool(pool);
 setPushPool(pool);
+setNotificationSettingsPool(pool);
 
 // Öffentliche Base-URL für generierte Datei-URLs.
 // Traefik terminiert TLS → req.protocol ist intern immer "http".
@@ -181,6 +183,22 @@ await pool.query(migratePlannedAtType);
         last_used_at TIMESTAMP
       );`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);`);
+      // ── User Notification Settings ──
+await pool.query(`CREATE TABLE IF NOT EXISTS user_notification_settings (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  master_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  step_ready_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  step_ready_vorlauf_min INTEGER NOT NULL DEFAULT 5,
+  preheat_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  preheat_vorlauf_min INTEGER NOT NULL DEFAULT 45,
+  bake_done_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  plan_done_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  quiet_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  quiet_start TIME NOT NULL DEFAULT '22:00:00',
+  quiet_end TIME NOT NULL DEFAULT '07:00:00',
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);`);
+
       console.log("✅ Datenbank bereit");
       return;
     } catch (err) {
@@ -284,6 +302,9 @@ app.use('/api/bake-sessions', bakeSessionsRouter);
 
 // ── Push Subscriptions Router ──
 app.use('/api/push', pushRouter);
+
+// ── Notification Settings Router ──
+app.use('/api/notification-settings', notificationSettingsRouter);
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
