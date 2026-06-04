@@ -9,7 +9,7 @@
 // keinen 60s-Lag haben.
 //
 // Transport-Wrapper trennt Eval-Logik vom Versand:
-//   evaluateSession → dispatch → sendNotification → ntfy + web-push
+//   evaluateSession → dispatch → sendNotification → web-push
 //
 // Trigger-Typen:
 //   - 'gate-ready'  Phase-Gate bereit (Toggle: step_ready_enabled)
@@ -22,7 +22,6 @@
 //   - 'overdue'     Safety-Net, immer aktiv (>30 Min soft_done)
 // ============================================================
 
-const axios = require('axios');
 const webpush = require('web-push');
 const { flattenSteps, getPendingGates, isWaitStep, isBakeStep } = require('./bake-engine');
 const { getSettings, isInQuietHours, DEFAULT_SETTINGS } = require('./notification-settings');
@@ -32,7 +31,6 @@ const OVERDUE_THRESHOLD_MIN = 30; // Minuten nach Timer-Ende bis "überfällig"
 
 // ── VAPID-Setup für Web Push ─────────────────────────────────
 // Wird einmalig beim Boot aus index.js aufgerufen.
-// Wenn VAPID-Keys fehlen, wird Web Push deaktiviert (ntfy läuft weiter).
 let webPushEnabled = false;
 function initWebPush() {
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
@@ -278,31 +276,6 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
   return candidates;
 }
 
-// ── Transport: ntfy ──────────────────────────────────────────
-async function sendNtfy(title, message, tags, priority) {
-  if (!process.env.NTFY_URL) return;
-  try {
-    const topic = process.env.NTFY_TOPIC || 'crumb-backplan';
-    const baseUrl = process.env.NTFY_URL.replace(/\/$/, '');
-    const shortTitle = title.length > 60
-      ? title.slice(0, 60).replace(/\s+\S*$/, '') + '…'
-      : title;
-    const payload = JSON.stringify({
-      topic,
-      title: shortTitle,
-      message,
-      tags: [tags || 'bread'],
-      priority: priority || 4,
-    });
-    const headers = { 'Content-Type': 'application/json' };
-    if (process.env.NTFY_TOKEN) headers['Authorization'] = `Bearer ${process.env.NTFY_TOKEN}`;
-    await axios.post(baseUrl, payload, { headers });
-    console.log(`🔔 ntfy: ${shortTitle}`);
-  } catch (err) {
-    console.error('❌ ntfy Fehler:', err.message);
-  }
-}
-
 // ── Transport: Web Push (per User) ───────────────────────────
 // Iteriert über alle Subscriptions des Users und sendet die Notification.
 // Bei expired Subscriptions (404/410): automatisches Cleanup in der DB.
@@ -349,17 +322,11 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
 }
 
 // ── sendNotification ─────────────────────────────────────────
-// Transport-Wrapper. Beide Channels parallel:
-//   1. ntfy (Legacy, globales Topic)
-//   2. Web Push (per User, falls Subscriptions vorhanden)
-//
+// Transport-Wrapper. Sendet via Web Push (per User).
 // Bypasst Settings/Quiet-Hours — wird vom Test-Endpoint und
 // von dispatch() (nach erfolgreichem Insert in sent_notifications) aufgerufen.
 async function sendNotification(poolRef, userId, candidate) {
-  await Promise.all([
-    sendNtfy(candidate.title, candidate.message, candidate.tags, candidate.priority),
-    sendWebPushToUser(poolRef, userId, candidate),
-  ]);
+  await sendWebPushToUser(poolRef, userId, candidate);
 }
 
 // ── dispatch ─────────────────────────────────────────────────

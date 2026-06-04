@@ -727,25 +727,6 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
   }
 });
 
-app.get('/api/ntfy/status', async (req, res) => {
-  try {
-    const sentCount = await pool.query(
-      'SELECT COUNT(*)::int AS n FROM sent_notifications WHERE sent_at > NOW() - INTERVAL \'24 hours\''
-    );
-    const activeSessions = await pool.query(
-      'SELECT COUNT(*)::int AS n FROM bake_sessions WHERE finished_at IS NULL'
-    );
-    res.json({
-      ntfy_url: process.env.NTFY_URL || 'http://ntfy.local',
-      topic: process.env.NTFY_TOPIC || 'crumb-backplan',
-      gesendete_notifications_24h: sentCount.rows[0].n,
-      active_sessions: activeSessions.rows[0].n,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ============================================================
 // SERVER STARTEN
 // ============================================================
@@ -758,7 +739,7 @@ app.listen(PORT, '0.0.0.0', async () => {
   // ── Notification-Sweep ───────────────────────────────────
   // Iteriert über aktive Bake-Sessions, prüft soft_done-Übergänge
   // (Warten-Timer abgelaufen) und ruft den Notification-Evaluator auf.
-  // Dispatch geht über DB-Dedup (sent_notifications) und ntfy-Transport.
+  // Dispatch geht über DB-Dedup (sent_notifications) und Web-Push-Transport.
   // State-Transitions durch User-Aktionen triggern parallel den gleichen
   // Evaluator direkt im bake-sessions Router — der Sweep ist das Safety-Net.
   const notificationSweep = async () => {
