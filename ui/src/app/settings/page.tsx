@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Clock, Bell, Percent, KeyRound, Moon, AlarmClock, ChevronRight, Loader2, CheckCircle, Eye, EyeOff, Send } from 'lucide-react';
+import { ArrowLeft, Clock, Bell, Percent, KeyRound, Moon, AlarmClock, ChevronRight, Loader2, CheckCircle, Eye, EyeOff, Send, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
+import { apiFetch } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -17,13 +18,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'security',      label: 'Sicherheit',         icon: <KeyRound size={16}/> },
 ];
 
+const API = process.env.NEXT_PUBLIC_API_URL;
+
 // ─── Toggle component ────────────────────────────────────────────────────────
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ value, onChange, disabled = false }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
-      onClick={() => onChange(!value)}
-      className={`w-10 h-[22px] rounded-full transition-colors relative flex-shrink-0 ${value ? 'bg-[#8B7355]' : 'bg-[#D6C9B4] dark:bg-white/15'}`}
+      onClick={() => !disabled && onChange(!value)}
+      disabled={disabled}
+      className={`w-10 h-[22px] rounded-full transition-colors relative flex-shrink-0 ${value ? 'bg-[#8B7355]' : 'bg-[#D6C9B4] dark:bg-white/15'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
       <div className={`absolute top-[3px] w-4 h-4 bg-white rounded-full shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-[3px]'}`}/>
     </button>
@@ -32,12 +36,12 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ─── Slider component ────────────────────────────────────────────────────────
 
-function SliderRow({ label, sub, value, min, max, step, format, onChange }: {
+function SliderRow({ label, sub, value, min, max, step, format, onChange, disabled = false }: {
   label: string; sub?: string; value: number; min: number; max: number; step: number;
-  format: (v: number) => string; onChange: (v: number) => void;
+  format: (v: number) => string; onChange: (v: number) => void; disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-4 py-3.5 border-b border-[#EDE5D6] dark:border-white/[0.07] last:border-0">
+    <div className={`flex items-center gap-4 py-3.5 border-b border-[#EDE5D6] dark:border-white/[0.07] last:border-0 ${disabled ? 'opacity-40' : ''}`}>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-[#2C1A0E] dark:text-white/85">{label}</p>
         {sub && <p className="text-xs text-[#A68B6A] dark:text-white/40 mt-0.5">{sub}</p>}
@@ -46,8 +50,9 @@ function SliderRow({ label, sub, value, min, max, step, format, onChange }: {
         <input
           type="range"
           min={min} max={max} step={step} value={value}
+          disabled={disabled}
           onChange={e => onChange(Number(e.target.value))}
-          className="w-28 h-1 appearance-none rounded-full outline-none cursor-pointer"
+          className="w-28 h-1 appearance-none rounded-full outline-none cursor-pointer disabled:cursor-not-allowed"
           style={{
             background: `linear-gradient(to right, #8B7355 ${((value - min) / (max - min)) * 100}%, #D6C9B4 ${((value - min) / (max - min)) * 100}%)`
           }}
@@ -68,14 +73,14 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ─── Row with toggle ─────────────────────────────────────────────────────────
 
-function ToggleRow({ label, sub, value, onChange }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({ label, sub, value, onChange, disabled = false }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-3.5 border-b border-[#EDE5D6] dark:border-white/[0.07] last:border-0">
+    <div className={`flex items-center justify-between py-3.5 border-b border-[#EDE5D6] dark:border-white/[0.07] last:border-0 ${disabled ? 'opacity-40' : ''}`}>
       <div>
         <p className="text-sm text-[#2C1A0E] dark:text-white/85">{label}</p>
         {sub && <p className="text-xs text-[#A68B6A] dark:text-white/40 mt-0.5">{sub}</p>}
       </div>
-      <Toggle value={value} onChange={onChange}/>
+      <Toggle value={value} onChange={onChange} disabled={disabled}/>
     </div>
   );
 }
@@ -183,72 +188,277 @@ function TabPlanung() {
 
 // ─── Tab: Notifications ───────────────────────────────────────────────────────
 
-function TabNotifications() {
-  const [pushEnabled,    setPushEnabled]    = useState(false);
-  const [stepEnabled,    setStepEnabled]    = useState(true);
-  const [stepVorlauf,    setStepVorlauf]    = useState(5);
-  const [ofenEnabled,    setOfenEnabled]    = useState(true);
-  const [ofenVorlauf,    setOfenVorlauf]    = useState(45);
-  const [fertigEnabled,  setFertigEnabled]  = useState(true);
-  const [planEnabled,    setPlanEnabled]    = useState(true);
-  const [nachtruheOn,    setNachtruheOn]    = useState(true);
-  const [testSending,    setTestSending]    = useState(false);
-  const [testResult,     setTestResult]     = useState<'ok'|'err'|null>(null);
+// Settings shape from backend (api/notification-settings.js)
+type NotifSettings = {
+  master_enabled: boolean;
+  step_ready_enabled: boolean;
+  step_ready_vorlauf_min: number;
+  preheat_enabled: boolean;
+  preheat_vorlauf_min: number;
+  bake_done_enabled: boolean;
+  plan_done_enabled: boolean;
+  quiet_enabled: boolean;
+  quiet_start: string;
+  quiet_end: string;
+};
 
-  // Load notification settings from localStorage
+const DEFAULT_NOTIF_SETTINGS: NotifSettings = {
+  master_enabled: true,
+  step_ready_enabled: true,
+  step_ready_vorlauf_min: 5,
+  preheat_enabled: true,
+  preheat_vorlauf_min: 45,
+  bake_done_enabled: true,
+  plan_done_enabled: true,
+  quiet_enabled: false,
+  quiet_start: '22:00',
+  quiet_end: '07:00',
+};
+
+// Convert URL-safe base64 to Uint8Array for VAPID applicationServerKey
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function TabNotifications() {
+  // Browser subscription state
+  const [pushSupported,  setPushSupported]  = useState<boolean | null>(null);
+  const [permission,     setPermission]     = useState<NotificationPermission>('default');
+  const [subscribed,     setSubscribed]     = useState(false);
+  const [busy,           setBusy]           = useState(false);
+  const [busyMsg,        setBusyMsg]        = useState<string>('');
+
+  // Backend settings (mirrored in local state for fast UI)
+  const [settings, setSettings] = useState<NotifSettings>(DEFAULT_NOTIF_SETTINGS);
+  const [loaded,   setLoaded]   = useState(false);
+
+  // Test push state
+  const [testSending, setTestSending] = useState(false);
+  const [testResult,  setTestResult]  = useState<'ok'|'err'|null>(null);
+  const [testError,   setTestError]   = useState<string>('');
+
+  // Debounce timer for settings save
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Initial load: check browser support + sync state ──────────────────────
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('crumb_notif_settings');
-      if (raw) {
-        const n = JSON.parse(raw);
-        if (n.pushEnabled   !== undefined) setPushEnabled(n.pushEnabled);
-        if (n.stepEnabled   !== undefined) setStepEnabled(n.stepEnabled);
-        if (n.stepVorlauf   !== undefined) setStepVorlauf(n.stepVorlauf);
-        if (n.ofenEnabled   !== undefined) setOfenEnabled(n.ofenEnabled);
-        if (n.ofenVorlauf   !== undefined) setOfenVorlauf(n.ofenVorlauf);
-        if (n.fertigEnabled !== undefined) setFertigEnabled(n.fertigEnabled);
-        if (n.planEnabled   !== undefined) setPlanEnabled(n.planEnabled);
-        if (n.nachtruheOn   !== undefined) setNachtruheOn(n.nachtruheOn);
+    const supported =
+      typeof window !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window &&
+      'Notification' in window;
+    setPushSupported(supported);
+    if (supported) setPermission(Notification.permission);
+
+    // Check current subscription
+    if (supported) {
+      navigator.serviceWorker.ready
+        .then(reg => reg.pushManager.getSubscription())
+        .then(sub => setSubscribed(!!sub))
+        .catch(() => setSubscribed(false));
+    }
+
+    // Load settings from backend
+    (async () => {
+      try {
+        const res = await apiFetch(`${API}/notification-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setSettings({ ...DEFAULT_NOTIF_SETTINGS, ...data });
+        }
+      } catch (e) {
+        console.error('Settings konnten nicht geladen werden', e);
+      } finally {
+        setLoaded(true);
       }
-    } catch {}
+    })();
   }, []);
 
-  const saveNotif = (updates: Record<string, unknown>) => {
-    try {
-      const raw = localStorage.getItem('crumb_notif_settings');
-      const current = raw ? JSON.parse(raw) : {};
-      localStorage.setItem('crumb_notif_settings', JSON.stringify({ ...current, ...updates }));
-    } catch {}
+  // ── Save settings (debounced) ──────────────────────────────────────────────
+  const saveSettingsToBackend = (next: NotifSettings) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await apiFetch(`${API}/notification-settings`, {
+          method: 'PUT',
+          body: JSON.stringify(next),
+        });
+      } catch (e) {
+        console.error('Settings speichern fehlgeschlagen', e);
+      }
+    }, 400);
   };
 
+  const updateSettings = (patch: Partial<NotifSettings>) => {
+    setSettings(prev => {
+      const next = { ...prev, ...patch };
+      saveSettingsToBackend(next);
+      return next;
+    });
+  };
+
+  // ── Subscribe (browser → backend) ──────────────────────────────────────────
+  const subscribe = async () => {
+    setBusy(true);
+    setBusyMsg('Berechtigung anfordern…');
+    try {
+      // 1. Permission
+      const perm = await Notification.requestPermission();
+      setPermission(perm);
+      if (perm !== 'granted') {
+        throw new Error('Berechtigung wurde nicht erteilt');
+      }
+
+      // 2. VAPID public key
+      setBusyMsg('VAPID-Key abrufen…');
+      const vapidRes = await apiFetch(`${API}/push/vapid-key`);
+      const { publicKey } = await vapidRes.json();
+      if (!publicKey) throw new Error('Server hat keinen VAPID-Key (Konfiguration prüfen)');
+
+      // 3. SW registration
+      setBusyMsg('Service Worker bereitstellen…');
+      const reg = await navigator.serviceWorker.ready;
+
+      // 4. Subscribe via PushManager (re-use existing sub if compatible)
+      setBusyMsg('Push-Subscription erstellen…');
+      let sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        // Make sure it matches our VAPID key; otherwise re-subscribe.
+        const currentKey = sub.options?.applicationServerKey;
+        if (!currentKey) {
+          await sub.unsubscribe();
+          sub = null;
+        }
+      }
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+
+      // 5. Push to backend
+      setBusyMsg('Beim Server registrieren…');
+      const subJson = sub.toJSON();
+      const subRes = await apiFetch(`${API}/push/subscribe`, {
+        method: 'POST',
+        body: JSON.stringify({
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+          userAgent: navigator.userAgent,
+        }),
+      });
+      if (!subRes.ok) throw new Error('Server hat Subscription abgelehnt');
+
+      // 6. Sync master_enabled to true
+      setSubscribed(true);
+      updateSettings({ master_enabled: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      console.error('Subscribe Fehler:', msg);
+      setTestError(msg);
+      setTestResult('err');
+      setTimeout(() => { setTestResult(null); setTestError(''); }, 4000);
+    } finally {
+      setBusy(false);
+      setBusyMsg('');
+    }
+  };
+
+  // ── Unsubscribe (browser + backend) ────────────────────────────────────────
+  const unsubscribe = async () => {
+    setBusy(true);
+    setBusyMsg('Subscription entfernen…');
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        const endpoint = sub.endpoint;
+        await sub.unsubscribe();
+        await apiFetch(`${API}/push/unsubscribe`, {
+          method: 'DELETE',
+          body: JSON.stringify({ endpoint }),
+        });
+      }
+      setSubscribed(false);
+    } catch (err) {
+      console.error('Unsubscribe Fehler:', err);
+    } finally {
+      setBusy(false);
+      setBusyMsg('');
+    }
+  };
+
+  const togglePush = (v: boolean) => {
+    if (busy) return;
+    if (v) subscribe(); else unsubscribe();
+  };
+
+  // ── Test push ──────────────────────────────────────────────────────────────
   const sendTest = async () => {
     setTestSending(true);
     setTestResult(null);
+    setTestError('');
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/push/test`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-      });
-      setTestResult(res.ok ? 'ok' : 'err');
-    } catch {
+      const res = await apiFetch(`${API}/push/test`, { method: 'POST' });
+      if (res.ok) {
+        setTestResult('ok');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setTestError(data.error || `HTTP ${res.status}`);
+        setTestResult('err');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Verbindungsfehler';
+      setTestError(msg);
       setTestResult('err');
     } finally {
       setTestSending(false);
-      setTimeout(() => setTestResult(null), 3000);
+      setTimeout(() => { setTestResult(null); setTestError(''); }, 4000);
     }
   };
 
   const card = "bg-white dark:bg-white/[0.03] rounded-2xl border border-[#EDE5D6] dark:border-white/[0.07] p-4";
 
+  // The master toggle should reflect "subscribed AND master_enabled".
+  // We control browser subscription primarily; master_enabled tracks alongside.
+  const pushOn = subscribed && settings.master_enabled;
+  const triggersDisabled = !pushOn || !loaded;
+
   return (
     <div>
+      {pushSupported === false && (
+        <div className="mb-4 p-3 rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 text-sm flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0"/>
+          <div>Dieser Browser unterstützt keine Push-Benachrichtigungen. Auf iOS muss Crumb dafür über &quot;Zum Home-Bildschirm&quot; installiert werden.</div>
+        </div>
+      )}
+      {pushSupported && permission === 'denied' && (
+        <div className="mb-4 p-3 rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 text-sm flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0"/>
+          <div>Benachrichtigungen sind in den Browser-Einstellungen blockiert. Bitte dort erlauben und die Seite neu laden.</div>
+        </div>
+      )}
+
       <SectionTitle>Push</SectionTitle>
       <div className={card}>
         <ToggleRow
           label="Push-Benachrichtigungen"
-          sub="Über ntfy auf diesem Gerät"
-          value={pushEnabled}
-          onChange={v=>{setPushEnabled(v);saveNotif({pushEnabled:v});}}
+          sub={
+            busy
+              ? busyMsg || 'Wird verarbeitet…'
+              : subscribed
+              ? 'Auf diesem Gerät aktiv'
+              : 'Nicht aktiv auf diesem Gerät'
+          }
+          value={pushOn}
+          onChange={togglePush}
+          disabled={busy || pushSupported !== true || permission === 'denied'}
         />
       </div>
 
@@ -258,17 +468,19 @@ function TabNotifications() {
           <ToggleRow
             label="Schritt fällig"
             sub="Wenn eine Aktion oder Phase an der Reihe ist"
-            value={stepEnabled}
-            onChange={v=>{setStepEnabled(v);saveNotif({stepEnabled:v});}}
+            value={settings.step_ready_enabled}
+            onChange={v => updateSettings({ step_ready_enabled: v })}
+            disabled={triggersDisabled}
           />
-          {stepEnabled && (
+          {settings.step_ready_enabled && (
             <SliderRow
               label="Heads-Up"
               sub="Vorlauf bis zur Benachrichtigung"
-              value={stepVorlauf}
-              min={1} max={30} step={1}
-              format={v=>`${v} Min`}
-              onChange={v=>{setStepVorlauf(v);saveNotif({stepVorlauf:v});}}
+              value={settings.step_ready_vorlauf_min}
+              min={0} max={30} step={1}
+              format={v => v === 0 ? 'sofort' : `${v} Min`}
+              onChange={v => updateSettings({ step_ready_vorlauf_min: v })}
+              disabled={triggersDisabled}
             />
           )}
         </div>
@@ -277,16 +489,18 @@ function TabNotifications() {
           <ToggleRow
             label="Ofen vorheizen"
             sub="Erinnerung vor jedem Backstep"
-            value={ofenEnabled}
-            onChange={v=>{setOfenEnabled(v);saveNotif({ofenEnabled:v});}}
+            value={settings.preheat_enabled}
+            onChange={v => updateSettings({ preheat_enabled: v })}
+            disabled={triggersDisabled}
           />
-          {ofenEnabled && (
+          {settings.preheat_enabled && (
             <SliderRow
               label="Vorlauf"
-              value={ofenVorlauf}
-              min={10} max={90} step={5}
-              format={v=>`${v} Min`}
-              onChange={v=>{setOfenVorlauf(v);saveNotif({ofenVorlauf:v});}}
+              value={settings.preheat_vorlauf_min}
+              min={5} max={120} step={5}
+              format={v => `${v} Min`}
+              onChange={v => updateSettings({ preheat_vorlauf_min: v })}
+              disabled={triggersDisabled}
             />
           )}
         </div>
@@ -294,14 +508,16 @@ function TabNotifications() {
         <ToggleRow
           label="Backen fertig"
           sub="Sobald der Backtimer abläuft"
-          value={fertigEnabled}
-          onChange={v=>{setFertigEnabled(v);saveNotif({fertigEnabled:v});}}
+          value={settings.bake_done_enabled}
+          onChange={v => updateSettings({ bake_done_enabled: v })}
+          disabled={triggersDisabled}
         />
         <ToggleRow
           label="Backplan abgeschlossen"
           sub="Wenn alle Schritte erledigt sind"
-          value={planEnabled}
-          onChange={v=>{setPlanEnabled(v);saveNotif({planEnabled:v});}}
+          value={settings.plan_done_enabled}
+          onChange={v => updateSettings({ plan_done_enabled: v })}
+          disabled={triggersDisabled}
         />
       </div>
 
@@ -309,17 +525,40 @@ function TabNotifications() {
       <div className={card}>
         <ToggleRow
           label="Nachtruhe"
-          sub="Keine Push in Ruhezeiten"
-          value={nachtruheOn}
-          onChange={v=>{setNachtruheOn(v);saveNotif({nachtruheOn:v});}}
+          sub={settings.quiet_enabled ? `Keine Push zwischen ${settings.quiet_start} und ${settings.quiet_end}` : 'Keine Push in Ruhezeiten'}
+          value={settings.quiet_enabled}
+          onChange={v => updateSettings({ quiet_enabled: v })}
+          disabled={triggersDisabled}
         />
+        {settings.quiet_enabled && (
+          <div className="flex items-center gap-3 py-3.5">
+            <Moon size={15} className="text-[#C4A484] dark:text-white/30 flex-shrink-0"/>
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                type="time"
+                value={settings.quiet_start}
+                onChange={e => updateSettings({ quiet_start: e.target.value })}
+                disabled={triggersDisabled}
+                className="px-3 py-2 text-sm rounded-xl border border-[#D6C9B4] dark:border-white/10 bg-white dark:bg-white/5 text-[#2C1A0E] dark:text-white/80 outline-none focus:border-[#8B7355] transition-colors w-full tabular-nums disabled:opacity-40"
+              />
+              <span className="text-[#D6C9B4] text-sm flex-shrink-0">–</span>
+              <input
+                type="time"
+                value={settings.quiet_end}
+                onChange={e => updateSettings({ quiet_end: e.target.value })}
+                disabled={triggersDisabled}
+                className="px-3 py-2 text-sm rounded-xl border border-[#D6C9B4] dark:border-white/10 bg-white dark:bg-white/5 text-[#2C1A0E] dark:text-white/80 outline-none focus:border-[#8B7355] transition-colors w-full tabular-nums disabled:opacity-40"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-5">
         <button
           onClick={sendTest}
-          disabled={testSending}
-          className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl border text-sm font-medium transition-all ${
+          disabled={testSending || !pushOn}
+          className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl border text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
             testResult==='ok'
               ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400'
               : testResult==='err'
@@ -332,7 +571,7 @@ function TabNotifications() {
           ) : testResult==='ok' ? (
             <><CheckCircle size={15}/>Test-Push gesendet</>
           ) : testResult==='err' ? (
-            <>Fehler beim Senden</>
+            <>Fehler{testError ? `: ${testError}` : ' beim Senden'}</>
           ) : (
             <><Send size={15}/>Test-Push senden</>
           )}
@@ -388,7 +627,7 @@ function TabSecurity() {
     if (newPassword.length < 6) { setError('Das Passwort muss mindestens 6 Zeichen haben'); return; }
     setIsLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/change-password`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
         body: JSON.stringify({ currentPassword, newPassword }),
