@@ -43,13 +43,17 @@ export async function getPushState(): Promise<PushState> {
 }
 
 // ── VAPID Public Key holen + konvertieren ───────────────────
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+// Return-Typ ist ArrayBuffer (nicht Uint8Array), weil pushManager.subscribe
+// in strict TypeScript ein BufferSource erwartet und der generic Uint8Array
+// (Uint8Array<ArrayBufferLike>) seit TS 5.7 nicht mehr direkt zuweisbar ist.
+function urlBase64ToBuffer(base64: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const normalized = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(normalized);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+  const buffer = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buffer);
+  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+  return buffer;
 }
 
 async function fetchVapidKey(): Promise<string> {
@@ -82,7 +86,7 @@ export async function subscribeToPush(): Promise<void> {
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+      applicationServerKey: urlBase64ToBuffer(vapidPublicKey),
     });
   }
 
