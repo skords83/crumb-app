@@ -472,7 +472,7 @@ function SettingsPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] pt-[73px] md:pt-[73px] pb-24 md:pb-8">
+    <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] pb-24 md:pb-8">
       <div className="max-w-3xl mx-auto px-4 pt-4 pb-8">
 
         {/* Back button */}
