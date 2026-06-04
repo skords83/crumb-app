@@ -216,22 +216,22 @@ export default function NewRecipePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F0E8] dark:bg-gray-900 p-4 md:p-8 text-[#2C1A0E] dark:text-gray-100 font-sans pb-32 transition-colors duration-200">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] text-[#2C1A0E] dark:text-white transition-colors duration-200">
+      <div className="max-w-6xl mx-auto px-6 pt-8 pb-20">
 
-        <Link href="/" className="inline-flex items-center gap-2 text-[#A68B6A] dark:text-gray-400 hover:text-[#2C1A0E] dark:hover:text-white mb-6 font-medium text-sm transition-colors">
+        <Link href="/" className="inline-flex items-center gap-2 text-[#A68B6A] dark:text-white/40 hover:text-[#2C1A0E] dark:hover:text-white mb-6 font-medium text-sm transition-colors">
           <ArrowLeft size={18} /> Zurück zur Bibliothek
         </Link>
 
         {/* Tab-Switcher */}
-        <div className="bg-[#EDE5D6] dark:bg-gray-800 p-1.5 rounded-2xl inline-flex w-full mb-8 border border-[#D6C9B4] dark:border-gray-700">
+        <div className="bg-[#EDE5D6] dark:bg-white/[0.05] p-1.5 rounded-2xl inline-flex w-full mb-8 border border-[#D6C9B4] dark:border-white/[0.07]">
           <button
             type="button"
             onClick={() => { setActiveTab('import'); setShowEditor(false); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${
               activeTab === 'import' && !showEditor
-                ? 'bg-white dark:bg-gray-700 shadow-sm text-[#8B7355]'
-                : 'text-[#A68B6A] dark:text-gray-400 hover:text-[#5C3D1E] dark:hover:text-gray-200'
+                ? 'bg-white dark:bg-gray-800/60 shadow-sm text-[#8B7355] dark:text-[#C4A484]'
+                : 'text-[#A68B6A] dark:text-white/40 hover:text-[#5C3D1E] dark:hover:text-white/70'
             }`}>
             <LinkIcon size={18} /> Von URL importieren
           </button>
@@ -240,8 +240,8 @@ export default function NewRecipePage() {
             onClick={() => { setShowEditor(true); setActiveTab('manual'); }}
             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${
               showEditor && activeTab === 'manual'
-                ? 'bg-white dark:bg-gray-700 shadow-sm text-[#8B7355]'
-                : 'text-[#A68B6A] dark:text-gray-400 hover:text-[#5C3D1E] dark:hover:text-gray-200'
+                ? 'bg-white dark:bg-gray-800/60 shadow-sm text-[#8B7355] dark:text-[#C4A484]'
+                : 'text-[#A68B6A] dark:text-white/40 hover:text-[#5C3D1E] dark:hover:text-white/70'
             }`}>
             <Edit3 size={18} /> Manuell erstellen
           </button>
@@ -249,10 +249,10 @@ export default function NewRecipePage() {
 
         {/* Import-Panel */}
         {!showEditor && activeTab === 'import' && (
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl p-10 border border-[#D6C9B4] dark:border-gray-700 shadow-sm text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="relative bg-white dark:bg-gray-800/60 rounded-2xl p-10 border border-[#D6C9B4] dark:border-white/[0.07] shadow-sm text-center animate-in fade-in zoom-in-95 duration-300">
             {isImporting && <ImportLoadingOverlay />}
             <h2 className="text-3xl font-bold text-[#8B7355] mb-2 text-center">Rezept importieren</h2>
-            <p className="text-sm text-[#A68B6A] dark:text-gray-500 mb-8 font-medium">
+            <p className="text-sm text-[#A68B6A] dark:text-white/40 mb-8 font-medium">
               Link vom Plötzblog, Homebaking.at, Marcel Paa oder Jo Semola einfügen.
             </p>
 
@@ -264,7 +264,7 @@ export default function NewRecipePage() {
                 value={importUrl}
                 onChange={(e) => { setImportUrl(e.target.value); setUrlError(null); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAutoImport()}
-                className="flex-1 px-4 py-3 border border-[#D6C9B4] dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl outline-none focus:border-[#8B7355]/50 transition-all placeholder:text-[#C4A484] dark:placeholder:text-gray-500"
+                className="flex-1 px-4 py-3 bg-[#F5F0E8] dark:bg-white/[0.05] border border-[#D6C9B4] dark:border-white/[0.08] rounded-xl outline-none focus:border-[#8B7355]/50 dark:focus:border-[#C4A484]/40 transition-all text-[#2C1A0E] dark:text-white/80 placeholder:text-[#C4A484] dark:placeholder:text-white/25"
               />
               <button
                 onClick={handleAutoImport}
@@ -281,13 +281,13 @@ export default function NewRecipePage() {
             )}
 
             {/* HTML Upload */}
-            <div className="mt-8 pt-8 border-t border-[#EDE5D6] dark:border-gray-700">
-              <p className="text-sm text-[#A68B6A] dark:text-gray-500 mb-4 font-medium">Oder HTML-Datei hochladen</p>
+            <div className="mt-8 pt-8 border-t border-[#EDE5D6] dark:border-white/[0.07]">
+              <p className="text-sm text-[#A68B6A] dark:text-white/40 mb-4 font-medium">Oder HTML-Datei hochladen</p>
               <div className="flex flex-col md:flex-row gap-3 max-w-2xl mx-auto">
                 <input type="file" accept=".html,.htm" onChange={handleFileChange} className="hidden" id="html-file-input" />
                 <label
                   htmlFor="html-file-input"
-                  className="flex-1 px-4 py-3 border-2 border-dashed border-[#D6C9B4] dark:border-gray-600 rounded-xl text-left cursor-pointer hover:border-[#8B7355] transition-colors text-[#A68B6A] dark:text-gray-400"
+                  className="flex-1 px-4 py-3 border-2 border-dashed border-[#D6C9B4] dark:border-white/[0.12] rounded-xl text-left cursor-pointer hover:border-[#8B7355] dark:hover:border-[#C4A484]/50 transition-colors text-[#A68B6A] dark:text-white/40"
                 >
                   {selectedFile ? selectedFile.name : "HTML-Datei auswählen..."}
                 </label>
