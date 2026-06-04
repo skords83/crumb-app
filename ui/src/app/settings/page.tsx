@@ -215,14 +215,17 @@ const DEFAULT_NOTIF_SETTINGS: NotifSettings = {
   quiet_end: '07:00',
 };
 
-// Convert URL-safe base64 to Uint8Array for VAPID applicationServerKey
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+// Convert URL-safe base64 to ArrayBuffer for VAPID applicationServerKey.
+// Returns ArrayBuffer (not Uint8Array) to satisfy the strict BufferSource type
+// expected by PushManager.subscribe under newer lib.dom typings.
+function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = window.atob(base64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+  const buf = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+  return buf;
 }
 
 function TabNotifications() {
@@ -338,7 +341,7 @@ function TabNotifications() {
       if (!sub) {
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
+          applicationServerKey: urlBase64ToArrayBuffer(publicKey),
         });
       }
 
