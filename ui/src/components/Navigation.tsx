@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search, BedDouble, AlarmClock, Flame } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, KeyRound, Download, Percent, Search, BedDouble, AlarmClock, Flame, Bell } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { loadSettings, saveSettings, SETTINGS_DEFAULTS, minToHHMM, hhmmToMin } from '@/lib/crumb-settings';
@@ -199,6 +199,7 @@ export default function Navigation() {
                       </div>
                     )}
                     <PushNotificationsToggle />
+                    <Link href="/profile/notifications" onClick={()=>setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"><Bell size={16} className="text-[#C4A484] dark:text-white/30"/>Benachrichtigungen</Link>
                     <Link href="/profile" onClick={()=>setShowUserMenu(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-[#5C3D1E] dark:text-white/70 hover:bg-[#F5F0E8] dark:hover:bg-white/5 transition-colors"><KeyRound size={16} className="text-[#C4A484] dark:text-white/30"/>Passwort ändern</Link>
                     <button onClick={()=>{setShowUserMenu(false);logout();}} className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"><LogOut size={16}/>Abmelden</button>
                   </div>
