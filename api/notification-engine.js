@@ -22,9 +22,18 @@
 //   - 'overdue'     Safety-Net, immer aktiv (>30 Min soft_done)
 // ============================================================
 
-const webpush = require('web-push');
-const { flattenSteps, getPendingGates, isWaitStep, isBakeStep } = require('./bake-engine');
-const { getSettings, isInQuietHours, DEFAULT_SETTINGS } = require('./notification-settings');
+const webpush = require("web-push");
+const {
+  flattenSteps,
+  getPendingGates,
+  isWaitStep,
+  isBakeStep,
+} = require("./bake-engine");
+const {
+  getSettings,
+  isInQuietHours,
+  DEFAULT_SETTINGS,
+} = require("./notification-settings");
 
 // ── Konfiguration ────────────────────────────────────────────
 const OVERDUE_THRESHOLD_MIN = 30; // Minuten nach Timer-Ende bis "überfällig"
@@ -34,21 +43,23 @@ const OVERDUE_THRESHOLD_MIN = 30; // Minuten nach Timer-Ende bis "überfällig"
 let webPushEnabled = false;
 function initWebPush() {
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-    console.warn('⚠️  VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY fehlen — Web Push deaktiviert');
+    console.warn(
+      "⚠️  VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY fehlen — Web Push deaktiviert",
+    );
     webPushEnabled = false;
     return false;
   }
   try {
     webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@crumb.local',
+      process.env.VAPID_SUBJECT || "mailto:admin@crumb.local",
       process.env.VAPID_PUBLIC_KEY,
-      process.env.VAPID_PRIVATE_KEY
+      process.env.VAPID_PRIVATE_KEY,
     );
     webPushEnabled = true;
-    console.log('✅ Web Push konfiguriert');
+    console.log("✅ Web Push konfiguriert");
     return true;
   } catch (err) {
-    console.error('❌ Web Push Init Fehler:', err.message);
+    console.error("❌ Web Push Init Fehler:", err.message);
     webPushEnabled = false;
     return false;
   }
@@ -58,20 +69,20 @@ function initWebPush() {
 function extractTemp(instruction) {
   if (!instruction) return null;
   const match = instruction.match(/(\d{2,3})\s*°\s*C?|(\d{2,3})\s*[Gg]rad/);
-  return match ? (match[1] || match[2]) : null;
+  return match ? match[1] || match[2] : null;
 }
 
 function truncate(s, n) {
-  if (!s) return '';
-  return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, '') + '…';
+  if (!s) return "";
+  return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…";
 }
 
 function normalizeKey(s) {
-  return (s || '')
+  return (s || "")
     .toLowerCase()
-    .replace(/[^a-z0-9äöüß]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replace(/[^a-z0-9äöüß]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
     .substring(0, 40);
 }
 
@@ -79,8 +90,8 @@ function normalizeKey(s) {
 // Findet den unmittelbar vorherigen Step in derselben Phase.
 // null wenn step der erste seiner Phase ist.
 function previousStepInPhase(allSteps, step) {
-  const phaseSteps = allSteps.filter(s => s.phase === step.phase);
-  const idx = phaseSteps.findIndex(s => s.globalIdx === step.globalIdx);
+  const phaseSteps = allSteps.filter((s) => s.phase === step.phase);
+  const idx = phaseSteps.findIndex((s) => s.globalIdx === step.globalIdx);
   return idx > 0 ? phaseSteps[idx - 1] : null;
 }
 
@@ -100,7 +111,7 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
 
   const states = session.step_states || {};
   const timestamps = session.step_timestamps || {};
-  const recipeTitle = session.title || 'Brot';
+  const recipeTitle = session.title || "Brot";
   const sessionId = session.id;
   const candidates = [];
   const now = Date.now();
@@ -116,11 +127,11 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
     for (const gate of gates) {
       candidates.push({
         notificationId: `bs-${sessionId}-gate-${normalizeKey(gate.phase)}`,
-        type: 'gate-ready',
+        type: "gate-ready",
         title: `🔓 ${truncate(gate.phase, 40)} kann starten`,
-        message: `${recipeTitle} · ${gate.dependencies.join(' + ')} fertig`,
+        message: `${recipeTitle} · ${gate.dependencies.join(" + ")} fertig`,
         priority: 4,
-        tags: 'unlock',
+        tags: "unlock",
       });
     }
 
@@ -137,11 +148,15 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
     //   → Bei kurzen Wartephasen (< vorlauf) feuert sie am Anfang der Wartephase
     //     (nicht in einer vorherigen aktiven Phase)
     //   → Bei vorlauf=0 entspricht es exakt timer_end (= alter softdone-Trigger)
-    const vorlaufMs = Math.max(0, Number(settings.step_ready_vorlauf_min) || 0) * 60000;
+    //
+    // Die Notification zeigt den NÄCHSTEN Step (was zu tun ist), nicht den
+    // ablaufenden Warte-Step.
+    const vorlaufMs =
+      Math.max(0, Number(settings.step_ready_vorlauf_min) || 0) * 60000;
 
-    steps.forEach(step => {
+    steps.forEach((step) => {
       const state = states[step.globalIdx];
-      if (state !== 'active' && state !== 'soft_done') return;
+      if (state !== "active" && state !== "soft_done") return;
       if (!isWaitStep(step)) return;
 
       const ts = timestamps[step.globalIdx];
@@ -151,13 +166,20 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
       const fireAt = Math.max(startedAt, ts.timer_end - vorlaufMs);
       if (now < fireAt) return;
 
+      // Nächsten Step in derselben Phase finden → das ist die relevante Info
+      const nextInPhase = steps.find(
+        (s) => s.phase === step.phase && s.globalIdx > step.globalIdx,
+      );
+
       candidates.push({
         notificationId: `bs-${sessionId}-stepready-${step.globalIdx}`,
-        type: 'step-ready',
-        title: `⏱ Nächster Schritt: ${truncate(step.phase, 30)}`,
-        message: `${recipeTitle} · ${truncate(step.instruction, 45)}`,
+        type: "step-ready",
+        title: nextInPhase
+          ? `⏱ ${truncate(nextInPhase.instruction, 45)}`
+          : `⏱ ${truncate(step.phase, 30)} fertig`,
+        message: `${recipeTitle} · ${truncate(step.phase, 30)}`,
         priority: 4,
-        tags: 'bell',
+        tags: "bell",
       });
     });
   }
@@ -171,20 +193,35 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
   //     ein laufender Warte-Step mit timer_end → fire bei max(start, timer_end - vorlauf)
   // Vorgehen identisch zur Step-Ready-Adaption, nur basierend auf dem
   // VORHERIGEN Wait-Step relativ zum Bake-Step.
+  //
+  // WICHTIG: Wenn der vorherige Step in der Phase ebenfalls Backen war,
+  // ist der Ofen bereits heiß → kein Preheat nötig.
   if (settings.preheat_enabled) {
-    const preVorlaufMs = Math.max(0, Number(settings.preheat_vorlauf_min) || 0) * 60000;
+    const preVorlaufMs =
+      Math.max(0, Number(settings.preheat_vorlauf_min) || 0) * 60000;
 
-    steps.forEach(step => {
+    steps.forEach((step) => {
       if (!isBakeStep(step)) return;
       const state = states[step.globalIdx];
 
+      // Vorherigen Step in der Phase prüfen — wenn der auch Backen war,
+      // ist der Ofen bereits heiß → kein Preheat nötig
+      const prevInPhase = steps
+        .filter((s) => s.phase === step.phase && s.globalIdx < step.globalIdx)
+        .pop();
+      if (prevInPhase && isBakeStep(prevInPhase)) return;
+
       let shouldFire = false;
 
-      if (state === 'ready') {
+      if (state === "ready") {
         shouldFire = true;
-      } else if (state === 'locked') {
+      } else if (state === "locked") {
         const prev = previousStepInPhase(steps, step);
-        if (prev && (states[prev.globalIdx] === 'active' || states[prev.globalIdx] === 'soft_done')) {
+        if (
+          prev &&
+          (states[prev.globalIdx] === "active" ||
+            states[prev.globalIdx] === "soft_done")
+        ) {
           const prevTs = timestamps[prev.globalIdx];
           if (prevTs && prevTs.timer_end) {
             const prevStart = prevTs.started_at || prevTs.timer_end;
@@ -199,11 +236,11 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
       const temp = extractTemp(step.instruction);
       candidates.push({
         notificationId: `bs-${sessionId}-preheat-${step.globalIdx}`,
-        type: 'preheat',
+        type: "preheat",
         title: temp ? `🔥 Ofen auf ${temp}°C vorheizen` : `🔥 Ofen vorheizen`,
         message: `${recipeTitle} · Backen steht bald an`,
         priority: 5,
-        tags: 'fire',
+        tags: "fire",
       });
     });
   }
@@ -214,23 +251,33 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
   // Backstep hat eigenen Timer (timer_end gesetzt beim start_baking).
   // bake-engine flippt Backstep NICHT auto auf soft_done — wir prüfen
   // also direkt now >= timer_end bei state 'active'.
+  //
+  // WICHTIG: Nur für den LETZTEN Backen-Step einer zusammenhängenden
+  // Ofen-Session feuern. Wenn der nächste Step in derselben Phase
+  // ebenfalls Backen ist, ist der Ofen-Vorgang noch nicht vorbei.
   if (settings.bake_done_enabled) {
-    steps.forEach(step => {
+    steps.forEach((step) => {
       if (!isBakeStep(step)) return;
       const state = states[step.globalIdx];
-      if (state !== 'active' && state !== 'soft_done') return;
+      if (state !== "active" && state !== "soft_done") return;
 
       const ts = timestamps[step.globalIdx];
       if (!ts || !ts.timer_end) return;
       if (now < ts.timer_end) return;
 
+      // Prüfe ob der nächste Step in derselben Phase auch Backen ist
+      const nextInPhase = steps.find(
+        (s) => s.phase === step.phase && s.globalIdx > step.globalIdx,
+      );
+      if (nextInPhase && isBakeStep(nextInPhase)) return; // Ofen-Session nicht vorbei
+
       candidates.push({
         notificationId: `bs-${sessionId}-bakedone-${step.globalIdx}`,
-        type: 'bake-done',
+        type: "bake-done",
         title: `✅ Backen fertig`,
         message: `${recipeTitle} · ${truncate(step.instruction, 50)}`,
         priority: 5,
-        tags: 'bread',
+        tags: "bread",
       });
     });
   }
@@ -239,15 +286,15 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
   // 4) Plan-Done (Toggle: plan_done_enabled)
   // ────────────────────────────────────────────────────────────
   if (settings.plan_done_enabled && steps.length > 0) {
-    const allDone = steps.every(s => states[s.globalIdx] === 'done');
+    const allDone = steps.every((s) => states[s.globalIdx] === "done");
     if (allDone) {
       candidates.push({
         notificationId: `bs-${sessionId}-plandone`,
-        type: 'plan-done',
+        type: "plan-done",
         title: `🎉 Backplan abgeschlossen`,
         message: `${recipeTitle} · Alle Schritte erledigt`,
         priority: 4,
-        tags: 'tada',
+        tags: "tada",
       });
     }
   }
@@ -257,19 +304,19 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
   // ────────────────────────────────────────────────────────────
   // Greift wenn Step-Ready bspw. durch Quiet-Hours unterdrückt wurde
   // und der Step jetzt > 30 Min in soft_done hängt.
-  steps.forEach(step => {
-    if (states[step.globalIdx] !== 'soft_done') return;
+  steps.forEach((step) => {
+    if (states[step.globalIdx] !== "soft_done") return;
     const ts = timestamps[step.globalIdx];
     if (!ts || !ts.timer_end) return;
     const minutesOverdue = (now - ts.timer_end) / 60000;
     if (minutesOverdue < OVERDUE_THRESHOLD_MIN) return;
     candidates.push({
       notificationId: `bs-${sessionId}-overdue-${step.globalIdx}`,
-      type: 'overdue',
+      type: "overdue",
       title: `⚠️ ${truncate(step.phase, 40)} überfällig`,
       message: `${recipeTitle} · ${truncate(step.instruction, 40)} — alles okay?`,
       priority: 4,
-      tags: 'warning',
+      tags: "warning",
     });
   });
 
@@ -283,8 +330,8 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
   if (!webPushEnabled || !poolRef || !userId) return;
   try {
     const subs = await poolRef.query(
-      'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
-      [userId]
+      "SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1",
+      [userId],
     );
     if (subs.rows.length === 0) return;
 
@@ -292,7 +339,7 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
       title: candidate.title,
       body: candidate.message,
       tag: candidate.notificationId,
-      url: '/backplan',
+      url: "/backplan",
       type: candidate.type,
     });
 
@@ -303,21 +350,30 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
       };
       try {
         await webpush.sendNotification(subscription, payload, { TTL: 3600 });
-        poolRef.query(
-          'UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = $1',
-          [sub.id]
-        ).catch(() => {});
+        poolRef
+          .query(
+            "UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = $1",
+            [sub.id],
+          )
+          .catch(() => {});
       } catch (err) {
         if (err.statusCode === 404 || err.statusCode === 410) {
-          await poolRef.query('DELETE FROM push_subscriptions WHERE id = $1', [sub.id]);
-          console.log(`🗑  Push-Sub abgelaufen (${err.statusCode}), gelöscht: id=${sub.id}`);
+          await poolRef.query("DELETE FROM push_subscriptions WHERE id = $1", [
+            sub.id,
+          ]);
+          console.log(
+            `🗑  Push-Sub abgelaufen (${err.statusCode}), gelöscht: id=${sub.id}`,
+          );
         } else {
-          console.error(`❌ Web-Push Fehler (${err.statusCode || 'no-status'}):`, err.message);
+          console.error(
+            `❌ Web-Push Fehler (${err.statusCode || "no-status"}):`,
+            err.message,
+          );
         }
       }
     }
   } catch (err) {
-    console.error('❌ sendWebPushToUser Fehler:', err.message);
+    console.error("❌ sendWebPushToUser Fehler:", err.message);
   }
 }
 
@@ -341,14 +397,14 @@ async function dispatch(poolRef, userId, sessionId, candidate) {
        VALUES ($1, $2, $3)
        ON CONFLICT (user_id, notification_id) DO NOTHING
        RETURNING id`,
-      [userId, sessionId, candidate.notificationId]
+      [userId, sessionId, candidate.notificationId],
     );
     if (result.rowCount === 0) return false;
 
     await sendNotification(poolRef, userId, candidate);
     return true;
   } catch (err) {
-    console.error('❌ dispatch Fehler:', err.message, candidate.notificationId);
+    console.error("❌ dispatch Fehler:", err.message, candidate.notificationId);
     return false;
   }
 }
@@ -391,7 +447,7 @@ async function cleanupOldNotifications(pool) {
       WHERE sent_at < NOW() - INTERVAL '7 days'
     `);
   } catch (err) {
-    console.error('❌ cleanupOldNotifications Fehler:', err.message);
+    console.error("❌ cleanupOldNotifications Fehler:", err.message);
   }
 }
 
