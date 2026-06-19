@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, use } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import * as Icons from 'lucide-react';
-import { calcTotalDuration, calcTotalDurationRange } from '@/lib/backplan-utils';
-import { calcHydration, FLOUR_KEYWORDS } from '@/lib/hydration';
+import React, { useEffect, useState, useMemo, use } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import * as Icons from "lucide-react";
+import {
+  calcTotalDuration,
+  calcTotalDurationRange,
+} from "@/lib/backplan-utils";
+import { calcHydration, FLOUR_KEYWORDS } from "@/lib/hydration";
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 import RecipeRhythmBar from "@/components/RecipeRhythmBar";
@@ -13,14 +16,14 @@ import RecipeRhythmBar from "@/components/RecipeRhythmBar";
 // ── BÄCKERPROZENTE ──────────────────────────────────────────
 const isFlour = (name: string) => {
   const lower = name.toLowerCase();
-  return FLOUR_KEYWORDS.some(kw => lower.includes(kw));
+  return FLOUR_KEYWORDS.some((kw) => lower.includes(kw));
 };
 
 const calcFlourBase = (ingredients: any[]): number => {
   return ingredients
-    .filter(ing => isFlour(ing.name || ''))
+    .filter((ing) => isFlour(ing.name || ""))
     .reduce((sum, ing) => {
-      const parsed = parseFloat(String(ing.amount || '0').replace(',', '.'));
+      const parsed = parseFloat(String(ing.amount || "0").replace(",", "."));
       return sum + (isNaN(parsed) ? 0 : parsed);
     }, 0);
 };
@@ -42,15 +45,21 @@ function DescriptionBox({ description }: { description: string }) {
         {description}
       </p>
       <p className="print-description-preview text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-        {isExpanded ? description : preview + (needsExpansion ? '...' : '')}
+        {isExpanded ? description : preview + (needsExpansion ? "..." : "")}
       </p>
       {needsExpansion && (
-        <button onClick={() => setIsExpanded(!isExpanded)}
-          className="print-description-toggle mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="print-description-toggle mt-3 text-xs font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 flex items-center gap-1 transition-colors"
+        >
           {isExpanded ? (
-            <><Icons.ChevronUp size={14} /> Weniger anzeigen</>
+            <>
+              <Icons.ChevronUp size={14} /> Weniger anzeigen
+            </>
           ) : (
-            <><Icons.ChevronDown size={14} /> Mehr anzeigen</>
+            <>
+              <Icons.ChevronDown size={14} /> Mehr anzeigen
+            </>
           )}
         </button>
       )}
@@ -58,19 +67,35 @@ function DescriptionBox({ description }: { description: string }) {
   );
 }
 
-function DeleteConfirmModal({ recipeName, onConfirm, onCancel }: { recipeName: string; onConfirm: () => void; onCancel: () => void }) {
+function DeleteConfirmModal({
+  recipeName,
+  onConfirm,
+  onCancel,
+}: {
+  recipeName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-xl">
-        <h3 className="font-black text-lg text-gray-900 dark:text-gray-100 mb-2">Rezept löschen?</h3>
+        <h3 className="font-black text-lg text-gray-900 dark:text-gray-100 mb-2">
+          Rezept löschen?
+        </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           „{recipeName}" wird unwiderruflich gelöscht.
         </p>
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
             Abbrechen
           </button>
-          <button onClick={onConfirm} className="flex-1 py-2.5 rounded-xl bg-red-500 text-sm font-bold text-white hover:bg-red-600 transition-colors">
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2.5 rounded-xl bg-red-500 text-sm font-bold text-white hover:bg-red-600 transition-colors"
+          >
             Löschen
           </button>
         </div>
@@ -80,32 +105,40 @@ function DeleteConfirmModal({ recipeName, onConfirm, onCancel }: { recipeName: s
 }
 
 function scaleAmount(amount: string | number, multiplier: number): string {
-  if (!amount && amount !== 0) return '';
-  const str = String(amount).replace(',', '.');
+  if (!amount && amount !== 0) return "";
+  const str = String(amount).replace(",", ".");
   const num = parseFloat(str);
   if (isNaN(num)) return String(amount);
   const scaled = num * multiplier;
   const rounded = Math.round(scaled * 100) / 100;
-  return String(rounded).replace('.', ',');
+  return String(rounded).replace(".", ",");
 }
 
 // ── SCALER BAR ───────────────────────────────────────────────
-function ScalerBar({ multiplier, onChange }: { multiplier: number; onChange: (v: number) => void }) {
+function ScalerBar({
+  multiplier,
+  onChange,
+}: {
+  multiplier: number;
+  onChange: (v: number) => void;
+}) {
   const steps = [0.5, 1, 2, 3, 4];
   return (
     <div className="print-hide flex items-center gap-2 mb-10 flex-wrap">
-      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mr-2">Menge</span>
-      {steps.map(step => (
+      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mr-2">
+        Menge
+      </span>
+      {steps.map((step) => (
         <button
           key={step}
           onClick={() => onChange(step)}
           className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
             multiplier === step
-              ? 'bg-[#8B4513] text-white shadow-sm'
-              : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 hover:border-[#8B4513]/40 dark:hover:border-[#C4A484]/40'
+              ? "bg-[#8B4513] text-white shadow-sm"
+              : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 hover:border-[#8B4513]/40 dark:hover:border-[#C4A484]/40"
           }`}
         >
-          {step === 1 ? '× 1' : `× ${step}`}
+          {step === 1 ? "× 1" : `× ${step}`}
         </button>
       ))}
       {multiplier !== 1 && (
@@ -118,18 +151,24 @@ function ScalerBar({ multiplier, onChange }: { multiplier: number; onChange: (v:
 }
 
 // ── EINSTELLUNGEN (localStorage) ────────────────────────────
-const SETTINGS_KEY = 'crumb_settings';
+const SETTINGS_KEY = "crumb_settings";
 const loadSettings = () => {
   try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-  } catch { return {}; }
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+  } catch {
+    return {};
+  }
 };
 const saveSettings = (settings: Record<string, any>) => {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 };
 
 // ── HAUPT-KOMPONENTE ─────────────────────────────────────────
-export default function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function RecipeDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const resolvedParams = use(params);
   const id = resolvedParams.id;
   const router = useRouter();
@@ -137,7 +176,6 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [recipe, setRecipe] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPlanModal, setShowPlanModal] = useState(false);
-  const [targetTime, setTargetTime] = useState("");
   const [showBakersPercent, setShowBakersPercent] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -146,7 +184,7 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   const [openSections, setOpenSections] = useState<Set<number>>(new Set([0]));
 
   const toggleSection = (idx: number) => {
-    setOpenSections(prev => {
+    setOpenSections((prev) => {
       const next = new Set(prev);
       next.has(idx) ? next.delete(idx) : next.add(idx);
       return next;
@@ -155,9 +193,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     setShowBakersPercent(!!loadSettings().showBakersPercent);
-    const onStorage = () => setShowBakersPercent(!!loadSettings().showBakersPercent);
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const onStorage = () =>
+      setShowBakersPercent(!!loadSettings().showBakersPercent);
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const toggleBakersPercent = () => {
@@ -170,20 +209,36 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     if (!id) return;
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("crumb_token")}`,
+      },
     })
-      .then(res => res.json())
-      .then(data => { setRecipe(data); setIsFavorite(!data.is_favorite); setIsLoading(false); })
+      .then((res) => res.json())
+      .then((data) => {
+        setRecipe(data);
+        setIsFavorite(!data.is_favorite);
+        setIsLoading(false);
+      })
       .catch(() => setIsLoading(false));
   }, [id]);
 
   const stats = useMemo(() => {
-    if (!recipe?.dough_sections) return { steps: 0, duration: 0, durationMin: 0, durationMax: 0, hydration: null };
+    if (!recipe?.dough_sections)
+      return {
+        steps: 0,
+        duration: 0,
+        durationMin: 0,
+        durationMax: 0,
+        hydration: null,
+      };
     const steps = recipe.dough_sections.reduce(
-      (s: number, sec: any) => s + (sec.steps?.length || 0), 0
+      (s: number, sec: any) => s + (sec.steps?.length || 0),
+      0,
     );
     const duration = calcTotalDuration(recipe.dough_sections);
-    const { min: durationMin, max: durationMax } = calcTotalDurationRange(recipe.dough_sections);
+    const { min: durationMin, max: durationMax } = calcTotalDurationRange(
+      recipe.dough_sections,
+    );
     const hydration = calcHydration(recipe.dough_sections);
     return { steps, duration, durationMin, durationMax, hydration };
   }, [recipe]);
@@ -193,23 +248,38 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
     setIsFavorite(next);
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("crumb_token")}`,
+        },
         body: JSON.stringify({ is_favorite: next }),
       });
-    } catch (err) { setIsFavorite(!next); console.error(err); }
+    } catch (err) {
+      setIsFavorite(!next);
+      console.error(err);
+    }
   };
 
   const handleDelete = async () => {
     setShowDeleteConfirm(false);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
-      });
-      if (res.ok) { router.push('/'); router.refresh(); }
-      else console.error("Fehler beim Löschen.");
-    } catch (err) { console.error(err); }
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("crumb_token")}`,
+          },
+        },
+      );
+      if (res.ok) {
+        router.push("/");
+        router.refresh();
+      } else console.error("Fehler beim Löschen.");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handlePrint = () => {
@@ -219,7 +289,10 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
   const totalIngredients = useMemo(() => {
     if (!recipe?.dough_sections) return [];
-    const totals: Record<string, { name: string; amount: number; unit: string }> = {};
+    const totals: Record<
+      string,
+      { name: string; amount: number; unit: string }
+    > = {};
     recipe.dough_sections.forEach((section: any) => {
       section.ingredients?.forEach((ing: any) => {
         const rawName = (ing.name || "").trim();
@@ -227,45 +300,56 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
         const nameLower = rawName.toLowerCase();
         const isIntermediate =
           /\b(?:reife[rs]?|gereifter?)\b/i.test(rawName) ||
-          recipe.dough_sections.some((sec: any) =>
-            sec.name.toLowerCase() !== section.name.toLowerCase() &&
-            nameLower.includes(sec.name.toLowerCase())
+          recipe.dough_sections.some(
+            (sec: any) =>
+              sec.name.toLowerCase() !== section.name.toLowerCase() &&
+              nameLower.includes(sec.name.toLowerCase()),
           );
         if (isIntermediate) return;
         const key = nameLower;
-        const parsed = parseFloat(String(ing.amount || '0').replace(',', '.'));
+        const parsed = parseFloat(String(ing.amount || "0").replace(",", "."));
         const num = isNaN(parsed) ? 0 : parsed;
         if (!totals[key]) {
-          totals[key] = { name: rawName, amount: num, unit: ing.unit || '' };
+          totals[key] = { name: rawName, amount: num, unit: ing.unit || "" };
         } else {
-          totals[key].amount = Math.round((totals[key].amount + num) * 1000) / 1000;
+          totals[key].amount =
+            Math.round((totals[key].amount + num) * 1000) / 1000;
         }
       });
     });
-    return Object.values(totals).map(ing => ({
+    return Object.values(totals).map((ing) => ({
       ...ing,
-      amount: ing.amount === 0 ? '' : String(ing.amount).replace('.', ',')
+      amount: ing.amount === 0 ? "" : String(ing.amount).replace(".", ","),
     }));
   }, [recipe]);
 
   if (isLoading) return <RecipeDetailSkeleton />;
-  if (!recipe) return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
+  if (!recipe)
+    return <div className="p-20 text-center">Rezept nicht gefunden.</div>;
 
   return (
     <div className="print-card-wrapper min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
       <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
-
         {/* HERO IMAGE */}
         <div className="print-hero relative h-96 w-full rounded-[1.5rem] overflow-hidden">
           <img
-            src={recipe.image_url || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop'}
+            src={
+              recipe.image_url ||
+              "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop"
+            }
             className="w-full h-full object-cover object-[center_65%]"
             alt={recipe.title}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/65 from-[0%] via-black/25 via-[45%] to-black/15 pointer-events-none" />
 
-          <Link href="/" className="no-print absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors">
-            <Icons.ChevronLeft size={20} className="text-gray-700 dark:text-gray-200" />
+          <Link
+            href="/"
+            className="no-print absolute top-4 left-4 z-10 p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors"
+          >
+            <Icons.ChevronLeft
+              size={20}
+              className="text-gray-700 dark:text-gray-200"
+            />
           </Link>
 
           <div className="no-print absolute top-4 right-4 z-10 flex gap-2">
@@ -273,21 +357,37 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
               onClick={toggleFavorite}
               className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm transition-all hover:scale-110"
             >
-              <Icons.Heart size={18} className={isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-500 dark:text-gray-400'} />
+              <Icons.Heart
+                size={18}
+                className={
+                  isFavorite
+                    ? "fill-red-500 text-red-500"
+                    : "text-gray-500 dark:text-gray-400"
+                }
+              />
             </button>
             <div className="relative">
               <button
-                onClick={() => setShowMenu(v => !v)}
+                onClick={() => setShowMenu((v) => !v)}
                 className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm hover:bg-white dark:hover:bg-gray-900 transition-colors"
               >
-                <Icons.MoreVertical size={18} className="text-gray-700 dark:text-gray-200" />
+                <Icons.MoreVertical
+                  size={18}
+                  className="text-gray-700 dark:text-gray-200"
+                />
               </button>
               {showMenu && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowMenu(false)}
+                  />
                   <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[200px]">
                     <button
-                      onClick={() => { router.push(`/recipes/${id}/edit`); setShowMenu(false); }}
+                      onClick={() => {
+                        router.push(`/recipes/${id}/edit`);
+                        setShowMenu(false);
+                      }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700"
                     >
                       <Icons.Edit3 size={15} className="text-gray-400" />
@@ -301,11 +401,16 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                       <span className="text-sm font-medium">Drucken / PDF</span>
                     </button>
                     <button
-                      onClick={() => { setShowMenu(false); setShowDeleteConfirm(true); }}
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowDeleteConfirm(true);
+                      }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
                       <Icons.Trash2 size={15} />
-                      <span className="text-sm font-semibold">Rezept löschen</span>
+                      <span className="text-sm font-semibold">
+                        Rezept löschen
+                      </span>
                     </button>
                   </div>
                 </>
@@ -315,27 +420,36 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
           <div className="absolute bottom-0 left-0 right-0 z-10 px-6 pb-6 pt-20">
             <div className="flex items-end justify-between">
-              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">{recipe.title}</h1>
+              <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
+                {recipe.title}
+              </h1>
               {(() => {
                 const url = recipe.original_source_url || recipe.source_url;
                 try {
                   return url ? (
-                    <a href={url} target="_blank" rel="noopener noreferrer"
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="flex items-center gap-1 text-[10px] font-medium text-white/50 hover:text-white/80 transition-colors whitespace-nowrap ml-4 mb-0.5 flex-shrink-0"
-                      onClick={(e) => e.stopPropagation()}>
-                      {new URL(url).hostname.replace('www.', '')}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {new URL(url).hostname.replace("www.", "")}
                       <Icons.ExternalLink size={9} />
                     </a>
                   ) : null;
-                } catch { return null; }
+                } catch {
+                  return null;
+                }
               })()}
             </div>
           </div>
         </div>
 
         <div className="p-6 md:p-10">
-
-          {recipe.description && <DescriptionBox description={recipe.description} />}
+          {recipe.description && (
+            <DescriptionBox description={recipe.description} />
+          )}
 
           {/* GESAMT-ZUTATENLISTE */}
           {totalIngredients.length > 0 && (
@@ -345,17 +459,17 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                   <Icons.ShoppingCart size={14} /> Was du brauchst
                 </h3>
                 <div className="no-print flex items-center gap-1.5">
-                  {[0.5, 1, 2, 3, 4].map(step => (
+                  {[0.5, 1, 2, 3, 4].map((step) => (
                     <button
                       key={step}
                       onClick={() => setMultiplier(step)}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all ${
                         multiplier === step
-                          ? 'bg-[#8B4513] text-white shadow-sm'
-                          : 'bg-white dark:bg-gray-600 text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-gray-500 hover:border-[#8B4513]/40'
+                          ? "bg-[#8B4513] text-white shadow-sm"
+                          : "bg-white dark:bg-gray-600 text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-gray-500 hover:border-[#8B4513]/40"
                       }`}
                     >
-                      {step === 1 ? '×1' : `×${step}`}
+                      {step === 1 ? "×1" : `×${step}`}
                     </button>
                   ))}
                 </div>
@@ -364,10 +478,18 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
                 {totalIngredients.map((ing, i) => {
                   const scaledAmount = scaleAmount(ing.amount, multiplier);
                   return (
-                    <div key={i} className="flex flex-col border-l-2 border-[#8B4513]/20 dark:border-[#8B4513]/20 pl-3">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{ing.name}</span>
+                    <div
+                      key={i}
+                      className="flex flex-col border-l-2 border-[#8B4513]/20 dark:border-[#8B4513]/20 pl-3"
+                    >
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {ing.name}
+                      </span>
                       <span className="font-bold text-sm text-gray-800 dark:text-gray-100">
-                        {scaledAmount} {String(ing.amount || '').includes(ing.unit) ? '' : ing.unit || ''}
+                        {scaledAmount}{" "}
+                        {String(ing.amount || "").includes(ing.unit)
+                          ? ""
+                          : ing.unit || ""}
                       </span>
                     </div>
                   );
@@ -379,42 +501,71 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
           {/* INFO BAR */}
           <div className="bg-[#FDFCFB] dark:bg-gray-800/50 rounded-2xl p-6 border border-[#8B4513]/5 dark:border-[#8B4513]/20 flex justify-around items-center mb-10">
             <div className="flex flex-col items-center gap-2">
-              <div className="text-[#8B4513] dark:text-[#C4A484]"><Icons.Clock size={22} /></div>
+              <div className="text-[#8B4513] dark:text-[#C4A484]">
+                <Icons.Clock size={22} />
+              </div>
               <div className="text-center">
-                <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Dauer</p>
+                <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">
+                  Dauer
+                </p>
                 <p className="font-black text-gray-800 dark:text-gray-100 text-sm">
                   {stats.durationMin !== stats.durationMax
                     ? `${Math.floor(stats.durationMin / 60)}–${Math.floor(stats.durationMax / 60)} h`
                     : stats.duration >= 60
-                      ? `${Math.floor(stats.duration / 60)} h${stats.duration % 60 > 0 ? ` ${stats.duration % 60} min` : ''}`
+                      ? `${Math.floor(stats.duration / 60)} h${stats.duration % 60 > 0 ? ` ${stats.duration % 60} min` : ""}`
                       : `${stats.duration} min`}
                 </p>
               </div>
             </div>
             <div className="flex flex-col items-center gap-2">
-              <div className="text-[#8B4513] dark:text-[#C4A484]"><Icons.ListChecks size={22} /></div>
+              <div className="text-[#8B4513] dark:text-[#C4A484]">
+                <Icons.ListChecks size={22} />
+              </div>
               <div className="text-center">
-                <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Schritte</p>
-                <p className="font-black text-gray-800 dark:text-gray-100 text-sm">{stats.steps}</p>
+                <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">
+                  Schritte
+                </p>
+                <p className="font-black text-gray-800 dark:text-gray-100 text-sm">
+                  {stats.steps}
+                </p>
               </div>
             </div>
             {stats.hydration !== null && (
               <div className="flex flex-col items-center gap-2">
-                <div className="text-blue-500 dark:text-blue-400"><Icons.Droplets size={22} /></div>
+                <div className="text-blue-500 dark:text-blue-400">
+                  <Icons.Droplets size={22} />
+                </div>
                 <div className="text-center">
-                  <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Hydration</p>
-                  <p className="font-black text-blue-500 dark:text-blue-400 text-sm">{stats.hydration}%</p>
+                  <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">
+                    Hydration
+                  </p>
+                  <p className="font-black text-blue-500 dark:text-blue-400 text-sm">
+                    {stats.hydration}%
+                  </p>
                 </div>
               </div>
             )}
-            <div className="no-print flex flex-col items-center gap-2 cursor-pointer" onClick={toggleBakersPercent}>
-              <div className={showBakersPercent ? 'text-[#8B4513] dark:text-[#C4A484]' : 'text-gray-300 dark:text-gray-600'}>
+            <div
+              className="no-print flex flex-col items-center gap-2 cursor-pointer"
+              onClick={toggleBakersPercent}
+            >
+              <div
+                className={
+                  showBakersPercent
+                    ? "text-[#8B4513] dark:text-[#C4A484]"
+                    : "text-gray-300 dark:text-gray-600"
+                }
+              >
                 <Icons.Percent size={22} />
               </div>
               <div className="text-center">
-                <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">Bäcker-%</p>
-                <p className={`font-black text-sm ${showBakersPercent ? 'text-[#8B4513] dark:text-[#C4A484]' : 'text-gray-300 dark:text-gray-600'}`}>
-                  {showBakersPercent ? 'An' : 'Aus'}
+                <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">
+                  Bäcker-%
+                </p>
+                <p
+                  className={`font-black text-sm ${showBakersPercent ? "text-[#8B4513] dark:text-[#C4A484]" : "text-gray-300 dark:text-gray-600"}`}
+                >
+                  {showBakersPercent ? "An" : "Aus"}
                 </p>
               </div>
             </div>
@@ -425,159 +576,209 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
 
           {/* PHASEN LOOP – Akkordeon */}
           {(() => {
-            const parallelCount = (recipe.dough_sections || []).filter((s: any) => s.is_parallel).length;
+            const parallelCount = (recipe.dough_sections || []).filter(
+              (s: any) => s.is_parallel,
+            ).length;
             return (
-          <div className="space-y-3">
-            {recipe.dough_sections?.map((section: any, sIdx: number) => {
-              const isParallel = !!section.is_parallel && parallelCount > 1;
-              const isOpen = openSections.has(sIdx);
-              const flourBase = calcFlourBase(section.ingredients || []) * multiplier;
-              const stepCount = section.steps?.length ?? 0;
-              const ingCount = section.ingredients?.length ?? 0;
-              const totalDur = (section.steps || []).reduce((s: number, st: any) => {
-                const min = parseInt(st.duration_min), max = parseInt(st.duration_max);
-                const dur = (!isNaN(min) && !isNaN(max)) ? Math.round((min + max) / 2) : (parseInt(st.duration) || 0);
-                return s + dur;
-              }, 0);
-              const durLabel = totalDur >= 60
-                ? `${Math.floor(totalDur / 60)} h${totalDur % 60 > 0 ? ` ${totalDur % 60} min` : ''}`
-                : totalDur > 0 ? `${totalDur} min` : null;
+              <div className="space-y-3">
+                {recipe.dough_sections?.map((section: any, sIdx: number) => {
+                  const isParallel = !!section.is_parallel && parallelCount > 1;
+                  const isOpen = openSections.has(sIdx);
+                  const flourBase =
+                    calcFlourBase(section.ingredients || []) * multiplier;
+                  const stepCount = section.steps?.length ?? 0;
+                  const ingCount = section.ingredients?.length ?? 0;
+                  const totalDur = (section.steps || []).reduce(
+                    (s: number, st: any) => {
+                      const min = parseInt(st.duration_min),
+                        max = parseInt(st.duration_max);
+                      const dur =
+                        !isNaN(min) && !isNaN(max)
+                          ? Math.round((min + max) / 2)
+                          : parseInt(st.duration) || 0;
+                      return s + dur;
+                    },
+                    0,
+                  );
+                  const durLabel =
+                    totalDur >= 60
+                      ? `${Math.floor(totalDur / 60)} h${totalDur % 60 > 0 ? ` ${totalDur % 60} min` : ""}`
+                      : totalDur > 0
+                        ? `${totalDur} min`
+                        : null;
 
-              return (
-                <section
-                  key={sIdx}
-                  className={`print-section rounded-2xl overflow-hidden transition-colors ${
-                    isParallel
-                      ? 'border-l-[3px] border-l-blue-400 dark:border-l-blue-500 border border-gray-100 dark:border-gray-700'
-                      : 'border border-gray-100 dark:border-gray-700'
-                  } bg-white dark:bg-gray-800`}
-                >
-                  {/* HEADER */}
-                  <button
-                    onClick={() => toggleSection(sIdx)}
-                    className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
-                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0 ${
-                      isParallel ? 'bg-blue-500 dark:bg-blue-600' : 'bg-[#8B4513]'
-                    }`}>
-                      {sIdx + 1}
-                    </span>
-                    <span className="flex-1 text-sm font-black uppercase tracking-wide text-gray-800 dark:text-gray-100">
-                      {section.name}
-                    </span>
-                    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                      {isParallel && (
-                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">
-                          parallel
+                  return (
+                    <section
+                      key={sIdx}
+                      className={`print-section rounded-2xl overflow-hidden transition-colors ${
+                        isParallel
+                          ? "border-l-[3px] border-l-blue-400 dark:border-l-blue-500 border border-gray-100 dark:border-gray-700"
+                          : "border border-gray-100 dark:border-gray-700"
+                      } bg-white dark:bg-gray-800`}
+                    >
+                      {/* HEADER */}
+                      <button
+                        onClick={() => toggleSection(sIdx)}
+                        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <span
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0 ${
+                            isParallel
+                              ? "bg-blue-500 dark:bg-blue-600"
+                              : "bg-[#8B4513]"
+                          }`}
+                        >
+                          {sIdx + 1}
                         </span>
-                      )}
-                      {durLabel && (
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                          {durLabel}
+                        <span className="flex-1 text-sm font-black uppercase tracking-wide text-gray-800 dark:text-gray-100">
+                          {section.name}
                         </span>
-                      )}
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                        {ingCount} Zutaten · {stepCount} Schritte
-                      </span>
-                      <Icons.ChevronDown
-                        size={16}
-                        className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                      />
-                    </div>
-                  </button>
+                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                          {isParallel && (
+                            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">
+                              parallel
+                            </span>
+                          )}
+                          {durLabel && (
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                              {durLabel}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                            {ingCount} Zutaten · {stepCount} Schritte
+                          </span>
+                          <Icons.ChevronDown
+                            size={16}
+                            className={`text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                          />
+                        </div>
+                      </button>
 
-                  {/* BODY */}
-                  {isOpen && (
-                    <div className="print-phase-grid grid lg:grid-cols-2 gap-8 px-5 pb-6 border-t border-gray-100 dark:border-gray-700 pt-5">
+                      {/* BODY */}
+                      {isOpen && (
+                        <div className="print-phase-grid grid lg:grid-cols-2 gap-8 px-5 pb-6 border-t border-gray-100 dark:border-gray-700 pt-5">
+                          {/* ZUTATEN */}
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-bold uppercase text-gray-300 dark:text-gray-500 tracking-widest block mb-2">
+                              Zutaten
+                            </span>
 
-                      {/* ZUTATEN */}
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-bold uppercase text-gray-300 dark:text-gray-500 tracking-widest block mb-2">Zutaten</span>
+                            {showBakersPercent && flourBase > 0 && (
+                              <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600 pb-1 border-b border-gray-100 dark:border-gray-700">
+                                <span className="flex-1">Zutat</span>
+                                <span className="w-16 text-right">Menge</span>
+                                <span className="w-12 text-right">%</span>
+                              </div>
+                            )}
 
-                        {showBakersPercent && flourBase > 0 && (
-                          <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600 pb-1 border-b border-gray-100 dark:border-gray-700">
-                            <span className="flex-1">Zutat</span>
-                            <span className="w-16 text-right">Menge</span>
-                            <span className="w-12 text-right">%</span>
+                            {section.ingredients?.map(
+                              (ing: any, iIdx: number) => {
+                                const amountNum = parseFloat(
+                                  String(ing.amount || "0").replace(",", "."),
+                                );
+                                const scaledNum = isNaN(amountNum)
+                                  ? 0
+                                  : amountNum * multiplier;
+                                const scaledDisplay = scaleAmount(
+                                  ing.amount,
+                                  multiplier,
+                                );
+                                const pct =
+                                  showBakersPercent && flourBase > 0
+                                    ? toBakersPercent(scaledNum, flourBase)
+                                    : null;
+
+                                return (
+                                  <div
+                                    key={iIdx}
+                                    className="flex justify-between border-b border-gray-50 dark:border-gray-700 py-1.5 text-sm items-baseline"
+                                  >
+                                    <span className="flex-1 text-gray-600 dark:text-gray-300">
+                                      {ing.name}
+                                      {ing.temperature && (
+                                        <span className="ml-2 text-xs font-bold text-blue-500 dark:text-blue-400">
+                                          {ing.temperature}°C
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span
+                                      className={`font-black text-gray-900 dark:text-gray-100 ${pct ? "w-16 text-right" : ""}`}
+                                    >
+                                      {scaledDisplay}{" "}
+                                      {String(ing.amount || "").includes(
+                                        ing.unit,
+                                      )
+                                        ? ""
+                                        : ing.unit || ""}
+                                    </span>
+                                    {pct && (
+                                      <span className="w-12 text-right text-xs font-bold text-[#8B4513]/60 dark:text-[#C4A484]/60 tabular-nums">
+                                        {pct}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              },
+                            )}
                           </div>
-                        )}
 
-                        {section.ingredients?.map((ing: any, iIdx: number) => {
-                          const amountNum = parseFloat(String(ing.amount || '0').replace(',', '.'));
-                          const scaledNum = isNaN(amountNum) ? 0 : amountNum * multiplier;
-                          const scaledDisplay = scaleAmount(ing.amount, multiplier);
-                          const pct = showBakersPercent && flourBase > 0
-                            ? toBakersPercent(scaledNum, flourBase)
-                            : null;
-
-                          return (
-                            <div key={iIdx} className="flex justify-between border-b border-gray-50 dark:border-gray-700 py-1.5 text-sm items-baseline">
-                              <span className="flex-1 text-gray-600 dark:text-gray-300">
-                                {ing.name}
-                                {ing.temperature && (
-                                  <span className="ml-2 text-xs font-bold text-blue-500 dark:text-blue-400">
-                                    {ing.temperature}°C
-                                  </span>
-                                )}
-                              </span>
-                              <span className={`font-black text-gray-900 dark:text-gray-100 ${pct ? 'w-16 text-right' : ''}`}>
-                                {scaledDisplay} {String(ing.amount || '').includes(ing.unit) ? '' : ing.unit || ''}
-                              </span>
-                              {pct && (
-                                <span className="w-12 text-right text-xs font-bold text-[#8B4513]/60 dark:text-[#C4A484]/60 tabular-nums">
-                                  {pct}
-                                </span>
+                          {/* SCHRITTE */}
+                          <div className="bg-gray-50/80 dark:bg-gray-700/50 rounded-2xl p-6 border border-gray-100/50 dark:border-gray-700">
+                            <span className="text-[10px] font-bold uppercase text-gray-400 dark:text-gray-400 tracking-widest block mb-4">
+                              Zubereitung
+                            </span>
+                            <div className="space-y-5">
+                              {section.steps?.map(
+                                (step: any, stIdx: number) => (
+                                  <div key={stIdx} className="flex gap-4">
+                                    <div
+                                      className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${
+                                        step.type === "Backen"
+                                          ? "bg-red-500 text-white border-red-500"
+                                          : step.type === "Aktion"
+                                            ? "bg-[#8B4513] text-white border-[#8B4513]"
+                                            : "bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600"
+                                      }`}
+                                    >
+                                      {stIdx + 1}
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                        {step.instruction}
+                                      </p>
+                                      {(step.duration_min !== undefined ||
+                                        step.duration > 0) && (
+                                        <span
+                                          className={`inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                            step.type === "Warten"
+                                              ? "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20"
+                                              : step.type === "Backen"
+                                                ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20"
+                                                : "text-gray-400 bg-gray-100 dark:bg-gray-700 dark:text-gray-500"
+                                          }`}
+                                        >
+                                          {step.duration_min !== undefined &&
+                                          step.duration_max !== undefined &&
+                                          step.duration_min !==
+                                            step.duration_max
+                                            ? `${step.duration_min}–${step.duration_max} min`
+                                            : `${step.duration} min`}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ),
                               )}
                             </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* SCHRITTE */}
-                      <div className="bg-gray-50/80 dark:bg-gray-700/50 rounded-2xl p-6 border border-gray-100/50 dark:border-gray-700">
-                        <span className="text-[10px] font-bold uppercase text-gray-400 dark:text-gray-400 tracking-widest block mb-4">Zubereitung</span>
-                        <div className="space-y-5">
-                          {section.steps?.map((step: any, stIdx: number) => (
-                            <div key={stIdx} className="flex gap-4">
-                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${
-                                step.type === 'Backen'
-                                  ? 'bg-red-500 text-white border-red-500'
-                                  : step.type === 'Aktion'
-                                    ? 'bg-[#8B4513] text-white border-[#8B4513]'
-                                    : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600'
-                              }`}>
-                                {stIdx + 1}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{step.instruction}</p>
-                                {(step.duration_min !== undefined || step.duration > 0) && (
-                                  <span className={`inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                    step.type === 'Warten'
-                                      ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
-                                      : step.type === 'Backen'
-                                        ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
-                                        : 'text-gray-400 bg-gray-100 dark:bg-gray-700 dark:text-gray-500'
-                                  }`}>
-                                    {step.duration_min !== undefined && step.duration_max !== undefined && step.duration_min !== step.duration_max
-                                      ? `${step.duration_min}–${step.duration_max} min`
-                                      : `${step.duration} min`}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                          </div>
                         </div>
-                      </div>
-
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
             );
           })()}
-
         </div>
       </div>
 
@@ -594,48 +795,12 @@ export default function RecipeDetailPage({ params }: { params: Promise<{ id: str
       </div>
 
       {/* PLAN MODAL */}
+      {/* Kein onConfirm-Prop: PlanModal übernimmt den Submit selbst
+          (POST /api/bake-sessions) und leitet danach zu /backplan weiter. */}
       <PlanModal
         isOpen={showPlanModal}
         onClose={() => setShowPlanModal(false)}
         recipe={recipe}
-        onConfirm={async (plannedAt, multiplierValue, timeline) => {
-          try {
-            let timelineToSave = timeline ?? null;
-            if (!timelineToSave) {
-              try {
-                const nightRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}/plan-night`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
-                  body: JSON.stringify({ nightWindow: { start: '22:00', end: '06:30' }, targetEndTime: plannedAt }),
-                });
-                if (nightRes.ok) {
-                  const nightData = await nightRes.json();
-                  if (nightData.viable && nightData.plan?.length > 0) timelineToSave = nightData.plan;
-                }
-              } catch {}
-            }
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('crumb_token')}`
-              },
-              body: JSON.stringify({
-                planned_at: plannedAt,
-                planned_timeline: timelineToSave,
-                multiplier: multiplierValue ?? multiplier,
-              }),
-            });
-            if (res.ok) {
-              setTargetTime(plannedAt);
-              setShowPlanModal(false);
-              fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }
-              }).then(r => r.json()).then(data => { setRecipe(data); });
-              router.refresh();
-            }
-          } catch (err) { console.error(err); }
-        }}
       />
 
       {/* DELETE CONFIRMATION */}
