@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LinkIcon, Edit3, X, AlertCircle, Loader2 } from 'lucide-react';
+import { LinkIcon, Edit3, X, AlertCircle, Loader2, FileJson } from 'lucide-react';
 import RecipeForm from '@/components/RecipeForm';
 import SaveButton from '@/components/SaveButton';
 import ImageSelectModal from '@/components/ImageSelectModal';
@@ -75,8 +75,10 @@ export default function NewRecipePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [jsonError, setJsonError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [pendingData, setPendingData] = useState<any>(null);
 
@@ -163,6 +165,29 @@ export default function NewRecipePage() {
       setFileError("Import fehlgeschlagen");
       setIsImporting(false);
     }
+  };
+
+  const handleJsonImport = () => {
+    if (!selectedJsonFile) return;
+    setJsonError(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const raw = JSON.parse(e.target?.result as string);
+        const data = Array.isArray(raw) ? raw[0] : raw;
+        if (!data || typeof data !== 'object') throw new Error('Ungültiges JSON-Format');
+        if (!data.title) throw new Error('Das JSON enthält kein "title"-Feld');
+        if (!data.dough_sections && !data.ingredients && !data.steps) {
+          throw new Error('Das JSON enthält weder "dough_sections" noch "ingredients"/"steps"');
+        }
+        handleImportResult(data);
+        setSelectedJsonFile(null);
+      } catch (err) {
+        setJsonError('Import fehlgeschlagen: ' + (err instanceof Error ? err.message : 'Ungültige JSON-Datei'));
+      }
+    };
+    reader.onerror = () => setJsonError('Fehler beim Lesen der Datei');
+    reader.readAsText(selectedJsonFile);
   };
 
   const handleAutoImport = async () => {
@@ -297,6 +322,36 @@ export default function NewRecipePage() {
               {fileError && (
                 <div className="max-w-2xl mx-auto text-left">
                   <ErrorBanner message={fileError} onDismiss={() => setFileError(null)} />
+                </div>
+              )}
+            </div>
+
+            {/* JSON Upload */}
+            <div className="mt-8 pt-8 border-t border-[#EDE5D6] dark:border-white/[0.07]">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <FileJson size={16} className="text-[#A68B6A] dark:text-white/40" />
+                <p className="text-sm text-[#A68B6A] dark:text-white/40 font-medium">Oder JSON-Datei importieren</p>
+              </div>
+              <p className="text-xs text-[#C4A484] dark:text-white/25 mb-4">Rezept-Export dieser App oder kompatibles JSON-Format</p>
+              <div className="flex flex-col md:flex-row gap-3 max-w-2xl mx-auto">
+                <input type="file" accept=".json" onChange={(e) => { setJsonError(null); setSelectedJsonFile(e.target.files?.[0] ?? null); }} className="hidden" id="json-file-input" />
+                <label
+                  htmlFor="json-file-input"
+                  className="flex-1 px-4 py-3 border-2 border-dashed border-[#D6C9B4] dark:border-white/[0.12] rounded-xl text-left cursor-pointer hover:border-[#8B7355] dark:hover:border-[#C4A484]/50 transition-colors text-[#A68B6A] dark:text-white/40"
+                >
+                  {selectedJsonFile ? selectedJsonFile.name : "JSON-Datei auswählen..."}
+                </label>
+                <button
+                  onClick={handleJsonImport}
+                  disabled={!selectedJsonFile || isImporting}
+                  className="bg-[#8B7355] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#766248] transition-colors disabled:opacity-50 shadow-md"
+                >
+                  Importieren
+                </button>
+              </div>
+              {jsonError && (
+                <div className="max-w-2xl mx-auto text-left">
+                  <ErrorBanner message={jsonError} onDismiss={() => setJsonError(null)} />
                 </div>
               )}
             </div>
