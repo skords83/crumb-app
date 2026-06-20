@@ -1124,6 +1124,43 @@ export default function BackplanPage() {
 
           // ── AKTIVE AKTION-Phase (inkl. aktives Backen) ──
           const sRem = stepRemaining(activePhaseStep);
+
+          const actionElapsed =
+            activePhaseStep.start && ACTION_TYPES.has(activePhaseStep.type)
+              ? Math.round(
+                  (currentTime.getTime() -
+                    new Date(activePhaseStep.start).getTime()) /
+                    1000,
+                )
+              : null;
+
+          const actionCountdownSec = (() => {
+            if (sRem !== null) return sRem;
+            if (!activePhaseStep.start || !ACTION_TYPES.has(activePhaseStep.type))
+              return null;
+            const durMin = activePhaseStep.duration_min;
+            const durMax = activePhaseStep.duration_max;
+            if (durMin != null && durMax != null) return null;
+            const durSec = activePhaseStep.duration * 60;
+            const target =
+              new Date(activePhaseStep.start).getTime() + durSec * 1000;
+            return Math.max(
+              0,
+              Math.round((target - currentTime.getTime()) / 1000),
+            );
+          })();
+
+          const actionRangeStatus = (() => {
+            if (actionElapsed === null) return null;
+            const durMin = activePhaseStep.duration_min;
+            const durMax = activePhaseStep.duration_max;
+            if (durMin == null || durMax == null) return null;
+            const elapsedMin = actionElapsed / 60;
+            if (elapsedMin >= durMax) return "over" as const;
+            if (elapsedMin >= durMin) return "ready" as const;
+            return "running" as const;
+          })();
+
           const cardStyle = isBaking
             ? "border-2 border-red-400/45 bg-red-50/50 dark:border-red-400/30 dark:bg-red-500/[0.06]"
             : "border-2 border-[#8B7355]/30 bg-[#8B7355]/[0.06] dark:border-[#C4A484]/30 dark:bg-[#C4A484]/[0.08]";
@@ -1170,14 +1207,83 @@ export default function BackplanPage() {
                   <span className="text-[13px] font-semibold flex-1 leading-snug text-[#2C1A0E] dark:text-white/90">
                     {activePhaseStep.instruction}
                   </span>
-                  <span
-                    className={`text-[11px] font-bold flex-shrink-0 tabular-nums ${isBaking ? "text-red-600 dark:text-red-400" : "text-[#8B7355] dark:text-[#C4A484]"}`}
-                  >
-                    {sRem !== null && sRem > 0
-                      ? formatCountdown(sRem)
-                      : formatStepDuration(activePhaseStep)}
-                  </span>
+                  {actionRangeStatus !== null && actionElapsed !== null ? (
+                    <span
+                      className={`text-[13px] font-extrabold flex-shrink-0 tabular-nums ${
+                        actionRangeStatus === "over"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : actionRangeStatus === "ready"
+                            ? "text-green-600 dark:text-green-400"
+                            : isBaking
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-[#8B7355] dark:text-[#C4A484]"
+                      }`}
+                    >
+                      {formatCountdown(actionElapsed)}
+                    </span>
+                  ) : actionCountdownSec !== null ? (
+                    <span
+                      className={`text-[13px] font-extrabold flex-shrink-0 tabular-nums ${isBaking ? "text-red-600 dark:text-red-400" : "text-[#8B7355] dark:text-[#C4A484]"}`}
+                    >
+                      {actionCountdownSec > 0
+                        ? formatCountdown(actionCountdownSec)
+                        : "0:00"}
+                    </span>
+                  ) : (
+                    <span
+                      className={`text-[11px] font-bold flex-shrink-0 tabular-nums ${isBaking ? "text-red-600 dark:text-red-400" : "text-[#8B7355] dark:text-[#C4A484]"}`}
+                    >
+                      {sRem !== null && sRem > 0
+                        ? formatCountdown(sRem)
+                        : formatStepDuration(activePhaseStep)}
+                    </span>
+                  )}
                 </div>
+                {actionRangeStatus !== null && actionElapsed !== null && (
+                  <div className="flex items-center gap-2 px-3 pb-1 -mt-2 mb-1">
+                    <div className="flex-1 h-1 rounded-full bg-[#EDE5D6] dark:bg-white/[0.08] overflow-hidden">
+                      {(() => {
+                        const durMinSec = activePhaseStep.duration_min! * 60;
+                        const durMaxSec = activePhaseStep.duration_max! * 60;
+                        const pct = Math.min(actionElapsed / durMaxSec, 1);
+                        const minPct = durMinSec / durMaxSec;
+                        return (
+                          <div className="relative h-full">
+                            <div
+                              className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${
+                                actionRangeStatus === "over"
+                                  ? "bg-amber-500"
+                                  : actionRangeStatus === "ready"
+                                    ? "bg-green-500"
+                                    : "bg-[#8B7355] dark:bg-[#C4A484]"
+                              }`}
+                              style={{ width: `${pct * 100}%` }}
+                            />
+                            <div
+                              className="absolute top-0 h-full w-0.5 bg-white/60 dark:bg-white/30"
+                              style={{ left: `${minPct * 100}%` }}
+                            />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold flex-shrink-0 ${
+                        actionRangeStatus === "over"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : actionRangeStatus === "ready"
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-[#A68B6A] dark:text-white/30"
+                      }`}
+                    >
+                      {actionRangeStatus === "over"
+                        ? "Maximalzeit überschritten"
+                        : actionRangeStatus === "ready"
+                          ? "Fertig wenn bereit"
+                          : `Ziel: ${formatStepDuration(activePhaseStep)}`}
+                    </span>
+                  </div>
+                )}
                 {isBaking ? (
                   <button
                     onClick={() =>
