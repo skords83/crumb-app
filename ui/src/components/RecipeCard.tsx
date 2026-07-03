@@ -121,7 +121,7 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
     // FIX: Nur ein einziger Border — direkt auf dem Link-Element
     <Link
       href={`/recipes/${recipe.id}`}
-      className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-[#D6C9B4] dark:border-gray-700 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[#8B7355]/40 dark:hover:border-gray-600 group active:scale-[0.98]"
+      className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden flex flex-col relative border border-[#D6C9B4] dark:border-gray-700 recipe-card-shadow transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-[0_10px_28px_-8px_rgba(92,61,30,0.22)] dark:hover:shadow-[0_10px_30px_-6px_rgba(0,0,0,0.5)] hover:border-[#8B7355]/40 dark:hover:border-gray-600 group active:scale-[0.98]"
       style={{
         borderLeft: catStyle ? `3px solid ${catStyle.borderColor}` : undefined,
       }}
@@ -130,12 +130,12 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
       <div className="h-56 overflow-hidden relative rounded-b-2xl bg-[#EDE5D6] dark:bg-gray-700">
         <Image src={imageSrc} alt={recipe.title} fill
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`object-cover transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent pointer-events-none" />
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(recipe.id, !recipe.is_favorite); }}
-          className="absolute top-3 right-3 z-10 p-2 bg-white/35 backdrop-blur-sm rounded-xl transition-transform hover:scale-110">
+          className="absolute top-3 right-3 z-10 p-2.5 bg-white/35 backdrop-blur-md rounded-xl ring-1 ring-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 hover:bg-white/45 active:scale-95">
           <Heart size={16} className={recipe.is_favorite ? 'fill-red-500 text-red-500' : 'text-white/80'} />
         </button>
         <div className="absolute bottom-0 inset-x-0 z-10 px-4 pb-4">
@@ -180,12 +180,12 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
 
         {/* Buttons */}
         <div className="grid grid-cols-2 gap-4 mt-auto">
-          <div className="flex items-center justify-center gap-2 py-2.5 bg-[#EDE5D6] dark:bg-gray-700/50 text-[#5C3D1E] dark:text-gray-300 rounded-xl text-xs font-bold border border-[#D6C9B4] dark:border-gray-600 hover:bg-[#D6C9B4] dark:hover:bg-gray-700 transition-colors">
+          <div className="flex items-center justify-center gap-2 py-2.5 bg-[#EDE5D6] dark:bg-gray-700/50 text-[#5C3D1E] dark:text-gray-300 rounded-xl text-xs font-bold border border-[#D6C9B4] dark:border-gray-600 hover:bg-[#D6C9B4] dark:hover:bg-gray-700 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97]">
             <Utensils size={13} /> Details
           </div>
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlan(recipe); }}
-            className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/10 dark:bg-[#C4A484]/10 text-[#8B7355] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/25 dark:border-[#C4A484]/25 hover:bg-[#8B7355] hover:text-white dark:hover:bg-[#C4A484]/25 transition-all"
+            className="flex items-center justify-center gap-2 py-2.5 bg-[#8B7355]/10 dark:bg-[#C4A484]/10 text-[#8B7355] dark:text-[#C4A484] rounded-xl text-xs font-bold border border-[#8B7355]/25 dark:border-[#C4A484]/25 hover:bg-[#8B7355] hover:text-white dark:hover:bg-[#C4A484]/25 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95"
           >
             <Clock size={13} /> Planen
           </button>

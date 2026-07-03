@@ -151,3 +151,14 @@
 .animate-shimmer {
   animation: shimmer 2s infinite;
 }
+
+/* Calm "still active" breathing cue for Backplan's console view.
+   Deliberately gentler than animate-pulse: precision instrument, not an alert. */
+@keyframes crumb-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
+
+.animate-breathe {
+  animation: crumb-breathe 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

@@ -521,7 +521,7 @@ export default function BackplanPage() {
                     )}
                     {isActive && (
                       <div
-                        className="h-full rounded-full bg-[#8B7355] dark:bg-[#C4A484] animate-pulse"
+                        className="h-full rounded-full bg-[#8B7355] dark:bg-[#C4A484] animate-breathe"
                         style={{ width: `${pct * 100}%` }}
                       />
                     )}
@@ -725,7 +725,7 @@ export default function BackplanPage() {
                     <div key={phase.name} className="mb-3 rounded-2xl border-2 border-amber-400/60 dark:border-amber-400/50 bg-amber-50 dark:bg-amber-500/[0.08] p-4 shadow-md shadow-amber-200/30 dark:shadow-amber-900/20">
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-[12px] font-extrabold flex-1 text-[#2C1A0E] dark:text-white/90 uppercase tracking-wide">{phase.name}</span>
-                        <span className="text-[11px] font-extrabold text-amber-700 dark:text-amber-300 animate-pulse">Bereit!</span>
+                        <span className="text-[11px] font-extrabold text-amber-700 dark:text-amber-300 animate-breathe">Bereit!</span>
                       </div>
                       <div className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-amber-200 text-amber-800 dark:bg-amber-500/30 dark:text-amber-200 mb-2">Bestätigung nötig</div>
                       <p className="text-[13px] font-semibold text-[#2C1A0E] dark:text-white/90 mb-3 leading-snug">{activePhaseStep.instruction}</p>
@@ -788,7 +788,7 @@ export default function BackplanPage() {
                         </span>
                       </div>
                       <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl mb-3 bg-white/40 dark:bg-white/[0.04]">
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${isBaking ? "bg-red-500" : "bg-[#8B7355] dark:bg-[#C4A484]"} animate-pulse`} />
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${isBaking ? "bg-red-500" : "bg-[#8B7355] dark:bg-[#C4A484]"} animate-breathe`} />
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide flex-shrink-0 mt-0.5 ${stepBadge}`}>{activePhaseStep.type}</span>
                         <span className="text-[13px] font-semibold flex-1 leading-snug text-[#2C1A0E] dark:text-white/90">{activePhaseStep.instruction}</span>
                         {actionRangeStatus !== null && actionElapsed !== null ? (

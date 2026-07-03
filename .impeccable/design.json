@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-03T00:00:00.000Z",
+  "title": "Design System: Crumb",
+  "extensions": {
+    "colorMeta": {
+      "crumb-500": { "role": "primary", "displayName": "Toasted Crumb", "canonical": "oklch(56% 0.07 55)", "tonalRamp": ["#2C1A0E", "#3E2716", "#5C3D1E", "#766248", "#8B7355", "#A68B6A", "#C4A484", "#E5DAC8"] },
+      "crumb-300": { "role": "secondary", "displayName": "Warm Sand", "canonical": "oklch(75% 0.05 60)", "tonalRamp": ["#5C3D1E", "#766248", "#8B7355", "#A68B6A", "#C4A484", "#D6C9B4", "#E5DAC8", "#F5F0E8"] },
+      "cream-bg": { "role": "neutral", "displayName": "Flour Cream", "canonical": "oklch(94% 0.015 80)", "tonalRamp": ["#2C1A0E", "#5C3D1E", "#8B7355", "#A68B6A", "#C4A484", "#D6C9B4", "#EDE5D6", "#F5F0E8"] },
+      "cream-surface": { "role": "neutral", "displayName": "Toasted Surface", "canonical": "oklch(91% 0.018 75)" },
+      "cream-card": { "role": "neutral", "displayName": "Paper White", "canonical": "oklch(100% 0 0)" },
+      "cream-border": { "role": "neutral", "displayName": "Crust Border", "canonical": "oklch(82% 0.03 70)" },
+      "crumb-900": { "role": "neutral", "displayName": "Deep Crumb", "canonical": "oklch(24% 0.04 45)" },
+      "crumb-700": { "role": "neutral", "displayName": "Toasted Brown", "canonical": "oklch(35% 0.06 50)" },
+      "crumb-400": { "role": "neutral", "displayName": "Dried Crust", "canonical": "oklch(65% 0.05 65)" },
+      "dark-canvas": { "role": "neutral", "displayName": "Midnight Slate", "canonical": "oklch(22% 0.04 260)" },
+      "console-well": { "role": "neutral", "displayName": "Console Well", "canonical": "oklch(15% 0.005 240)" },
+      "console-surface": { "role": "neutral", "displayName": "Console Surface", "canonical": "oklch(20% 0.005 240)" },
+      "console-border": { "role": "neutral", "displayName": "Console Border", "canonical": "oklch(30% 0.005 240)" },
+      "console-muted": { "role": "neutral", "displayName": "Console Muted", "canonical": "oklch(65% 0.01 240)" },
+      "console-now-line": { "role": "error", "displayName": "Now-Line Red", "canonical": "oklch(60% 0.19 25)" },
+      "console-success": { "role": "success", "displayName": "Free-Time Green", "canonical": "oklch(82% 0.18 145)" },
+      "phase-blue": { "role": "data", "displayName": "Phase Blue", "canonical": "oklch(72% 0.13 250)" },
+      "phase-purple": { "role": "data", "displayName": "Phase Purple", "canonical": "oklch(72% 0.13 300)" },
+      "phase-emerald": { "role": "data", "displayName": "Phase Emerald", "canonical": "oklch(75% 0.14 155)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Named things only: the wordmark and an active recipe's title. Never generic headings." },
+      "body": { "displayName": "Body", "purpose": "All UI text, descriptions, form content." },
+      "label": { "displayName": "Label", "purpose": "Uppercase micro-labels: category badges, ingredient tags, stat captions." }
+    },
+    "shadows": [
+      { "name": "card-rest", "value": "0 2px 12px -2px rgba(92,61,30,0.08)", "purpose": "Recipe cards at rest, light mode. Brand-tinted, never neutral." },
+      { "name": "card-rest-dark", "value": "0 4px 20px -2px rgba(0,0,0,0.3)", "purpose": "Recipe cards at rest, dark mode. Neutral black is the one dark-mode exception." },
+      { "name": "fab-elevation", "value": "0 20px 50px rgba(139,115,85,0.3)", "purpose": "Floating save button at rest." },
+      { "name": "fab-elevation-hover", "value": "0 10px 30px rgba(139,115,85,0.4)", "purpose": "Floating save button on hover." }
+    ],
+    "motion": [
+      { "name": "duration-standard", "value": "200ms", "purpose": "Default transition duration for hover/active states across buttons and nav." },
+      { "name": "duration-image", "value": "500ms", "purpose": "Recipe card hero image scale on hover." },
+      { "name": "ease-active-press", "value": "scale(0.95)", "purpose": "Active/press feedback on primary buttons and the FAB." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action button (e.g. form submit, save actions).",
+      "html": "<button class=\"ds-btn-primary\">Speichern</button>",
+      "css": ".ds-btn-primary { background: #8B7355; color: #fff; font-weight: 700; padding: 12px 24px; border-radius: 0.75rem; border: 2px solid #8B7355; transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-primary:hover { background: #766248; border-color: #766248; box-shadow: 0 2px 8px rgba(92,61,30,0.15); } .ds-btn-primary:active { transform: scale(0.95); } .ds-btn-primary:focus-visible { outline: 2px solid #8B7355; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary action button, e.g. cancel or a paired 'Details' action.",
+      "html": "<button class=\"ds-btn-secondary\">Details</button>",
+      "css": ".ds-btn-secondary { background: #FFFFFF; color: #5C3D1E; font-weight: 700; padding: 12px 24px; border-radius: 0.75rem; border: 1px solid #D6C9B4; transition: color 0.15s, border-color 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-secondary:hover { border-color: #A68B6A; color: #2C1A0E; } .ds-btn-secondary:focus-visible { outline: 2px solid #8B7355; outline-offset: 2px; }"
+    },
+    {
+      "name": "Floating Save Button",
+      "kind": "custom",
+      "refersTo": "fab-save",
+      "description": "Signature floating action button, fixed bottom-right, used for the primary save/commit action on a screen.",
+      "html": "<button class=\"ds-fab\"><span class=\"ds-fab-icon\">&#43;</span>Rezept speichern</button>",
+      "css": ".ds-fab { position: fixed; bottom: 40px; right: 40px; display: inline-flex; align-items: center; gap: 12px; padding: 16px 32px 16px 28px; background: #8B7355; color: #fff; font-weight: 700; border-radius: 1rem; border: none; box-shadow: 0 20px 50px rgba(139,115,85,0.3); transition: background 0.3s, box-shadow 0.3s, transform 0.3s; } .ds-fab:hover { background: #766248; box-shadow: 0 10px 30px rgba(139,115,85,0.4); } .ds-fab:active { transform: scale(0.95); } .ds-fab:disabled { opacity: 0.4; pointer-events: none; }"
+    },
+    {
+      "name": "Recipe Card",
+      "kind": "card",
+      "refersTo": "card-recipe",
+      "description": "Primary content card for the recipe library grid: hero photo, category-colored ribbon, and a stat bar for time/steps/hydration.",
+      "html": "<a class=\"ds-recipe-card\" style=\"border-left: 3px solid #8a9a6a\"><div class=\"ds-recipe-card-media\"><div class=\"ds-recipe-card-scrim\"></div><h3 class=\"ds-recipe-card-title\">Rustikales Roggenbrot</h3></div><div class=\"ds-recipe-card-body\"><p class=\"ds-recipe-card-subtitle\">Brot &middot; quelle.de</p><div class=\"ds-recipe-card-stats\"><span>4h 30m</span><span>&middot;</span><span>12 Schritte</span><span>&middot;</span><span class=\"ds-hydration\">72%</span></div></div></a>",
+      "css": ".ds-recipe-card { display: flex; flex-direction: column; background: #fff; border-radius: 1rem; overflow: hidden; border: 1px solid #D6C9B4; box-shadow: 0 2px 12px -2px rgba(92,61,30,0.08); transition: box-shadow 0.3s, border-color 0.3s; text-decoration: none; } .ds-recipe-card:hover { box-shadow: 0 4px 16px -2px rgba(92,61,30,0.14); border-color: rgba(139,115,85,0.4); } .ds-recipe-card-media { position: relative; height: 224px; background: #EDE5D6; } .ds-recipe-card-scrim { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0.15) 60%, transparent); } .ds-recipe-card-title { position: absolute; left: 16px; right: 16px; bottom: 16px; color: #fff; font-weight: 900; font-size: 1.25rem; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.5); } .ds-recipe-card-body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px; } .ds-recipe-card-subtitle { font-size: 11px; font-weight: 500; color: #A68B6A; margin: 0; } .ds-recipe-card-stats { display: flex; align-items: center; gap: 6px; background: #F5F0E8; border-radius: 0.75rem; padding: 8px; font-size: 13px; font-weight: 500; color: #5C3D1E; } .ds-hydration { font-weight: 700; color: #3a75a0; }"
+    },
+    {
+      "name": "Category / Ingredient Tag",
+      "kind": "chip",
+      "refersTo": "badge-tag",
+      "description": "Small uppercase functional tag denoting recipe attributes (leaven type, grain type, wholegrain content).",
+      "html": "<span class=\"ds-tag ds-tag--sourdough\">Roggensauerteig</span>",
+      "css": ".ds-tag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 0.5rem; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid transparent; white-space: nowrap; } .ds-tag--sourdough { background: #FDE2E2; color: #A23939; border-color: #f5c5c5; } .ds-tag--grain { background: #E2E8F0; color: #475569; border-color: #cbd5e1; } .ds-tag--wholegrain { background: #E1F2E5; color: #2D5A39; border-color: #b6d9be; }"
+    },
+    {
+      "name": "Navigation Wordmark",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "The Crumb wordmark, the one place the serif Display font meets the nav bar.",
+      "html": "<h1 class=\"ds-wordmark\">crumb<span class=\"ds-wordmark-dot\"></span></h1>",
+      "css": ".ds-wordmark { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.65rem; line-height: 1; color: #2C1A0E; display: inline-flex; align-items: flex-end; margin: 0; } .ds-wordmark-dot { display: inline-block; width: 5px; height: 5px; border-radius: 9999px; background: #8B7355; margin-left: 3px; margin-bottom: 5px; }"
+    },
+    {
+      "name": "Backplan Timeline Phase Bar",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Signature canvas-rendered component: a single dough-phase segment on the Backplan precision timeline, color-coded by section.",
+      "html": "<div class=\"ds-timeline-track\"><div class=\"ds-timeline-phase\" style=\"left:8%;width:34%;background:rgba(196,164,132,0.55);border-color:rgba(196,164,132,0.9)\"></div><div class=\"ds-timeline-now\" style=\"left:46%\"></div></div>",
+      "css": ".ds-timeline-track { position: relative; height: 44px; background: #21262d; border-radius: 0.5rem; overflow: hidden; } .ds-timeline-phase { position: absolute; top: 4px; bottom: 4px; border-radius: 0.375rem; border: 1px solid; } .ds-timeline-now { position: absolute; top: 0; bottom: 0; width: 2px; background: #F85149; box-shadow: 0 0 6px rgba(248,81,73,0.6); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Kitchen Notebook & The Console",
+    "overview": "Crumb is two rooms in one house. Most of the app — the recipe library, the search, the import flow, the plan sheet — is the kitchen notebook: warm cream and toasted-brown, generous rounded corners, soft brand-tinted shadows, the feel of a trusted handwritten binder a small circle of bakers has kept for years. Then there's Backplan, the timing engine, which steps into the console: a near-black, precision-instrument surface borrowed from flight displays and terminal UIs, where colored phase bars and a live now-line replace warmth with exactness. The same hand designed both rooms — the console still carries the notebook's signature tan accent (#C4A484) through its phase bars and highlights — but the register shifts because the task shifts: browsing and planning is unhurried, timing is exact. This directly follows PRODUCT.md's Design Principle 1, 'Precision without sterility': the console is allowed to go dark and exact because it's carrying real timing math, but it never turns cold or corporate — it borrows the kitchen's rounded shapes and warm accent rather than reaching for sharp-edged dashboard chrome.",
+    "keyCharacteristics": [
+      "Warm cream-and-brown palette for browsing/planning; a separate near-black console palette exclusively for Backplan's timing view",
+      "One workhorse sans (Outfit) carries all UI text; a serif display face (DM Serif Display) appears only for named things — the wordmark and an active recipe's title — never for generic headings",
+      "Confident, heavy type weights (black/extrabold) even within a warm, soft-cornered shell",
+      "Brand-tinted shadows in light mode; tonal layering (translucent white) in dark mode",
+      "Functional color-coding throughout (recipe categories, dough phases, hydration %, ingredient tags) rather than decorative color"
+    ],
+    "rules": [
+      { "name": "The Warmth-Is-Not-Decoration Rule", "body": "Every color in the cream/brown system carries a job — text hierarchy, a surface layer, or the single accent. Nothing is added for prettiness.", "section": "colors" },
+      { "name": "The One Room Rule", "body": "The console palette is scoped to Backplan alone. It never leaks into the recipe library, and the cream system never leaks into Backplan's timeline.", "section": "colors" },
+      { "name": "The Named-Thing Rule", "body": "DM Serif Display renders exactly two kinds of content: the Crumb wordmark, and an active bake's recipe title inside Backplan. It never appears on a generic page heading, card title, button, or label.", "section": "typography" },
+      { "name": "The Warm Shadow Rule", "body": "In light mode, every shadow is tinted brown, never plain black. In dark mode this inverts: surfaces lift via translucent white overlays rather than shadows.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the accent (crumb-500 / #8B7355) to actions, selection, and current-state only.",
+      "Do tint light-mode shadows brown, never neutral black.",
+      "Do reserve DM Serif Display for named things only: the wordmark, or a specific recipe's title in an active session.",
+      "Do keep the console palette scoped to Backplan; it is a distinct room, not a system-wide dark theme.",
+      "Do use color-coding functionally — categories, dough phases, hydration, ingredient tags — so color always answers 'what is this.'"
+    ],
+    "donts": [
+      "Don't introduce a navy/blue corporate palette or icon-in-a-box metric cards anywhere in the app.",
+      "Don't add pastel doodles, cutesy icons, or stock-photo food styling.",
+      "Don't gamify or 'cutesify' bake timing — no playful stopwatch animations, no novelty countdown treatments.",
+      "Don't let the console's dark, terminal-native palette bleed into the recipe library, or vice versa.",
+      "Don't use plain black shadows in light mode.",
+      "Don't add growth-marketing UI (upsells, social proof, onboarding funnels)."
+    ]
+  }
+}
