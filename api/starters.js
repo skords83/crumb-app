@@ -106,7 +106,7 @@ router.get('/:id', async (req, res) => {
       `SELECT s.*, tp.feeding_interval_hours_max, tp.label_de AS target_profile_label
        FROM starters s
        JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
-       WHERE s.id = $1 AND s.user_id = $2`,
+       WHERE s.id = $1 AND s.user_id = $2 AND s.archived_at IS NULL`,
       [req.params.id, req.user.userId]
     );
     if (starterRes.rows.length === 0) {
@@ -141,7 +141,7 @@ router.patch('/:id', async (req, res) => {
          flour_type = COALESCE($2, flour_type),
          hydration_percent = COALESCE($3, hydration_percent),
          target_profile = COALESCE($4, target_profile)
-       WHERE id = $5 AND user_id = $6 RETURNING *`,
+       WHERE id = $5 AND user_id = $6 AND archived_at IS NULL RETURNING *`,
       [name ?? null, flour_type ?? null, hydration_percent ?? null, target_profile ?? null, req.params.id, req.user.userId]
     );
     if (result.rows.length === 0) {
@@ -178,7 +178,7 @@ router.get('/:id/health', async (req, res) => {
       `SELECT s.*, tp.feeding_interval_hours_max
        FROM starters s
        JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
-       WHERE s.id = $1 AND s.user_id = $2`,
+       WHERE s.id = $1 AND s.user_id = $2 AND s.archived_at IS NULL`,
       [req.params.id, req.user.userId]
     );
     if (starterRes.rows.length === 0) {
