@@ -99,4 +99,100 @@ router.post('/', async (req, res) => {
   }
 });
 
+// ── GET /api/starters/:id — Einzelner Starter inkl. letzter Fütterungen ──
+router.get('/:id', async (req, res) => {
+  try {
+    const starterRes = await pool.query(
+      `SELECT s.*, tp.feeding_interval_hours_max, tp.label_de AS target_profile_label
+       FROM starters s
+       JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
+       WHERE s.id = $1 AND s.user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+    if (starterRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Starter nicht gefunden' });
+    }
+    const starter = starterRes.rows[0];
+    const feedingsRes = await pool.query(
+      `SELECT * FROM starter_feedings WHERE starter_id = $1 ORDER BY fed_at DESC LIMIT 20`,
+      [starter.id]
+    );
+    const { health, status } = calculateHealth(feedingsRes.rows, starter);
+    res.json({ ...starter, health, status, feedings: feedingsRes.rows });
+  } catch (err) {
+    console.error('❌ starter detail Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /api/starters/:id — Bearbeiten ─────────────────────────
+router.patch('/:id', async (req, res) => {
+  const { name, flour_type, hydration_percent, target_profile } = req.body;
+  if (flour_type !== undefined && !FLOUR_TYPES.includes(flour_type)) {
+    return res.status(400).json({ error: `flour_type muss einer von ${FLOUR_TYPES.join(', ')} sein` });
+  }
+  if (target_profile !== undefined && !TARGET_PROFILE_KEYS.includes(target_profile)) {
+    return res.status(400).json({ error: `target_profile muss einer von ${TARGET_PROFILE_KEYS.join(', ')} sein` });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE starters SET
+         name = COALESCE($1, name),
+         flour_type = COALESCE($2, flour_type),
+         hydration_percent = COALESCE($3, hydration_percent),
+         target_profile = COALESCE($4, target_profile)
+       WHERE id = $5 AND user_id = $6 RETURNING *`,
+      [name ?? null, flour_type ?? null, hydration_percent ?? null, target_profile ?? null, req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Starter nicht gefunden' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('❌ starter update Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/starters/:id — Soft-Delete ────────────────────────
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE starters SET archived_at = NOW() WHERE id = $1 AND user_id = $2 AND archived_at IS NULL RETURNING id`,
+      [req.params.id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Starter nicht gefunden' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ starter delete Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/starters/:id/health — Health separat ─────────────────
+router.get('/:id/health', async (req, res) => {
+  try {
+    const starterRes = await pool.query(
+      `SELECT s.*, tp.feeding_interval_hours_max
+       FROM starters s
+       JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
+       WHERE s.id = $1 AND s.user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+    if (starterRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Starter nicht gefunden' });
+    }
+    const feedingsRes = await pool.query(
+      `SELECT * FROM starter_feedings WHERE starter_id = $1 ORDER BY fed_at DESC LIMIT 20`,
+      [req.params.id]
+    );
+    res.json(calculateHealth(feedingsRes.rows, starterRes.rows[0]));
+  } catch (err) {
+    console.error('❌ starter health Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = { router, setPool };
