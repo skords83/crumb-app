@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, Download, Search, Settings, Flame } from 'lucide-react';
+import { LayoutGrid, FileDown, Clock, Sun, Moon, LogOut, ChevronDown, Download, Search, Settings, Flame, Sprout } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { calculateBackplan, parseLocalDate } from '@/lib/backplan-utils';
@@ -82,7 +82,7 @@ export default function Navigation() {
 
   if(isAuthPage)return null;
 
-  const navItems=[{name:'Rezepte',href:'/',icon:LayoutGrid},{name:'Suche',href:'/search',icon:Search},{name:'Import',href:'/new',icon:FileDown}];
+  const navItems=[{name:'Rezepte',href:'/',icon:LayoutGrid},{name:'Starter',href:'/starters',icon:Sprout},{name:'Suche',href:'/search',icon:Search},{name:'Import',href:'/new',icon:FileDown}];
   const allNavItems=[...navItems];
   if(hasActivePlan)allNavItems.push({name:'Backplan',href:'/backplan',icon:Clock});
 
