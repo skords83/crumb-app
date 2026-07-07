@@ -16,7 +16,7 @@ const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./
 const { router: pushRouter, setPool: setPushPool } = require('./push');
 const { router: notificationSettingsRouter, setPool: setNotificationSettingsPool } = require('./notification-settings');
 const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
-const { evaluateAndDispatch, cleanupOldNotifications, initWebPush } = require('./notification-engine');
+const { evaluateAndDispatch, cleanupOldNotifications, initWebPush, checkStarterFeedingDue } = require('./notification-engine');
 const { router: startersRouter, setPool: setStartersPool } = require('./starters');
 const { TARGET_PROFILES } = require('./starter-profiles');
 
@@ -827,6 +827,9 @@ app.listen(PORT, '0.0.0.0', async () => {
         // Notifications auswerten und versenden (idempotent, DB-Dedup)
         await evaluateAndDispatch(pool, { ...session, step_states: updatedStates }, sections);
       }
+
+      // Sauerteig-Fütterungs-Check (unabhängig von Bake-Sessions)
+      await checkStarterFeedingDue(pool);
     } catch (err) {
       console.error('❌ Notification-Sweep Fehler:', err.message);
     }

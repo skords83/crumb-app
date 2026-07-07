@@ -451,6 +451,44 @@ async function cleanupOldNotifications(pool) {
   }
 }
 
+// ── checkStarterFeedingDue ───────────────────────────────────
+// Settings sind pro User unterschiedlich (Quiet Hours etc.) — der Check muss
+// also pro Starter (bzw. dessen user_id) laufen, nicht einmal global vorab.
+async function checkStarterFeedingDue(pool) {
+  const { rows: starters } = await pool.query(`
+    SELECT s.id, s.user_id, s.name, tp.feeding_interval_hours_max
+    FROM starters s
+    JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
+    WHERE s.archived_at IS NULL
+  `);
+
+  for (const starter of starters) {
+    const settings = await getSettings(pool, starter.user_id);
+    if (!settings.master_enabled || isInQuietHours(settings)) continue;
+
+    const { rows: feedings } = await pool.query(
+      `SELECT fed_at FROM starter_feedings WHERE starter_id = $1 ORDER BY fed_at DESC LIMIT 1`,
+      [starter.id]
+    );
+    const lastFeeding = feedings[0];
+    const hoursSince = lastFeeding
+      ? (Date.now() - new Date(lastFeeding.fed_at)) / 3600000
+      : Infinity;
+
+    if (hoursSince <= starter.feeding_interval_hours_max) continue;
+
+    const dedupKey = `st-${starter.id}-feedingdue-${new Date().toISOString().slice(0, 10)}`;
+    await dispatch(pool, starter.user_id, null, {
+      notificationId: dedupKey,
+      type: 'starter-feeding-due',
+      title: '🫙 Sauerteig füttern',
+      message: `${starter.name} wartet auf Fütterung (${Math.round(hoursSince)}h seit letzter Fütterung).`,
+      priority: 4,
+      tags: 'sourdough',
+    });
+  }
+}
+
 module.exports = {
   evaluateSession,
   dispatch,
@@ -459,4 +497,5 @@ module.exports = {
   cleanupOldNotifications,
   extractTemp,
   initWebPush,
+  checkStarterFeedingDue,
 };
