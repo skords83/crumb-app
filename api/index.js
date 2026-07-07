@@ -17,6 +17,7 @@ const { router: pushRouter, setPool: setPushPool } = require('./push');
 const { router: notificationSettingsRouter, setPool: setNotificationSettingsPool } = require('./notification-settings');
 const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
 const { evaluateAndDispatch, cleanupOldNotifications, initWebPush } = require('./notification-engine');
+const { router: startersRouter, setPool: setStartersPool } = require('./starters');
 const { TARGET_PROFILES } = require('./starter-profiles');
 
 const app = express();
@@ -65,6 +66,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 setBakeSessionsPool(pool);
 setPushPool(pool);
 setNotificationSettingsPool(pool);
+setStartersPool(pool);
 
 // Öffentliche Base-URL für generierte Datei-URLs.
 // Traefik terminiert TLS → req.protocol ist intern immer "http".
@@ -353,6 +355,9 @@ app.use('/api/push', pushRouter);
 
 // ── Notification Settings Router ──
 app.use('/api/notification-settings', notificationSettingsRouter);
+
+// ── Starters Router ──
+app.use('/api/starters', startersRouter);
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
