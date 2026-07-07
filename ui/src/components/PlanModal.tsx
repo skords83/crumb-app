@@ -238,12 +238,20 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [freieZeitOpen, setFreieZeitOpen] = useState(false);
+  const [starters, setStarters] = useState<any[]>([]);
+  const [selectedStarterId, setSelectedStarterId] = useState<string>("");
+  const [starterWarningMsg, setStarterWarningMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       const s = loadSettings(); setSettings(s); setMultiplier(1); setManualHint(""); setPickerTarget(null); setDayOffset(0);
       setPlanOffset(snapTo(nowMin(), s.snapMin, true)); setScenario("jetzt"); setIsSubmitting(false); setSubmitError("");
       setFreieZeitOpen(false);
+      setSelectedStarterId(""); setStarterWarningMsg(null);
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/starters`, { headers: { Authorization: `Bearer ${localStorage.getItem("crumb_token")}` } })
+        .then(res => (res.ok ? res.json() : []))
+        .then(data => setStarters(Array.isArray(data) ? data : []))
+        .catch(() => setStarters([]));
     }
   }, [isOpen]);
 
@@ -318,12 +326,28 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/bake-sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("crumb_token")}` },
-        body: JSON.stringify({ recipe_id: recipe!.id, planned_at: target, multiplier }),
+        body: JSON.stringify({
+          recipe_id: recipe!.id,
+          planned_at: target,
+          multiplier,
+          ...(selectedStarterId ? { starter_id: Number(selectedStarterId) } : {}),
+        }),
       });
       if (!res.ok) { const err = await res.json(); setSubmitError(err.error || "Fehler beim Erstellen"); setIsSubmitting(false); return; }
+      const data = await res.json();
+      if (data.starterWarning) {
+        setStarterWarningMsg(data.starterWarning.message);
+        setIsSubmitting(false);
+        return;
+      }
       onClose();
       window.location.href = "/backplan";
     } catch (err: any) { setSubmitError(err.message || "Netzwerkfehler"); setIsSubmitting(false); }
+  };
+
+  const proceedDespiteStarterWarning = () => {
+    onClose();
+    window.location.href = "/backplan";
   };
 
   const openPicker = (target: "from" | "to") => { const val = target === "from" ? sleepFrom : sleepTo; setPickerH(Math.floor(val / 60)); setPickerM(val % 60); setPickerError(""); setPickerTarget(target); };
@@ -451,6 +475,20 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
             </div>
           </div>
 
+          {starters.length > 0 && (
+            <div className="px-4 pt-2">
+              <label className="text-[10px] font-semibold text-[#8b949e] uppercase tracking-widest">Sauerteig verknüpfen (optional)</label>
+              <select
+                value={selectedStarterId}
+                onChange={(e) => setSelectedStarterId(e.target.value)}
+                className="mt-1 w-full bg-[#21262d] border border-[#30363d] rounded-lg px-3 py-2 text-sm text-[#e6edf3]"
+              >
+                <option value="">Keinen Starter verknüpfen</option>
+                {starters.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+              </select>
+            </div>
+          )}
+
           {/* B: Freie Zeit — kollapsierbar */}
           {showFreieZeit && visibleGaps.length > 0 && (
             <>
@@ -503,6 +541,12 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
         </div>
 
         {submitError && <div className="mx-4 mb-2 text-[11px] text-[#f85149] bg-[#f85149]/10 px-3 py-2 rounded-lg">{submitError}</div>}
+        {starterWarningMsg && (
+          <div className="mx-4 mb-2 flex items-center justify-between gap-2 text-[11px] text-[#e3b341] bg-[#e3b341]/10 px-3 py-2 rounded-lg">
+            <span>{starterWarningMsg}</span>
+            <button onClick={proceedDespiteStarterWarning} className="shrink-0 underline font-semibold">Trotzdem fortfahren</button>
+          </div>
+        )}
 
         <div className="h-px bg-[#21262d] flex-shrink-0" />
         <div className="flex gap-3 px-4 py-3 flex-shrink-0">
