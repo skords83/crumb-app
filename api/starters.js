@@ -206,7 +206,7 @@ router.post('/:id/feedings', async (req, res) => {
       `SELECT s.*, tp.feeding_interval_hours_max
        FROM starters s
        JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
-       WHERE s.id = $1 AND s.user_id = $2`,
+       WHERE s.id = $1 AND s.user_id = $2 AND s.archived_at IS NULL`,
       [req.params.id, req.user.userId]
     );
     if (starterRes.rows.length === 0) {
@@ -247,7 +247,7 @@ router.post('/:id/feedings', async (req, res) => {
 router.get('/:id/feedings', async (req, res) => {
   try {
     const ownerCheck = await pool.query(
-      `SELECT id FROM starters WHERE id = $1 AND user_id = $2`,
+      `SELECT id FROM starters WHERE id = $1 AND user_id = $2 AND archived_at IS NULL`,
       [req.params.id, req.user.userId]
     );
     if (ownerCheck.rows.length === 0) {
