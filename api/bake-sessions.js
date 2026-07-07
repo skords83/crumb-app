@@ -16,6 +16,7 @@ const {
   buildUITimeline,
 } = require('./bake-engine');
 const { evaluateAndDispatch } = require('./notification-engine');
+const { calculateHealth } = require('./starter-health');
 
 // Pool wird vom Parent-Module injiziert
 let pool;
@@ -23,7 +24,7 @@ function setPool(p) { pool = p; }
 
 // ── POST /api/bake-sessions — Session starten ───────────────
 router.post('/', async (req, res) => {
-  const { recipe_id, planned_at, multiplier } = req.body;
+  const { recipe_id, planned_at, multiplier, starter_id } = req.body;
   if (!recipe_id || !planned_at) {
     return res.status(400).json({ error: 'recipe_id und planned_at erforderlich' });
   }
@@ -50,9 +51,9 @@ router.post('/', async (req, res) => {
 
     // Session erstellen
     const result = await pool.query(
-      `INSERT INTO bake_sessions 
-       (recipe_id, user_id, planned_at, started_at, multiplier, step_states, step_timestamps, projected_end)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO bake_sessions
+       (recipe_id, user_id, planned_at, started_at, multiplier, step_states, step_timestamps, projected_end, starter_id)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8) RETURNING *`,
       [
         recipe_id,
         req.user.userId,
@@ -61,6 +62,7 @@ router.post('/', async (req, res) => {
         JSON.stringify(states),
         JSON.stringify(timestamps),
         projectedEnd,
+        starter_id || null,
       ]
     );
 
@@ -74,12 +76,40 @@ router.post('/', async (req, res) => {
     const gates = getPendingGates(sections, states);
     const timeline = buildUITimeline(sections, states, timestamps, planned_at);
 
-    res.status(201).json({
+    const response = {
       session,
       timeline,
       gates,
       recipe: { id: recipe.id, title: recipe.title, image_url: recipe.image_url, dough_sections: sections },
-    });
+    };
+
+    if (starter_id) {
+      try {
+        const starterRes = await pool.query(
+          `SELECT s.*, tp.* FROM starters s
+           JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
+           WHERE s.id = $1 AND s.user_id = $2 AND s.archived_at IS NULL`,
+          [starter_id, req.user.userId]
+        );
+        if (starterRes.rows.length > 0) {
+          const feedingsRes = await pool.query(
+            `SELECT * FROM starter_feedings WHERE starter_id = $1 ORDER BY fed_at DESC LIMIT 20`,
+            [starter_id]
+          );
+          const { health, status } = calculateHealth(feedingsRes.rows, starterRes.rows[0]);
+          if (health < 60) {
+            response.starterWarning = {
+              starterId: starter_id,
+              message: `Dein Starter "${starterRes.rows[0].name}" ist aktuell "${status}". Eventuell vorher füttern.`,
+            };
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ Starter-Health-Check Fehler (nicht kritisch):', err.message);
+      }
+    }
+
+    res.status(201).json(response);
   } catch (err) {
     console.error('❌ bake-session create Fehler:', err.message);
     res.status(500).json({ error: err.message });
