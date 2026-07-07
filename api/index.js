@@ -17,6 +17,7 @@ const { router: pushRouter, setPool: setPushPool } = require('./push');
 const { router: notificationSettingsRouter, setPool: setNotificationSettingsPool } = require('./notification-settings');
 const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
 const { evaluateAndDispatch, cleanupOldNotifications, initWebPush } = require('./notification-engine');
+const { TARGET_PROFILES } = require('./starter-profiles');
 
 const app = express();
 
@@ -198,6 +199,53 @@ await pool.query(`CREATE TABLE IF NOT EXISTS user_notification_settings (
   quiet_end TIME NOT NULL DEFAULT '07:00:00',
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );`);
+
+      // ── Starter Tracker: starters, Fütterungen, Zielprofile ─────
+      await pool.query(`CREATE TABLE IF NOT EXISTS starters (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        flour_type VARCHAR(50) NOT NULL,
+        hydration_percent INTEGER NOT NULL DEFAULT 100,
+        target_profile VARCHAR(50) NOT NULL DEFAULT 'ausgeglichen',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        archived_at TIMESTAMP
+      );`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_starters_user ON starters(user_id) WHERE archived_at IS NULL;`);
+
+      await pool.query(`CREATE TABLE IF NOT EXISTS starter_feedings (
+        id SERIAL PRIMARY KEY,
+        starter_id INTEGER NOT NULL REFERENCES starters(id) ON DELETE CASCADE,
+        flour_grams INTEGER NOT NULL,
+        water_grams INTEGER NOT NULL,
+        discard_grams INTEGER,
+        temperature_celsius NUMERIC(4,1),
+        activity_rating INTEGER CHECK (activity_rating BETWEEN 1 AND 10),
+        notes TEXT,
+        fed_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_starter_feedings_starter ON starter_feedings(starter_id, fed_at DESC);`);
+
+      await pool.query(`CREATE TABLE IF NOT EXISTS starter_target_profiles (
+        profile_key VARCHAR(50) PRIMARY KEY,
+        label_de VARCHAR(100) NOT NULL,
+        feeding_interval_hours_min INTEGER NOT NULL,
+        feeding_interval_hours_max INTEGER NOT NULL,
+        ratio_starter_flour_water VARCHAR(20) NOT NULL,
+        target_temp_min NUMERIC(4,1),
+        target_temp_max NUMERIC(4,1)
+      );`);
+      for (const p of TARGET_PROFILES) {
+        await pool.query(
+          `INSERT INTO starter_target_profiles
+             (profile_key, label_de, feeding_interval_hours_min, feeding_interval_hours_max, ratio_starter_flour_water, target_temp_min, target_temp_max)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (profile_key) DO NOTHING`,
+          [p.profile_key, p.label_de, p.feeding_interval_hours_min, p.feeding_interval_hours_max, p.ratio_starter_flour_water, p.target_temp_min, p.target_temp_max]
+        );
+      }
+
+      await pool.query(`ALTER TABLE bake_sessions ADD COLUMN IF NOT EXISTS starter_id INTEGER REFERENCES starters(id);`);
 
       console.log("✅ Datenbank bereit");
       return;
