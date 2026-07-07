@@ -195,4 +195,76 @@ router.get('/:id/health', async (req, res) => {
   }
 });
 
+// ── POST /api/starters/:id/feedings — Fütterung protokollieren ───
+router.post('/:id/feedings', async (req, res) => {
+  const { flour_grams, water_grams, discard_grams, temperature_celsius, activity_rating, notes, fed_at } = req.body;
+  if (!Number.isFinite(Number(flour_grams)) || !Number.isFinite(Number(water_grams))) {
+    return res.status(400).json({ error: 'flour_grams und water_grams erforderlich' });
+  }
+  try {
+    const starterRes = await pool.query(
+      `SELECT s.*, tp.feeding_interval_hours_max
+       FROM starters s
+       JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
+       WHERE s.id = $1 AND s.user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+    if (starterRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Starter nicht gefunden' });
+    }
+    const starter = starterRes.rows[0];
+
+    const insertRes = await pool.query(
+      `INSERT INTO starter_feedings
+         (starter_id, flour_grams, water_grams, discard_grams, temperature_celsius, activity_rating, notes, fed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, NOW()))
+       RETURNING *`,
+      [
+        starter.id,
+        Number(flour_grams),
+        Number(water_grams),
+        discard_grams != null ? Number(discard_grams) : null,
+        temperature_celsius != null ? Number(temperature_celsius) : null,
+        activity_rating != null ? Number(activity_rating) : null,
+        notes || null,
+        fed_at || null,
+      ]
+    );
+
+    const feedingsRes = await pool.query(
+      `SELECT * FROM starter_feedings WHERE starter_id = $1 ORDER BY fed_at DESC LIMIT 20`,
+      [starter.id]
+    );
+    const { health, status } = calculateHealth(feedingsRes.rows, starter);
+    res.status(201).json({ feeding: insertRes.rows[0], health, status });
+  } catch (err) {
+    console.error('❌ feeding create Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/starters/:id/feedings — Historie (neueste zuerst) ───
+router.get('/:id/feedings', async (req, res) => {
+  try {
+    const ownerCheck = await pool.query(
+      `SELECT id FROM starters WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.userId]
+    );
+    if (ownerCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Starter nicht gefunden' });
+    }
+    const result = await pool.query(
+      `SELECT sf.* FROM starter_feedings sf
+       JOIN starters s ON s.id = sf.starter_id
+       WHERE sf.starter_id = $1 AND s.user_id = $2
+       ORDER BY sf.fed_at DESC LIMIT 100`,
+      [req.params.id, req.user.userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ feedings history Fehler:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = { router, setPool };
