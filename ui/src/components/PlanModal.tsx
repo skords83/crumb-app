@@ -288,7 +288,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
   }, [planStart, sleepFrom, sleepTo, phases]);
 
   const isPastWarning = warning?.text?.includes("Vergangenheit");
-  const canConfirm = !isPastWarning && !isSubmitting;
+  const canConfirm = !isPastWarning && !isSubmitting && !starterWarningMsg;
 
   const abendNote = (() => { if (dayOffset > 0) return ""; return abendZiel - planDur <= nowMin() ? "→ morgen Abend" : ""; })();
   const morgenNote = (() => { if (dayOffset > 0) return ""; const s = morgenZiel - planDur; return (s <= nowMin() ? s + 1440 : s) >= 2 * 1440 ? "→ übermorgen früh" : ""; })();
