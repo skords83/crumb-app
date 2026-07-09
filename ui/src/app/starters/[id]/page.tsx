@@ -14,6 +14,8 @@ export default function StarterDetailPage() {
 
   const [starter, setStarter] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [isChangingProfile, setIsChangingProfile] = useState(false);
 
   const [flourGrams, setFlourGrams] = useState(50);
   const [waterGrams, setWaterGrams] = useState(50);
@@ -33,6 +35,26 @@ export default function StarterDetailPage() {
   };
 
   useEffect(() => { if (id) load(); }, [id]);
+
+  useEffect(() => {
+    apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/starters/profiles`)
+      .then(res => res.json())
+      .then(data => setProfiles(Array.isArray(data) ? data : []))
+      .catch(() => setProfiles([]));
+  }, []);
+
+  const handleProfileChange = async (newProfileKey: string) => {
+    setIsChangingProfile(true);
+    try {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/starters/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ target_profile: newProfileKey }),
+      });
+      if (res.ok) load();
+    } finally {
+      setIsChangingProfile(false);
+    }
+  };
 
   const handleFeed = async () => {
     setIsSubmitting(true);
@@ -94,6 +116,43 @@ export default function StarterDetailPage() {
             <span className="text-[#A68B6A] dark:text-gray-500">{starter.health}%</span>
           </div>
           <p className="text-xs text-[#A68B6A] dark:text-gray-500">{timeSinceFeeding(starter.feedings?.[0]?.fed_at || null)}</p>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-black">Zielprofil</h2>
+            <select
+              value={starter.target_profile}
+              disabled={isChangingProfile}
+              onChange={(e) => handleProfileChange(e.target.value)}
+              className="bg-[#F5F0E8] dark:bg-gray-900 border-2 border-[#D6C9B4] dark:border-gray-700 rounded-xl px-3 py-1.5 text-sm font-bold"
+            >
+              {profiles.map((p) => (
+                <option key={p.profile_key} value={p.profile_key}>{p.label_de}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center mb-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-[#A68B6A] dark:text-gray-500">Intervall</div>
+              <div className="text-sm font-bold text-[#5C3D1E] dark:text-gray-300">
+                alle {starter.feeding_interval_hours_min}–{starter.feeding_interval_hours_max}h
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-[#A68B6A] dark:text-gray-500">Verhältnis</div>
+              <div className="text-sm font-bold text-[#5C3D1E] dark:text-gray-300">{starter.ratio_starter_flour_water}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-[#A68B6A] dark:text-gray-500">Temperatur</div>
+              <div className="text-sm font-bold text-[#5C3D1E] dark:text-gray-300">
+                {starter.target_temp_min}–{starter.target_temp_max}°C
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-[#A68B6A] dark:text-gray-500 border-t border-[#EDE5D6] dark:border-gray-700 pt-3">
+            {profiles.find((p) => p.profile_key === starter.target_profile)?.description_de}
+          </p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">

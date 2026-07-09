@@ -103,7 +103,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const starterRes = await pool.query(
-      `SELECT s.*, tp.feeding_interval_hours_max, tp.label_de AS target_profile_label
+      `SELECT s.*, tp.*
        FROM starters s
        JOIN starter_target_profiles tp ON tp.profile_key = s.target_profile
        WHERE s.id = $1 AND s.user_id = $2 AND s.archived_at IS NULL`,
