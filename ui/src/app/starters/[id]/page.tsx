@@ -3,9 +3,53 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Droplets } from 'lucide-react';
+import { ArrowLeft, Droplets, Trash2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { healthColor, timeSinceFeeding } from '@/lib/starter-health';
+
+function StarterDeleteConfirmModal({
+  isDeleting,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  isDeleting: boolean;
+  error: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 max-w-sm w-full shadow-xl">
+        <h3 className="font-black text-lg text-[#2C1A0E] dark:text-gray-100 mb-2">
+          Starter wirklich löschen?
+        </h3>
+        <p className="text-sm text-[#A68B6A] dark:text-gray-400 mb-6">
+          Diese Aktion kann nicht rückgängig gemacht werden.
+        </p>
+        {error && (
+          <div className="text-xs text-red-600 dark:text-red-400 mb-4">{error}</div>
+        )}
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={isDeleting}
+            className="flex-1 py-2.5 rounded-xl border border-[#D6C9B4] dark:border-gray-600 text-sm font-bold text-[#5C3D1E] dark:text-gray-300 hover:bg-[#F5F0E8] dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            Abbrechen
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="flex-1 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm font-bold text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50"
+          >
+            {isDeleting ? 'Wird gelöscht…' : 'Löschen'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StarterDetailPage() {
   const params = useParams();
@@ -25,6 +69,10 @@ export default function StarterDetailPage() {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const load = () => {
     setIsLoading(true);
@@ -86,6 +134,26 @@ export default function StarterDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/starters/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setDeleteError(err.error || 'Fehler beim Löschen');
+        setIsDeleting(false);
+        return;
+      }
+      router.push('/starters');
+    } catch (err: any) {
+      setDeleteError(err.message || 'Netzwerkfehler');
+      setIsDeleting(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A]" />;
   }
@@ -107,7 +175,16 @@ export default function StarterDetailPage() {
         </Link>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">
-          <h1 className="text-2xl font-black mb-4">{starter.name}</h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-black">{starter.name}</h1>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              aria-label="Starter löschen"
+              className="p-2 rounded-xl text-[#A68B6A] dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
           <div className="h-3 rounded-full bg-[#EDE5D6] dark:bg-gray-700 overflow-hidden mb-2">
             <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(4, starter.health)}%`, backgroundColor: color }} />
           </div>
@@ -218,6 +295,15 @@ export default function StarterDetailPage() {
             </div>
           )}
         </div>
+
+        {showDeleteConfirm && (
+          <StarterDeleteConfirmModal
+            isDeleting={isDeleting}
+            error={deleteError}
+            onConfirm={handleDelete}
+            onCancel={() => { setShowDeleteConfirm(false); setDeleteError(''); }}
+          />
+        )}
       </div>
     </div>
   );
