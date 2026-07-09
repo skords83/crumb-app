@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { calculateHealth } = require('./starter-health');
+const { calculateHealth, calculatePlanAdherence } = require('./starter-health');
 const { TARGET_PROFILES, TARGET_PROFILE_KEYS } = require('./starter-profiles');
 
 let pool;
@@ -118,7 +118,8 @@ router.get('/:id', async (req, res) => {
       [starter.id]
     );
     const { health, status } = calculateHealth(feedingsRes.rows, starter);
-    res.json({ ...starter, health, status, feedings: feedingsRes.rows });
+    const plan_adherence = calculatePlanAdherence(feedingsRes.rows, starter);
+    res.json({ ...starter, health, status, plan_adherence, feedings: feedingsRes.rows });
   } catch (err) {
     console.error('❌ starter detail Fehler:', err.message);
     res.status(500).json({ error: err.message });
@@ -197,9 +198,12 @@ router.get('/:id/health', async (req, res) => {
 
 // ── POST /api/starters/:id/feedings — Fütterung protokollieren ───
 router.post('/:id/feedings', async (req, res) => {
-  const { flour_grams, water_grams, discard_grams, temperature_celsius, activity_rating, notes, fed_at } = req.body;
+  const { flour_grams, water_grams, discard_grams, temperature_celsius, activity_rating, notes, fed_at, flour_type } = req.body;
   if (!Number.isFinite(Number(flour_grams)) || !Number.isFinite(Number(water_grams))) {
     return res.status(400).json({ error: 'flour_grams und water_grams erforderlich' });
+  }
+  if (flour_type !== undefined && !FLOUR_TYPES.includes(flour_type)) {
+    return res.status(400).json({ error: `flour_type muss einer von ${FLOUR_TYPES.join(', ')} sein` });
   }
   try {
     const starterRes = await pool.query(
@@ -216,8 +220,8 @@ router.post('/:id/feedings', async (req, res) => {
 
     const insertRes = await pool.query(
       `INSERT INTO starter_feedings
-         (starter_id, flour_grams, water_grams, discard_grams, temperature_celsius, activity_rating, notes, fed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, NOW()))
+         (starter_id, flour_grams, water_grams, discard_grams, temperature_celsius, activity_rating, notes, fed_at, flour_type, target_profile_at_feeding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, NOW()), $9, $10)
        RETURNING *`,
       [
         starter.id,
@@ -228,6 +232,8 @@ router.post('/:id/feedings', async (req, res) => {
         activity_rating != null ? Number(activity_rating) : null,
         notes || null,
         fed_at || null,
+        flour_type ?? null,
+        starter.target_profile,
       ]
     );
 

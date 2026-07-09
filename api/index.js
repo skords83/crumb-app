@@ -227,6 +227,8 @@ await pool.query(`CREATE TABLE IF NOT EXISTS user_notification_settings (
         fed_at TIMESTAMP NOT NULL DEFAULT NOW()
       );`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_starter_feedings_starter ON starter_feedings(starter_id, fed_at DESC);`);
+      await pool.query(`ALTER TABLE starter_feedings ADD COLUMN IF NOT EXISTS flour_type VARCHAR(50);`);
+      await pool.query(`ALTER TABLE starter_feedings ADD COLUMN IF NOT EXISTS target_profile_at_feeding VARCHAR(50);`);
 
       await pool.query(`CREATE TABLE IF NOT EXISTS starter_target_profiles (
         profile_key VARCHAR(50) PRIMARY KEY,

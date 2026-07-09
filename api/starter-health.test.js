@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calculateHealth } = require('./starter-health');
+const { calculateHealth, calculatePlanAdherence } = require('./starter-health');
 
 const PROFILE = { feeding_interval_hours_max: 24 };
 
@@ -44,4 +44,65 @@ test('low activity_rating on last feeding penalizes health by 15', () => {
   const feedings = [{ fed_at: new Date().toISOString(), activity_rating: 2 }];
   const result = calculateHealth(feedings, PROFILE);
   assert.equal(result.health, 85); // 100 - 15
+});
+
+test('plan adherence returns null with fewer than 2 snapshot-tagged feedings', () => {
+  const feedings = [{ fed_at: new Date().toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100 }];
+  const starter = { flour_type: 'weizen' };
+  assert.equal(calculatePlanAdherence(feedings, starter), null);
+});
+
+test('plan adherence is 100 for on-time, on-hydration, same-flour feedings', () => {
+  const now = Date.now();
+  // feedings arrive newest-first (DESC), matching the real DB query order
+  const feedings = [
+    { fed_at: new Date(now).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+    { fed_at: new Date(now - 18 * 3600000).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+  ];
+  const starter = { flour_type: 'weizen' };
+  assert.equal(calculatePlanAdherence(feedings, starter), 100);
+});
+
+test('a strongly delayed feeding causes a noticeable but non-zero deduction', () => {
+  const now = Date.now();
+  const feedings = [
+    { fed_at: new Date(now).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+    { fed_at: new Date(now - 48 * 3600000).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+  ];
+  const starter = { flour_type: 'weizen' };
+  const result = calculatePlanAdherence(feedings, starter);
+  assert.equal(result, 60);
+  assert.ok(result > 0, 'no cliff effect down to 0');
+});
+
+test('each feeding is scored against its own snapshot profile, not the current one', () => {
+  const now = Date.now();
+  const feedings = [
+    { fed_at: new Date(now).toISOString(), target_profile_at_feeding: 'powerkur', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+    { fed_at: new Date(now - 10 * 3600000).toISOString(), target_profile_at_feeding: 'powerkur', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+  ];
+  const starter = { flour_type: 'weizen' };
+  // powerkur window is 8-12h; a 10h gap is within window -> full score,
+  // regardless of what the starter's current target_profile is now.
+  assert.equal(calculatePlanAdherence(feedings, starter), 100);
+});
+
+test('feedings without a profile snapshot (pre-migration data) are excluded, not defaulted', () => {
+  const now = Date.now();
+  const feedings = [
+    { fed_at: new Date(now).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+    { fed_at: new Date(now - 18 * 3600000).toISOString(), target_profile_at_feeding: null, flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+  ];
+  const starter = { flour_type: 'weizen' };
+  assert.equal(calculatePlanAdherence(feedings, starter), null);
+});
+
+test('a flour type different from the starter deducts 15 points', () => {
+  const now = Date.now();
+  const feedings = [
+    { fed_at: new Date(now).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'roggen' },
+    { fed_at: new Date(now - 18 * 3600000).toISOString(), target_profile_at_feeding: 'ausgeglichen', flour_grams: 100, water_grams: 100, flour_type: 'weizen' },
+  ];
+  const starter = { flour_type: 'weizen' };
+  assert.equal(calculatePlanAdherence(feedings, starter), 85);
 });

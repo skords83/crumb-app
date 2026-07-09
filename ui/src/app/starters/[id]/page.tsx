@@ -116,6 +116,9 @@ export default function StarterDetailPage() {
             <span className="text-[#A68B6A] dark:text-gray-500">{starter.health}%</span>
           </div>
           <p className="text-xs text-[#A68B6A] dark:text-gray-500">{timeSinceFeeding(starter.feedings?.[0]?.fed_at || null)}</p>
+          <p className="text-xs text-[#A68B6A] dark:text-gray-500 mt-2">
+            {starter.plan_adherence != null ? `Plantreue: ${starter.plan_adherence}%` : 'Plantreue: Noch nicht genug Daten'}
+          </p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">
