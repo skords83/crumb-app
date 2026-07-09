@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 
 const { calculateHealth, calculatePlanAdherence } = require('./starter-health');
+const { predictNextPeak } = require('./starter-peak');
 const { TARGET_PROFILES, TARGET_PROFILE_KEYS } = require('./starter-profiles');
 
 let pool;
@@ -119,7 +120,14 @@ router.get('/:id', async (req, res) => {
     );
     const { health, status } = calculateHealth(feedingsRes.rows, starter);
     const plan_adherence = calculatePlanAdherence(feedingsRes.rows, starter);
-    res.json({ ...starter, health, status, plan_adherence, feedings: feedingsRes.rows });
+    const nextPeakPrediction = predictNextPeak(feedingsRes.rows, starter.target_profile);
+    const next_peak_prediction = nextPeakPrediction ? {
+      source: nextPeakPrediction.source,
+      window_start: nextPeakPrediction.windowStart,
+      window_end: nextPeakPrediction.windowEnd,
+      median: nextPeakPrediction.median,
+    } : null;
+    res.json({ ...starter, health, status, plan_adherence, next_peak_prediction, feedings: feedingsRes.rows });
   } catch (err) {
     console.error('❌ starter detail Fehler:', err.message);
     res.status(500).json({ error: err.message });
