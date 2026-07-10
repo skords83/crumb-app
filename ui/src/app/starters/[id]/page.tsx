@@ -3,9 +3,35 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Droplets, Trash2 } from 'lucide-react';
+import { ArrowLeft, Droplets, Trash2, TrendingUp, Moon, Zap } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { healthColor, timeSinceFeeding } from '@/lib/starter-health';
+
+type NextPeakPrediction = {
+  source: 'historical' | 'profile_rule';
+  window_start: string;
+  window_end: string;
+  median: string | null;
+};
+
+function formatPeakWindow(prediction: NextPeakPrediction): string {
+  const start = new Date(prediction.window_start);
+  const end = new Date(prediction.window_end);
+  const now = new Date();
+
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(start) - startOfDay(now)) / (24 * 60 * 60 * 1000));
+  const dayLabel = diffDays === 0 ? 'heute' : diffDays === 1 ? 'morgen'
+    : start.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+
+  const timeLabel = (d: Date) => d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+  const refPoint = prediction.median ? new Date(prediction.median) : start;
+  const hoursUntil = Math.round((refPoint.getTime() - now.getTime()) / (60 * 60 * 1000));
+  const relative = hoursUntil > 0 ? `in ~${hoursUntil}h` : hoursUntil === 0 ? 'jetzt' : 'überfällig';
+
+  return `${dayLabel}, ${timeLabel(start)}–${timeLabel(end)} Uhr (${relative})`;
+}
 
 function StarterDeleteConfirmModal({
   isDeleting,
@@ -63,7 +89,6 @@ export default function StarterDetailPage() {
 
   const [flourGrams, setFlourGrams] = useState(50);
   const [waterGrams, setWaterGrams] = useState(50);
-  const [discardGrams, setDiscardGrams] = useState<number | ''>('');
   const [temperature, setTemperature] = useState<number | ''>('');
   const [activityRating, setActivityRating] = useState(7);
   const [notes, setNotes] = useState('');
@@ -113,7 +138,6 @@ export default function StarterDetailPage() {
         body: JSON.stringify({
           flour_grams: flourGrams,
           water_grams: waterGrams,
-          discard_grams: discardGrams === '' ? undefined : discardGrams,
           temperature_celsius: temperature === '' ? undefined : temperature,
           activity_rating: activityRating,
           notes: notes || undefined,
@@ -125,7 +149,7 @@ export default function StarterDetailPage() {
         setIsSubmitting(false);
         return;
       }
-      setDiscardGrams(''); setTemperature(''); setNotes('');
+      setTemperature(''); setNotes('');
       setIsSubmitting(false);
       load();
     } catch (err: any) {
@@ -169,12 +193,14 @@ export default function StarterDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] px-6 text-[#2C1A0E] dark:text-white transition-colors duration-200 pb-24">
-      <div className="max-w-3xl mx-auto pt-8">
+      <div className="max-w-3xl min-[860px]:max-w-[1040px] mx-auto pt-8">
         <Link href="/starters" className="inline-flex items-center gap-2 text-sm text-[#A68B6A] dark:text-gray-400 hover:text-[#5C3D1E] dark:hover:text-gray-200 mb-6">
           <ArrowLeft size={16} /> Zurück
         </Link>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">
+        <div className="grid grid-cols-1 min-[860px]:grid-cols-[380px_1fr] gap-6 min-[860px]:items-start">
+        <div className="flex flex-col gap-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-black">{starter.name}</h1>
             <button
@@ -198,7 +224,7 @@ export default function StarterDetailPage() {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-black">Zielprofil</h2>
             <select
@@ -230,14 +256,31 @@ export default function StarterDetailPage() {
               </div>
             </div>
           </div>
+          {starter.next_peak_prediction && (
+            <div className="mb-3 rounded-xl bg-[#F5F0E8] dark:bg-gray-900 border border-[#D6C9B4] dark:border-gray-700 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp size={14} className="text-[#8B7355] dark:text-gray-400" />
+                <span className="text-sm font-bold text-[#5C3D1E] dark:text-gray-300">
+                  {formatPeakWindow(starter.next_peak_prediction)}
+                </span>
+              </div>
+              <p className="text-[10px] uppercase tracking-widest text-[#A68B6A] dark:text-gray-500">
+                {starter.next_peak_prediction.source === 'historical'
+                  ? 'Basierend auf deinen letzten Fütterungen'
+                  : 'Richtwert laut Zielprofil'}
+              </p>
+            </div>
+          )}
           <p className="text-xs text-[#A68B6A] dark:text-gray-500 border-t border-[#EDE5D6] dark:border-gray-700 pt-3">
             {profiles.find((p) => p.profile_key === starter.target_profile)?.description_de}
           </p>
         </div>
+        </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6 mb-6">
+        <div className="flex flex-col gap-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-[#D6C9B4] dark:border-gray-700 p-6">
           <h2 className="text-lg font-black mb-4">Fütterung protokollieren</h2>
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-3 gap-3 mb-3">
             <div>
               <label className="text-xs font-bold text-[#8B7355] dark:text-gray-400">Mehl (g)</label>
               <input type="number" value={flourGrams} onChange={e => setFlourGrams(Number(e.target.value) || 0)}
@@ -249,12 +292,7 @@ export default function StarterDetailPage() {
                 className="mt-1 w-full bg-[#F5F0E8] dark:bg-gray-900 border-2 border-[#D6C9B4] dark:border-gray-700 rounded-xl px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="text-xs font-bold text-[#8B7355] dark:text-gray-400">Verworfen (g, optional)</label>
-              <input type="number" value={discardGrams} onChange={e => setDiscardGrams(e.target.value === '' ? '' : Number(e.target.value))}
-                className="mt-1 w-full bg-[#F5F0E8] dark:bg-gray-900 border-2 border-[#D6C9B4] dark:border-gray-700 rounded-xl px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-[#8B7355] dark:text-gray-400 flex items-center gap-1"><Droplets size={11} /> Temperatur (°C, optional)</label>
+              <label className="text-xs font-bold text-[#8B7355] dark:text-gray-400 flex items-center gap-1"><Droplets size={11} /> Temp. (°C)</label>
               <input type="number" value={temperature} onChange={e => setTemperature(e.target.value === '' ? '' : Number(e.target.value))}
                 className="mt-1 w-full bg-[#F5F0E8] dark:bg-gray-900 border-2 border-[#D6C9B4] dark:border-gray-700 rounded-xl px-3 py-2 text-sm" />
             </div>
@@ -264,6 +302,20 @@ export default function StarterDetailPage() {
             <label className="text-xs font-bold text-[#8B7355] dark:text-gray-400">Aktivität ({activityRating}/10)</label>
             <input type="range" min={1} max={10} value={activityRating} onChange={e => setActivityRating(Number(e.target.value))}
               className="mt-1 w-full accent-[#8B7355]" />
+            <div className="flex items-center justify-between mt-2 px-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-full bg-[#F5F0E8] dark:bg-gray-900 border border-[#D6C9B4] dark:border-gray-700 flex items-center justify-center">
+                  <Moon size={12} className="text-[#8B7355] dark:text-gray-400" />
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-[#A68B6A] dark:text-gray-500">ruhig</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-widest text-[#A68B6A] dark:text-gray-500">aktiv</span>
+                <span className="w-6 h-6 rounded-full bg-[#F5F0E8] dark:bg-gray-900 border border-[#D6C9B4] dark:border-gray-700 flex items-center justify-center">
+                  <Zap size={12} className="text-[#8B7355] dark:text-gray-400" />
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="mb-4">
@@ -294,6 +346,8 @@ export default function StarterDetailPage() {
               ))}
             </div>
           )}
+        </div>
+        </div>
         </div>
 
         {showDeleteConfirm && (
