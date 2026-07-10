@@ -20,9 +20,12 @@ function formatPeakWindow(prediction: NextPeakPrediction): string {
   const now = new Date();
 
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(start) - startOfDay(now)) / (24 * 60 * 60 * 1000));
-  const dayLabel = diffDays === 0 ? 'heute' : diffDays === 1 ? 'morgen'
-    : start.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  const dayLabelFor = (d: Date) => {
+    const diffDays = Math.round((startOfDay(d) - startOfDay(now)) / (24 * 60 * 60 * 1000));
+    return diffDays === 0 ? 'heute' : diffDays === 1 ? 'morgen'
+      : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  };
+  const dayLabel = dayLabelFor(start);
 
   const timeLabel = (d: Date) => d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
@@ -30,7 +33,12 @@ function formatPeakWindow(prediction: NextPeakPrediction): string {
   const hoursUntil = Math.round((refPoint.getTime() - now.getTime()) / (60 * 60 * 1000));
   const relative = hoursUntil > 0 ? `in ~${hoursUntil}h` : hoursUntil === 0 ? 'jetzt' : 'überfällig';
 
-  return `${dayLabel}, ${timeLabel(start)}–${timeLabel(end)} Uhr (${relative})`;
+  const sameDay = startOfDay(start) === startOfDay(end);
+  const range = sameDay
+    ? `${dayLabel}, ${timeLabel(start)}–${timeLabel(end)} Uhr`
+    : `${dayLabel}, ${timeLabel(start)} Uhr – ${dayLabelFor(end)}, ${timeLabel(end)} Uhr`;
+
+  return `${range} (${relative})`;
 }
 
 function StarterDeleteConfirmModal({
