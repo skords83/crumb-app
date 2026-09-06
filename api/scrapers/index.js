@@ -4,7 +4,7 @@ const scrapeMarcelPaa  = require('./marcelpaa');
 const scrapeHomebaking = require('./homebaking');
 const scrapeJoSemola   = require('./josemola');
 const parseHtmlImport  = require('./smry');
-const axios            = require('axios');
+const { safeGet }      = require('../safe-http');
 const { ensureHttps }  = require('./utils');
 
 // ── SMRY-FALLBACK: URL fetchen, dann HTML-Parser aufrufen ────
@@ -12,7 +12,7 @@ const scrapeViaSmry = async (originalUrl) => {
   const smryUrl = `https://smry.app/${originalUrl}`;
   console.log(`⚠️ Unbekannte Quelle – versuche smry.app: ${smryUrl}`);
   try {
-    const { data: html } = await axios.get(smryUrl, {
+    const { data: html } = await safeGet(smryUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
       timeout: 15000
     });

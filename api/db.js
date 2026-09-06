@@ -6,7 +6,7 @@ const dbUrl = process.env.DATABASE_URL;
 
 console.log("-----------------------------------------");
 console.log("📡 VERBINDUNGS-CHECK:");
-console.log("Adresse:", dbUrl);
+console.log("DATABASE_URL konfiguriert:", Boolean(dbUrl));
 
 if (!dbUrl) {
   console.log("❌ FEHLER: DATABASE_URL ist komplett leer!");

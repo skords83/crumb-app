@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { safeGet } = require('../safe-http');
 const cheerio = require('cheerio');
 const { detectPortionCount, scaleSectionsToOnePortion, splitCompoundStep } = require('./utils');
 const { parseStepsWithLLM } = require('./llm-refine');
@@ -41,7 +41,7 @@ const detectIsParallel = (name) => {
 // ── HAUPT-SCRAPER ────────────────────────────────────────────
 const scrapeHomebaking = async (url) => {
   try {
-    const { data } = await axios.get(url.trim(), {
+    const { data } = await safeGet(url.trim(), {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Crumb/1.0)' },
       timeout: 12000
     });

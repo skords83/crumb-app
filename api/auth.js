@@ -8,7 +8,15 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+const MIN_PASSWORD_LENGTH = 12;
+const MAX_PASSWORD_LENGTH = 128;
+
+// A predictable fallback would allow anyone to forge bearer tokens when the
+// deployment configuration is incomplete. Refuse to start instead.
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error('JWT_SECRET must be configured and contain at least 32 characters');
+}
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -32,7 +40,7 @@ const authenticateToken = (req, res, next) => {
 const login = async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
   }
 
@@ -73,12 +81,12 @@ const login = async (req, res) => {
 const register = async (req, res) => {
   const { email, password, username } = req.body;
 
-  if (!email || !password || !username) {
+  if (typeof email !== 'string' || typeof password !== 'string' || typeof username !== 'string' || !email || !password || !username) {
     return res.status(400).json({ error: 'Email, username and password required' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters` });
   }
 
   if (username.length < 2) {
@@ -146,7 +154,7 @@ const verify = async (req, res) => {
 const requestPasswordReset = async (req, res) => {
   const { email } = req.body;
 
-  if (!email) {
+  if (typeof email !== 'string' || !email) {
     return res.status(400).json({ error: 'Email is required' });
   }
 
@@ -155,6 +163,11 @@ const requestPasswordReset = async (req, res) => {
     
     // Always return success to prevent email enumeration
     if (result.rows.length === 0) {
+      return res.json({ message: 'If an account exists, a reset link will be sent' });
+    }
+
+    if (!process.env.SMTP_HOST) {
+      console.error('Password reset requested, but SMTP is not configured');
       return res.json({ message: 'If an account exists, a reset link will be sent' });
     }
 
@@ -168,37 +181,30 @@ const requestPasswordReset = async (req, res) => {
       [resetTokenHash, resetExpires, user.id]
     );
 
-    // Send email if SMTP is configured
-    if (process.env.SMTP_HOST) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT || 587,
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
 
-      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&uid=${user.id}`;
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&uid=${user.id}`;
       
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@crumb.app',
-        to: email,
-        subject: 'Passwort zurücksetzen - Crumb',
-        html: `
-          <h1>Passwort zurücksetzen</h1>
-          <p>Klicke auf den folgenden Link, um dein Passwort zurückzusetzen:</p>
-          <a href="${resetLink}">${resetLink}</a>
-          <p>Dieser Link ist 1 Stunde gültig.</p>
-          <p>Falls du dies nicht angefordert hast, ignoriere diese E-Mail.</p>
-        `
-      });
-    } else {
-      // For development: return token directly
-      console.log('Reset token (dev mode):', resetToken);
-      console.log('Reset link:', `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&uid=${user.id}`);
-    }
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@crumb.app',
+      to: email,
+      subject: 'Passwort zurücksetzen - Crumb',
+      html: `
+        <h1>Passwort zurücksetzen</h1>
+        <p>Klicke auf den folgenden Link, um dein Passwort zurückzusetzen:</p>
+        <a href="${resetLink}">${resetLink}</a>
+        <p>Dieser Link ist 1 Stunde gültig.</p>
+        <p>Falls du dies nicht angefordert hast, ignoriere diese E-Mail.</p>
+      `
+    });
 
     res.json({ message: 'If an account exists, a reset link will be sent' });
   } catch (err) {
@@ -215,8 +221,8 @@ const resetPassword = async (req, res) => {
     return res.status(400).json({ error: 'Token, user ID and new password are required' });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters` });
   }
 
   try {
@@ -266,8 +272,8 @@ const changePassword = async (req, res) => {
     return res.status(400).json({ error: 'Current and new password are required' });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters` });
   }
 
   try {

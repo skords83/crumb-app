@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -19,8 +18,40 @@ const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
 const { evaluateAndDispatch, cleanupOldNotifications, initWebPush, checkStarterFeedingDue } = require('./notification-engine');
 const { router: startersRouter, setPool: setStartersPool } = require('./starters');
 const { TARGET_PROFILES } = require('./starter-profiles');
+const { safeGet } = require('./safe-http');
 
 const app = express();
+app.set('trust proxy', 1);
+
+const createRateLimiter = ({ windowMs, max }) => {
+  const attempts = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip;
+    const entry = attempts.get(key);
+    if (!entry && attempts.size >= 10_000) {
+      for (const [storedKey, storedEntry] of attempts) {
+        if (storedEntry.resetAt <= now) attempts.delete(storedKey);
+      }
+      if (attempts.size >= 10_000) {
+        return res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.' });
+      }
+    }
+    if (!entry || entry.resetAt <= now) {
+      attempts.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (entry.count >= max) {
+      res.set('Retry-After', Math.ceil((entry.resetAt - now) / 1000));
+      return res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.' });
+    }
+    entry.count += 1;
+    next();
+  };
+};
+
+const authRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+const passwordResetRateLimit = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
 
 // ============================================================
 // MIDDLEWARE & SETUP
@@ -46,17 +77,49 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 const uploadDir = path.join(__dirname, 'uploads');
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-app.use('/uploads', express.static(uploadDir));
+app.use('/uploads', express.static(uploadDir, {
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+  }
+}));
 
 // ============================================================
 // MULTER KONFIGURATION
 // ============================================================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => { cb(null, uploadDir); },
-  filename:    (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname); }
+  // Temporary files deliberately have no user-controlled extension. The final
+  // extension is assigned only after checking the file signature below.
+  filename:    (req, file, cb) => { cb(null, `${uuidv4()}.upload`); }
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: MAX_UPLOAD_BYTES,
+    files: 1,
+    fields: 10,
+    fieldSize: 16 * 1024,
+  },
+});
+
+const imageTypeFromSignature = (buffer) => {
+  if (buffer.length >= 3 && buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return { extension: 'jpg', mimeType: 'image/jpeg' };
+  }
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return { extension: 'png', mimeType: 'image/png' };
+  }
+  if (buffer.length >= 6 && (buffer.subarray(0, 6).equals(Buffer.from('GIF87a')) || buffer.subarray(0, 6).equals(Buffer.from('GIF89a')))) {
+    return { extension: 'gif', mimeType: 'image/gif' };
+  }
+  if (buffer.length >= 12 && buffer.subarray(0, 4).equals(Buffer.from('RIFF')) && buffer.subarray(8, 12).equals(Buffer.from('WEBP'))) {
+    return { extension: 'webp', mimeType: 'image/webp' };
+  }
+  return null;
+};
 
 // ============================================================
 // DATENBANK POOL & INIT
@@ -73,8 +136,7 @@ setStartersPool(pool);
 // Deshalb: BASE_URL env-Variable bevorzugen, sonst X-Forwarded-Proto auswerten.
 const getPublicBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '');
-  const proto = req.get('x-forwarded-proto') || req.protocol;
-  return `${proto}://${req.get('host')}`;
+  return 'http://localhost:5000';
 };
 
 const initDB = async () => {
@@ -330,11 +392,11 @@ const calculateTimeline = (plannedAt, sections) => {
 // ============================================================
 // AUTH ROUTES
 // ============================================================
-app.post('/api/auth/login', login);
-app.post('/api/auth/register', register);
+app.post('/api/auth/login', authRateLimit, login);
+app.post('/api/auth/register', authRateLimit, register);
 app.get('/api/auth/verify', authenticateToken, verify);
-app.post('/api/auth/request-reset', requestPasswordReset);
-app.post('/api/auth/reset-password', resetPassword);
+app.post('/api/auth/request-reset', passwordResetRateLimit, requestPasswordReset);
+app.post('/api/auth/reset-password', passwordResetRateLimit, resetPassword);
 app.post('/api/auth/change-password', authenticateToken, changePassword);
 
 // ============================================================
@@ -361,10 +423,33 @@ app.use('/api/notification-settings', notificationSettingsRouter);
 // ── Starters Router ──
 app.use('/api/starters', startersRouter);
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
-  const imageUrl = `${getPublicBaseUrl(req)}/uploads/${req.file.filename}`;
-  res.json({ url: imageUrl });
+app.post('/api/upload', (req, res) => {
+  upload.single('file')(req, res, async (uploadError) => {
+    if (uploadError) {
+      const status = uploadError instanceof multer.MulterError ? 400 : 500;
+      return res.status(status).json({ error: 'Upload fehlgeschlagen' });
+    }
+    if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+
+    const temporaryPath = req.file.path;
+    try {
+      const signature = await fs.promises.readFile(temporaryPath, { encoding: null });
+      const imageType = imageTypeFromSignature(signature);
+      if (!imageType) {
+        await fs.promises.unlink(temporaryPath);
+        return res.status(400).json({ error: 'Nur JPEG, PNG, GIF und WebP sind erlaubt' });
+      }
+
+      const filename = `${uuidv4()}.${imageType.extension}`;
+      await fs.promises.rename(temporaryPath, path.join(uploadDir, filename));
+      res.type(imageType.mimeType);
+      res.json({ url: `${getPublicBaseUrl(req)}/uploads/${filename}` });
+    } catch (error) {
+      await fs.promises.unlink(temporaryPath).catch(() => {});
+      console.error('Upload-Verarbeitung fehlgeschlagen:', error.message);
+      res.status(500).json({ error: 'Upload fehlgeschlagen' });
+    }
+  });
 });
 
 app.post('/api/import', async (req, res) => {
@@ -383,7 +468,7 @@ app.post('/api/import', async (req, res) => {
     if (!recipeData.source_url) recipeData.source_url = url;
     if (recipeData.image_url && recipeData.image_url.startsWith('http')) {
       try {
-        const response = await axios.get(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const response = await safeGet(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
         const fileName = `import-${Date.now()}-${uuidv4().substring(0, 8)}.jpg`;
         fs.writeFileSync(path.join(uploadDir, fileName), response.data);
         recipeData.image_url = `${getPublicBaseUrl(req)}/uploads/${fileName}`;
@@ -409,7 +494,7 @@ app.post('/api/import/html', async (req, res) => {
 
     if (recipeData.image_url && recipeData.image_url.startsWith('http') && !recipeData.image_url.startsWith('data:')) {
       try {
-        const response = await axios.get(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const response = await safeGet(recipeData.image_url, { responseType: 'arraybuffer', timeout: 7000, headers: { 'User-Agent': 'Mozilla/5.0' } });
         const fileName = `import-${Date.now()}-${uuidv4().substring(0, 8)}.jpg`;
         fs.writeFileSync(path.join(uploadDir, fileName), response.data);
         recipeData.image_url = `${getPublicBaseUrl(req)}/uploads/${fileName}`;

@@ -1,11 +1,11 @@
-const axios = require('axios');
+const { safeGet } = require('../safe-http');
 const cheerio = require('cheerio');
 const { stepDuration, isBakingStep, splitCompoundStep } = require('./utils');
 const { parseFullRecipeWithLLM } = require('./llm-refine');
 
 const scrapeBrotdoc = async (url) => {
   try {
-    const { data } = await axios.get(url.trim(), {
+    const { data } = await safeGet(url.trim(), {
       headers: { 'User-Agent': 'Mozilla/5.0' },
       timeout: 10000
     });

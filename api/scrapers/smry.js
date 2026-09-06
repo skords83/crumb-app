@@ -1,4 +1,4 @@
-const axios = require("axios");
+const { safeGet } = require("../safe-http");
 const cheerio = require("cheerio");
 const path = require("path");
 const fs = require("fs");
@@ -428,7 +428,7 @@ const parseHtmlImport = async (html, filename, hostUrl) => {
           : "https://" + ploetzMatch[1];
         recipeData.original_source_url = ploetzUrl;
         try {
-          const ploetzRes = await axios.get(ploetzUrl, {
+          const ploetzRes = await safeGet(ploetzUrl, {
             timeout: 8000,
             headers: { "User-Agent": "Mozilla/5.0" },
           });
