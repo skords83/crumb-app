@@ -7,6 +7,7 @@
 // ============================================================
 const express = require('express');
 const router = express.Router();
+const { validatePushSubscription } = require('./push-security');
 
 // Pool wird vom Parent-Module injiziert
 let pool;
@@ -38,23 +39,29 @@ router.get('/status', async (req, res) => {
 
 // ── POST /api/push/subscribe — Subscription registrieren ──
 // Body: { endpoint, keys: { p256dh, auth }, userAgent? }
-// Upsert: gleiche endpoint → update (z.B. wenn ein User Account-Wechsel macht).
+// Updates are restricted to the existing owner.
 router.post('/subscribe', async (req, res) => {
   const { endpoint, keys, userAgent } = req.body || {};
-  if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
-    return res.status(400).json({ error: 'endpoint, keys.p256dh, keys.auth erforderlich' });
+  try {
+    validatePushSubscription({ endpoint, keys, userAgent });
+  } catch {
+    return res.status(400).json({ error: 'Ungültige Push-Subscription oder nicht erlaubter Anbieter' });
   }
   try {
-    await pool.query(
+    const count = await pool.query('SELECT COUNT(*)::int AS n FROM push_subscriptions WHERE user_id = $1 AND endpoint <> $2', [req.user.userId, endpoint]);
+    if (count.rows[0].n >= 20) return res.status(429).json({ error: 'Maximal 20 Push-Geräte erlaubt' });
+    const saved = await pool.query(
       `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (endpoint) DO UPDATE SET
          user_id = EXCLUDED.user_id,
          p256dh = EXCLUDED.p256dh,
          auth = EXCLUDED.auth,
-         user_agent = EXCLUDED.user_agent`,
+         user_agent = EXCLUDED.user_agent
+       WHERE push_subscriptions.user_id = EXCLUDED.user_id RETURNING id`,
       [req.user.userId, endpoint, keys.p256dh, keys.auth, userAgent || null]
     );
+    if (!saved.rowCount) return res.status(409).json({ error: 'Subscription bereits vergeben' });
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error('❌ subscribe Fehler:', err.message);

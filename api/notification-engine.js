@@ -1,3 +1,4 @@
+const { validatePushSubscription, pushAgent } = require('./push-security');
 // api/notification-engine.js
 // ============================================================
 // NOTIFICATION ENGINE — Auswertung & Versand für Bake-Sessions
@@ -349,7 +350,8 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
         keys: { p256dh: sub.p256dh, auth: sub.auth },
       };
       try {
-        await webpush.sendNotification(subscription, payload, { TTL: 3600 });
+        validatePushSubscription(subscription);
+        await webpush.sendNotification(subscription, payload, { TTL: 3600, timeout: 10_000, agent: pushAgent });
         poolRef
           .query(
             "UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = $1",

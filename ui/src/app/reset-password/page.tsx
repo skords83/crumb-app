@@ -33,8 +33,8 @@ function ResetPasswordForm() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Das Passwort muss mindestens 6 Zeichen haben');
+    if (password.length < 12) {
+      setError('Das Passwort muss mindestens 12 Zeichen haben');
       return;
     }
 
@@ -138,7 +138,7 @@ function ResetPasswordForm() {
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-700 bg-gray-900 text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors placeholder:text-gray-600"
               placeholder="••••••••"
               required
-              minLength={6}
+              minLength={12}
               disabled={!token || !userId}
             />
           </div>
@@ -154,7 +154,7 @@ function ResetPasswordForm() {
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-700 bg-gray-900 text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors placeholder:text-gray-600"
               placeholder="••••••••"
               required
-              minLength={6}
+              minLength={12}
               disabled={!token || !userId}
             />
           </div>

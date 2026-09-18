@@ -103,3 +103,28 @@ crumb/
 ## Lizenz
 
 MIT
+
+## Sicherheitskonfiguration
+
+Neue Konten benötigen einen Einladungscode. Setze `REGISTRATION_INVITE_CODE` in
+`.env` auf einen zufälligen Wert mit mindestens 32 Zeichen, beispielsweise erzeugt
+mit `openssl rand -hex 32`. Teile ihn nur mit eingeladenen Personen. Ohne Code
+bleibt die Registrierung gesperrt; bestehende Konten können sich weiter anmelden.
+Zum Sperren weiterer Registrierungen den Wert entfernen und den API-Container
+neu erstellen. Ein geänderter Code beeinflusst bestehende Konten nicht.
+
+Beim ersten Start dieser Sicherheitsversion wird `users.token_version` automatisch
+angelegt. Bestehende Anmeldungen werden einmalig ungültig. Passwortwechsel und
+Passwortreset widerrufen danach sämtliche bisherigen Anmeldungen des Kontos
+und offene Reset-Links; anschließend ist eine erneute Anmeldung erforderlich.
+
+Push unterstützt HTTPS-Endpunkte von Google FCM, Mozilla und Apple. Ziele werden
+auch beim Versand geprüft, DNS-Adressen beim Verbindungsaufbau auf öffentliche
+Adressen begrenzt. Andere Anbieter werden abgelehnt. Pro Benutzer sind bis zu
+20 Geräte vorgesehen, Versandverbindungen haben ein Zeitlimit von 10 Sekunden.
+Eine Subscription kann nicht durch ein anderes Konto übernommen werden; beim
+Kontowechsel gegebenenfalls Push zunächst im bisherigen Konto deaktivieren.
+
+Prüfungen: `cd api && npm test`, `cd ui && npm run build`, sowie `npm audit`
+in beiden Verzeichnissen. Sicherheitsupdates werden erst nach Neubau und
+Deployment der Container in der laufenden Anwendung wirksam.

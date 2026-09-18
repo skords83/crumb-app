@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const { login, register, isLoading, error } = useAuth();
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       if (isRegister) {
-        await register(email, password, username);
+        await register(email, password, username, inviteCode);
       } else {
         await login(email, password);
       }
@@ -55,6 +56,11 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {isRegister && <div>
+            <label htmlFor="invite-code" className="block text-sm font-bold mb-2">Einladungscode</label>
+            <input id="invite-code" type="password" value={inviteCode} onChange={e => setInviteCode(e.target.value)} required maxLength={256} autoComplete="off" className="w-full px-4 py-3 rounded-xl border-2 border-[#D6C9B4] dark:border-gray-700 bg-[#F5F0E8] dark:bg-gray-900" />
+            <p className="text-xs mt-1">Den Code erhältst du vom Betreiber.</p>
+          </div>}
           {isRegister && (
             <div>
               <label className="block text-sm font-bold text-[#5C3D1E] dark:text-gray-300 mb-2">
@@ -97,11 +103,11 @@ export default function LoginPage() {
               className="w-full px-4 py-3 rounded-xl border-2 border-[#D6C9B4] dark:border-gray-700 bg-[#F5F0E8] dark:bg-gray-900 text-[#2C1A0E] dark:text-gray-100 focus:border-[#8B7355] focus:outline-none transition-colors placeholder:text-[#C4A484] dark:placeholder:text-gray-600"
               placeholder="••••••••"
               required
-              minLength={6}
+              minLength={isRegister ? 12 : 1}
             />
             {isRegister && (
               <p className="text-xs text-[#A68B6A] dark:text-gray-500 mt-1">
-                Mindestens 6 Zeichen
+                Mindestens 12 Zeichen
               </p>
             )}
             {!isRegister && (

@@ -627,7 +627,7 @@ function TabSecurity() {
     e.preventDefault();
     setError(''); setMessage('');
     if (newPassword !== confirmPassword) { setError('Die neuen Passwörter stimmen nicht überein'); return; }
-    if (newPassword.length < 6) { setError('Das Passwort muss mindestens 6 Zeichen haben'); return; }
+    if (newPassword.length < 12) { setError('Das Passwort muss mindestens 12 Zeichen haben'); return; }
     setIsLoading(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/change-password`, {
@@ -637,7 +637,8 @@ function TabSecurity() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Fehler beim Ändern des Passworts'); return; }
-      setMessage('Passwort wurde erfolgreich geändert');
+      localStorage.removeItem('crumb_token');
+      window.location.href = '/login';
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
     } catch { setError('Verbindungsfehler. Bitte versuche es später erneut.'); }
     finally { setIsLoading(false); }

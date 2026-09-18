@@ -203,6 +203,7 @@ const initDB = async () => {
   while (retries > 0) {
     try {
       await pool.query(createUsersTable);
+      await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0');
       await pool.query(createRecipesTable);
       await pool.query(createIndex);
       await pool.query(migrateRecipesTable);
@@ -397,7 +398,7 @@ app.post('/api/auth/register', authRateLimit, register);
 app.get('/api/auth/verify', authenticateToken, verify);
 app.post('/api/auth/request-reset', passwordResetRateLimit, requestPasswordReset);
 app.post('/api/auth/reset-password', passwordResetRateLimit, resetPassword);
-app.post('/api/auth/change-password', authenticateToken, changePassword);
+app.post('/api/auth/change-password', authenticateToken, passwordResetRateLimit, changePassword);
 
 // ============================================================
 // API ROUTES (Protected)
@@ -415,7 +416,7 @@ app.use('/api', (req, res, next) => {
 app.use('/api/bake-sessions', bakeSessionsRouter);
 
 // ── Push Subscriptions Router ──
-app.use('/api/push', pushRouter);
+app.use('/api/push', createRateLimiter({ windowMs: 60 * 1000, max: 30 }), pushRouter);
 
 // ── Notification Settings Router ──
 app.use('/api/notification-settings', notificationSettingsRouter);

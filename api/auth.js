@@ -19,20 +19,26 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 }
 
 // Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access denied. No token provided.' });
-  }
-
+const authenticateToken = async (req, res, next) => {
+  const match = /^Bearer ([^ ]+)$/.exec(req.headers.authorization || '');
+  if (!match) return res.status(401).json({ error: 'Anmeldung erforderlich' });
+  let verified;
   try {
-    const verified = jwt.verify(token, JWT_SECRET);
+    verified = jwt.verify(match[1], JWT_SECRET, { algorithms: ['HS256'] });
+    if (!Number.isInteger(verified.userId) || !Number.isInteger(verified.tokenVersion)) throw new Error('Invalid claims');
+  } catch {
+    return res.status(401).json({ error: 'Anmeldung abgelaufen. Bitte erneut anmelden.' });
+  }
+  try {
+    const result = await pool.query('SELECT token_version FROM users WHERE id = $1', [verified.userId]);
+    if (!result.rows[0] || result.rows[0].token_version !== verified.tokenVersion) {
+      return res.status(401).json({ error: 'Anmeldung abgelaufen. Bitte erneut anmelden.' });
+    }
     req.user = verified;
     next();
   } catch (err) {
-    res.status(403).json({ error: 'Invalid token' });
+    console.error('Session verification failed:', err.message);
+    res.status(503).json({ error: 'Anmeldung momentan nicht prüfbar' });
   }
 };
 
@@ -58,7 +64,7 @@ const login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, tokenVersion: user.token_version },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -79,7 +85,12 @@ const login = async (req, res) => {
 
 // Register
 const register = async (req, res) => {
-  const { email, password, username } = req.body;
+  const { email, password, username, inviteCode } = req.body || {};
+  const expected = process.env.REGISTRATION_INVITE_CODE;
+  if (!expected || expected.length < 32 || typeof inviteCode !== 'string' || inviteCode.length > 256 ||
+      !crypto.timingSafeEqual(crypto.createHash('sha256').update(inviteCode).digest(), crypto.createHash('sha256').update(expected).digest())) {
+    return res.status(403).json({ error: 'Registrierung nur mit gültigem Einladungscode möglich.' });
+  }
 
   if (typeof email !== 'string' || typeof password !== 'string' || typeof username !== 'string' || !email || !password || !username) {
     return res.status(400).json({ error: 'Email, username and password required' });
@@ -108,13 +119,13 @@ const register = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     const result = await pool.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email',
+      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, token_version',
       [username, email, passwordHash]
     );
 
     const user = result.rows[0];
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, tokenVersion: user.token_version },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -217,7 +228,7 @@ const requestPasswordReset = async (req, res) => {
 const resetPassword = async (req, res) => {
   const { token, userId, newPassword } = req.body;
 
-  if (!token || !userId || !newPassword) {
+  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || !userId || !newPassword) {
     return res.status(400).json({ error: 'Token, user ID and new password are required' });
   }
 
@@ -251,10 +262,11 @@ const resetPassword = async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await pool.query(
-      'UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_token_expires = NULL WHERE id = $2',
-      [passwordHash, userId]
+    const updated = await pool.query(
+      'UPDATE users SET password_hash = $1, token_version = token_version + 1, reset_token_hash = NULL, reset_token_expires = NULL WHERE id = $2 AND reset_token_hash = $3 AND reset_token_expires > CURRENT_TIMESTAMP RETURNING id',
+      [passwordHash, userId, user.reset_token_hash]
     );
+    if (!updated.rowCount) return res.status(400).json({ error: 'Invalid or expired token' });
 
     res.json({ message: 'Password has been reset successfully' });
   } catch (err) {
@@ -268,7 +280,7 @@ const changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.user.userId;
 
-  if (!currentPassword || !newPassword) {
+  if (typeof currentPassword !== 'string' || !currentPassword || !newPassword) {
     return res.status(400).json({ error: 'Current and new password are required' });
   }
 
@@ -292,10 +304,11 @@ const changePassword = async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await pool.query(
-      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [passwordHash, userId]
+    const updated = await pool.query(
+      'UPDATE users SET password_hash = $1, token_version = token_version + 1, reset_token_hash = NULL, reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND password_hash = $3 RETURNING id',
+      [passwordHash, userId, result.rows[0].password_hash]
     );
+    if (!updated.rowCount) return res.status(409).json({ error: 'Passwort wurde bereits geändert. Bitte erneut anmelden.' });
 
     res.json({ message: 'Password changed successfully' });
   } catch (err) {

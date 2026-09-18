@@ -18,11 +18,15 @@ function isPublicIp(address) {
     return true;
   }
   if (family === 6) {
-    const normalized = address.toLowerCase();
-    if (normalized === '::' || normalized === '::1') return false;
-    if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:')) return false;
-    const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    return !mapped || isPublicIp(mapped[1]);
+    // Only global unicast; reject mapped IPv4, local, multicast and transition ranges.
+    const global = new net.BlockList();
+    global.addSubnet('2000::', 3, 'ipv6');
+    const special = new net.BlockList();
+    special.addSubnet('2001::', 23, 'ipv6');
+    special.addSubnet('2001:db8::', 32, 'ipv6');
+    special.addSubnet('2002::', 16, 'ipv6');
+    special.addSubnet('3fff::', 20, 'ipv6');
+    return global.check(address, 'ipv6') && !special.check(address, 'ipv6');
   }
   return false;
 }
@@ -48,9 +52,15 @@ async function resolvePublicHost(hostname) {
   return addresses;
 }
 
-function safeLookup(hostname, _options, callback) {
+function safeLookup(hostname, options, callback) {
   resolvePublicHost(hostname)
-    .then(([address]) => callback(null, address.address, net.isIP(address.address)))
+    .then((addresses) => {
+      const family = typeof options === 'number' ? options : options?.family;
+      const matches = family ? addresses.filter(a => a.family === family) : addresses;
+      if (!matches.length) throw new Error('Keine öffentliche Adresse für diese Adressfamilie');
+      if (options?.all) callback(null, matches);
+      else callback(null, matches[0].address, matches[0].family);
+    })
     .catch(callback);
 }
 
@@ -66,6 +76,11 @@ async function safeGet(url, options = {}) {
     maxBodyLength: MAX_REMOTE_RESPONSE_BYTES,
     proxy: false,
     beforeRedirect: (redirectOptions) => {
+      // Node bypasses DNS lookup for IP literals, so validate these explicitly.
+      const hostname = redirectOptions.hostname.replace(/^\[|\]$/g, '');
+      if (net.isIP(hostname) && !isPublicIp(hostname)) {
+        throw new Error('Weiterleitung auf eine interne Adresse blockiert');
+      }
       if (redirectOptions.protocol !== 'https:') {
         throw new Error('Weiterleitung auf ein unsicheres Protokoll blockiert');
       }
@@ -73,4 +88,4 @@ async function safeGet(url, options = {}) {
   });
 }
 
-module.exports = { safeGet, isPublicIp, parseRemoteUrl };
+module.exports = { safeGet, isPublicIp, parseRemoteUrl, safeLookup };
