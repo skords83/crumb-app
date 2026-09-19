@@ -64,7 +64,16 @@ function createWidgetRouter(pool, config = process.env) {
           timeline: buildUITimeline(sections, states, row.step_timestamps || {}, row.planned_at),
         };
       });
-      return res.json({ active_count: sessions.length, next_step: selectNextStep(sessions) });
+      const recipeResult = await pool.query(
+        'SELECT COUNT(*)::int AS count FROM recipes WHERE user_id = $1 AND archived_at IS NULL',
+        [userId]
+      );
+      
+      return res.json({
+        recipe_count: recipeResult.rows[0].count,
+        active_count: sessions.length,
+        next_step: selectNextStep(sessions)
+      });
     } catch (error) {
       console.error('Widget-Status Fehler:', error.message);
       return res.status(500).json({ error: 'Status derzeit nicht verfügbar' });
