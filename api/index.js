@@ -13,6 +13,7 @@ const { v4: uuidv4 } = require('uuid');
 const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 const { categorizeRecipe } = require('./categorize');
 const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
+const { createWidgetRouter } = require('./widget-status');
 const { router: pushRouter, setPool: setPushPool } = require('./push');
 const { router: notificationSettingsRouter, setPool: setNotificationSettingsPool } = require('./notification-settings');
 const { checkSoftDone } = require('./bake-engine');
@@ -405,6 +406,7 @@ app.post('/api/auth/change-password', authenticateToken, passwordResetRateLimit,
 // ============================================================
 // API ROUTES (Protected)
 // ============================================================
+app.use('/api/widget', createWidgetRouter(pool));
 app.use(authenticateToken);
 
 // Alle API-Responses: kein Caching (personalisierte Daten)
