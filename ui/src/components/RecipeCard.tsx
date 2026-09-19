@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Clock, Layers, Utensils, Heart, Droplets } from 'lucide-react';
 import { calcTotalDurationRange } from "@/lib/backplan-utils";
-import { calcHydration } from '@/lib/hydration';
+import { hydrationDetails } from '@/lib/hydration';
 import { getCategoryStyle, getHydrationColor } from '@/lib/category-colors';
 
 interface RecipeCardProps {
@@ -19,8 +19,9 @@ const getStats = (recipe: any) => {
   const fmt = (mins: number) => { const h = Math.floor(mins / 60), m = mins % 60; return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`; };
   const timeString = min !== max ? `${fmt(min)} – ${fmt(max)}` : fmt(min);
   const totalSteps = (recipe.dough_sections || []).reduce((s: number, sec: any) => s + (sec.steps?.length || 0), 0);
-  const hydration = calcHydration(recipe.dough_sections || []);
-  return { timeString, totalSteps, hydration };
+  const details = hydrationDetails(recipe.dough_sections || []);
+  const hydration = details.value;
+  return { timeString, totalSteps, hydration, hydrationApproximate: details.approximate, hydrationNotes: details.warnings.join(" ") };
 };
 
 const getRecipeLabels = (recipe: any) => {
@@ -171,8 +172,8 @@ export default function RecipeCard({ recipe, onToggleFavorite, onPlan }: RecipeC
               <div className="flex items-center justify-center gap-1.5 flex-1 min-w-0">
                 <Droplets size={14} className="flex-shrink-0 dark:hidden" style={{ color: hydrationColor.light }} />
                 <Droplets size={14} className="flex-shrink-0 hidden dark:block" style={{ color: hydrationColor.dark }} />
-                <span className="text-[13px] font-bold leading-none dark:hidden" style={{ color: hydrationColor.light }}>{stats.hydration}%</span>
-                <span className="text-[13px] font-bold leading-none hidden dark:inline" style={{ color: hydrationColor.dark }}>{stats.hydration}%</span>
+                <span className="text-[13px] font-bold leading-none dark:hidden" style={{ color: hydrationColor.light }}>{stats.hydrationApproximate ? "≈ " : ""}{stats.hydration}%</span>
+                <span className="text-[13px] font-bold leading-none hidden dark:inline" style={{ color: hydrationColor.dark }}>{stats.hydrationApproximate ? "≈ " : ""}{stats.hydration}%</span>
               </div>
             </>
           )}

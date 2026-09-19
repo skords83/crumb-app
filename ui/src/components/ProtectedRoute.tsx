@@ -8,15 +8,24 @@ import { Loader2 } from 'lucide-react';
 const publicPaths = ['/login', '/forgot-password', '/reset-password'];
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, verificationError, retryVerification } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !user && !publicPaths.some(p => pathname.startsWith(p))) {
+    if (!isLoading && !verificationError && !user && !publicPaths.some(p => pathname.startsWith(p))) {
       router.push('/login');
     }
-  }, [user, isLoading, router, pathname]);
+  }, [user, isLoading, verificationError, router, pathname]);
+
+  if (verificationError && !publicPaths.includes(pathname)) {
+    return <div className="min-h-[100dvh] flex items-center justify-center px-6">
+      <div className="text-center max-w-sm" role="alert">
+        <p>{verificationError}</p>
+        <button onClick={retryVerification} className="mt-4 rounded-xl bg-[#8B7355] px-5 py-3 text-white">Erneut versuchen</button>
+      </div>
+    </div>;
+  }
 
   if (isLoading) {
     return (

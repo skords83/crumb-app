@@ -1,3 +1,4 @@
+const { migrateBakeReliability, sessionRecipeColumns } = require('./bake-persistence');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -14,7 +15,7 @@ const { categorizeRecipe } = require('./categorize');
 const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
 const { router: pushRouter, setPool: setPushPool } = require('./push');
 const { router: notificationSettingsRouter, setPool: setNotificationSettingsPool } = require('./notification-settings');
-const { checkSoftDone, calculateProjectedEnd } = require('./bake-engine');
+const { checkSoftDone } = require('./bake-engine');
 const { evaluateAndDispatch, cleanupOldNotifications, initWebPush, checkStarterFeedingDue } = require('./notification-engine');
 const { router: startersRouter, setPool: setStartersPool } = require('./starters');
 const { TARGET_PROFILES } = require('./starter-profiles');
@@ -224,6 +225,7 @@ await pool.query(migratePlannedAtType);
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );`);
+      await migrateBakeReliability(pool);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_active ON bake_sessions(user_id) WHERE finished_at IS NULL;`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_recipe ON bake_sessions(recipe_id, finished_at DESC);`);
       // ── Sent Notifications: DB-basierte Dedup für Notification-Versand ──
@@ -517,7 +519,7 @@ app.get('/api/recipes', async (req, res) => {
   try {
     const { q, category, filter, sort } = req.query;
     const params = [req.user.userId];
-    const conditions = ['user_id = $1'];
+    const conditions = ['user_id = $1', 'archived_at IS NULL'];
 
     // Volltextsuche über title, description und Zutaten-Namen in dough_sections
     if (q) {
@@ -734,7 +736,7 @@ app.put('/api/recipes/:id', async (req, res) => {
     const category = manualCategory || categorizeRecipe({ title, dough_sections });
     const result = await pool.query(
       `UPDATE recipes SET title=$1, image_url=$2, ingredients=$3, steps=$4, description=$5, dough_sections=$6, source_url=$7, original_source_url=$8, category=$9
-       WHERE id=$10 AND user_id=$11 RETURNING *;`,
+       WHERE id=$10 AND user_id=$11 AND archived_at IS NULL RETURNING *;`,
       [title, image_url, JSON.stringify(ingredients), JSON.stringify(steps), description,
        JSON.stringify(dough_sections), source_url || '', original_source_url || '', category, id, req.user.userId]
     );
@@ -746,7 +748,7 @@ app.put('/api/recipes/:id', async (req, res) => {
 app.delete('/api/recipes/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM recipes WHERE id=$1 AND user_id=$2 RETURNING *',
+      'UPDATE recipes SET archived_at = NOW(), planned_at = NULL, planned_timeline = NULL WHERE id=$1 AND user_id=$2 AND archived_at IS NULL RETURNING *',
       [req.params.id, req.user.userId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: "Nicht gefunden" });
@@ -761,7 +763,7 @@ app.patch('/api/recipes/:id', async (req, res) => {
     let result;
     if (planned_at !== undefined) {
       const recipeResult = await pool.query(
-        'SELECT dough_sections FROM recipes WHERE id=$1 AND user_id=$2',
+        'SELECT dough_sections FROM recipes WHERE id=$1 AND user_id=$2 AND archived_at IS NULL',
         [id, req.user.userId]
       );
       if (recipeResult.rows.length === 0) return res.status(404).json({ error: "Nicht gefunden" });
@@ -784,12 +786,12 @@ app.patch('/api/recipes/:id', async (req, res) => {
       }
 
       result = await pool.query(
-  "UPDATE recipes SET planned_at=$1, planned_timeline=$2, multiplier=$3 WHERE id=$4 AND user_id=$5 RETURNING *",
+  "UPDATE recipes SET planned_at=$1, planned_timeline=$2, multiplier=$3 WHERE id=$4 AND user_id=$5 AND archived_at IS NULL RETURNING *",
   [planned_at || null, timelineToSave ? JSON.stringify(timelineToSave) : null, multiplier ?? 1, id, req.user.userId]
 );
     } else if (is_favorite !== undefined) {
       result = await pool.query(
-        "UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 RETURNING *",
+        "UPDATE recipes SET is_favorite=$1 WHERE id=$2 AND user_id=$3 AND archived_at IS NULL RETURNING *",
         [is_favorite, id, req.user.userId]
       );
     }
@@ -811,7 +813,7 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT * FROM recipes WHERE id = $1 AND user_id = $2',
+      'SELECT * FROM recipes WHERE id = $1 AND user_id = $2 AND archived_at IS NULL',
       [id, req.user.userId]
     );
     if (result.rows.length === 0) {
@@ -829,7 +831,7 @@ app.post('/api/recipes/:id/plan-night', async (req, res) => {
     if (planResult.viable && planResult.endTime && planResult.plan?.length > 0) {
       try {
         await pool.query(
-          'UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4',
+          'UPDATE recipes SET planned_at=$1, planned_timeline=$2 WHERE id=$3 AND user_id=$4 AND archived_at IS NULL',
           [planResult.endTime, JSON.stringify(planResult.plan), id, req.user.userId]
         );
       } catch (saveErr) {
@@ -854,7 +856,7 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
     }
 
     const result = await pool.query(
-      'UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      'UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3 AND archived_at IS NULL RETURNING *',
       [plannedAt, id, req.user.userId]
     );
     if (result.rows.length === 0) {
@@ -872,10 +874,10 @@ app.post('/api/recipes/:id/plan-night/save', async (req, res) => {
 // SERVER STARTEN
 // ============================================================
 const PORT = 5000;
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Backend läuft auf Port ${PORT}`);
+async function startServer() {
   await initDB();
   initWebPush();
+  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Backend läuft auf Port ${PORT}`));
 
   // ── Notification-Sweep ───────────────────────────────────
   // Iteriert über aktive Bake-Sessions, prüft soft_done-Übergänge
@@ -886,9 +888,8 @@ app.listen(PORT, '0.0.0.0', async () => {
   const notificationSweep = async () => {
     try {
       const result = await pool.query(
-        `SELECT bs.*, r.title, r.dough_sections
+        `SELECT bs.*, ${sessionRecipeColumns}
          FROM bake_sessions bs
-         JOIN recipes r ON r.id = bs.recipe_id
          WHERE bs.finished_at IS NULL`
       );
       for (const session of result.rows) {
@@ -897,20 +898,8 @@ app.listen(PORT, '0.0.0.0', async () => {
         const timestamps = session.step_timestamps || {};
 
         // Soft-Done Check: Warten-Timer abgelaufen?
-        const { states: updatedStates, softDoneSteps } = checkSoftDone(sections, states, timestamps);
-        if (softDoneSteps.length > 0) {
-          await pool.query(
-            'UPDATE bake_sessions SET step_states = $1 WHERE id = $2',
-            [JSON.stringify(updatedStates), session.id]
-          );
-        }
-
-        // Projected End neu berechnen (für UI)
-        const projectedEnd = calculateProjectedEnd(sections, updatedStates, timestamps);
-        await pool.query(
-          'UPDATE bake_sessions SET projected_end = $1 WHERE id = $2',
-          [projectedEnd, session.id]
-        );
+        const { states: updatedStates } = checkSoftDone(sections, states, timestamps);
+        // Timer-derived state stays read-only; only user transitions persist changes.
 
         // Notifications auswerten und versenden (idempotent, DB-Dedup)
         await evaluateAndDispatch(pool, { ...session, step_states: updatedStates }, sections);
@@ -932,4 +921,6 @@ app.listen(PORT, '0.0.0.0', async () => {
   // Sweep alle 60s, Cleanup alle 6h
   setInterval(notificationSweep, 60 * 1000);
   setInterval(() => cleanupOldNotifications(pool), 6 * 60 * 60 * 1000);
-});
+}
+
+startServer().catch(err => { console.error('Start fehlgeschlagen:', err); process.exit(1); });

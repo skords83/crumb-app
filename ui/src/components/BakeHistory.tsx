@@ -1,6 +1,7 @@
 // ui/src/components/BakeHistory.tsx
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from 'react';
 import { Clock, FileText, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { type BakeHistoryEntry, type RecipeStats, formatDuration } from '@/lib/backplan-utils';
@@ -35,12 +36,12 @@ export default function BakeHistory({ recipeId }: BakeHistoryProps) {
   const loadData = () => {
     const headers = { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` };
 
-    fetch(`${API}/bake-sessions/recipe-stats/${recipeId}`, { headers })
+    apiFetch(`${API}/bake-sessions/recipe-stats/${recipeId}`, { headers })
       .then(r => r.json())
       .then(setStats)
       .catch(() => {});
 
-    fetch(`${API}/bake-sessions/history?recipe_id=${recipeId}`, { headers })
+    apiFetch(`${API}/bake-sessions/history?recipe_id=${recipeId}`, { headers })
       .then(r => r.json())
       .then(data => { setHistory(Array.isArray(data) ? data : []); setIsLoading(false); })
       .catch(() => setIsLoading(false));
@@ -50,7 +51,7 @@ export default function BakeHistory({ recipeId }: BakeHistoryProps) {
 
   const deleteEntry = async (sessionId: number) => {
     try {
-      const res = await fetch(`${API}/bake-sessions/${sessionId}`, {
+      const res = await apiFetch(`${API}/bake-sessions/${sessionId}`, {
         method: 'DELETE',
         headers: authHeaders(),
       });

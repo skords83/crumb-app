@@ -22,5 +22,8 @@
     "pg": "^8.18.0",
     "uuid": "^14.0.2",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
   }
 }

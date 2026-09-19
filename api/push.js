@@ -15,7 +15,7 @@ function setPool(p) { pool = p; }
 
 // ── GET /api/push/vapid-key — öffentlicher VAPID-Key fürs Frontend ──
 router.get('/vapid-key', (req, res) => {
-  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || null });
+  res.json({ publicKey: require('./notification-engine').isWebPushEnabled() ? process.env.VAPID_PUBLIC_KEY : null });
 });
 
 // ── GET /api/push/status — hat dieser User Subscriptions? ──
@@ -29,7 +29,7 @@ router.get('/status', async (req, res) => {
     res.json({
       subscribed: n > 0,
       count: n,
-      vapidConfigured: !!process.env.VAPID_PUBLIC_KEY,
+      vapidConfigured: require('./notification-engine').isWebPushEnabled(),
     });
   } catch (err) {
     console.error('❌ push status Fehler:', err.message);
@@ -97,14 +97,17 @@ router.delete('/unsubscribe', async (req, res) => {
 router.post('/test', async (req, res) => {
   try {
     const { sendNotification } = require('./notification-engine');
-    await sendNotification(pool, req.user.userId, {
+    const delivery = await sendNotification(pool, req.user.userId, {
       notificationId: `test-${Date.now()}`,
       title: '🧪 Crumb Test',
-      message: 'Push-Benachrichtigungen funktionieren.',
+      message: 'Deine Test-Benachrichtigung ist angekommen.',
       priority: 4,
       tags: 'test_tube',
     });
-    res.json({ ok: true });
+    if (!delivery.configured) return res.status(503).json({ error: 'Push ist auf dem Server nicht eingerichtet.' });
+    if (!delivery.attempted) return res.status(409).json({ error: 'Kein Push-Gerät registriert. Bitte Push auf diesem Gerät aktivieren.' });
+    if (!delivery.sent) return res.status(502).json({ error: 'Der Push-Dienst konnte die Nachricht nicht annehmen. Bitte erneut versuchen.' });
+    res.json({ ok: true, sent: delivery.sent, failed: delivery.failed });
   } catch (err) {
     console.error('❌ push test Fehler:', err.message);
     res.status(500).json({ error: err.message });

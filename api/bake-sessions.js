@@ -1,3 +1,4 @@
+const { sessionRecipeColumns, saveTransition, startSession, finishSession } = require('./bake-persistence');
 // api/bake-sessions.js
 // ============================================================
 // BAKE SESSIONS API — Routes für den State-Machine-Backplan
@@ -6,9 +7,6 @@ const express = require('express');
 const router = express.Router();
 
 const {
-  flattenSteps,
-  buildDependencyGraph,
-  computeInitialStates,
   performTransition,
   checkSoftDone,
   calculateProjectedEnd,
@@ -25,54 +23,15 @@ function setPool(p) { pool = p; }
 // ── POST /api/bake-sessions — Session starten ───────────────
 router.post('/', async (req, res) => {
   const { recipe_id, planned_at, multiplier, starter_id } = req.body;
-  if (!recipe_id || !planned_at) {
+  if (!recipe_id || !planned_at || !Number.isFinite(new Date(planned_at).getTime()) || (multiplier !== undefined && (!Number.isFinite(Number(multiplier)) || Number(multiplier) <= 0 || Number(multiplier) > 99))) {
     return res.status(400).json({ error: 'recipe_id und planned_at erforderlich' });
   }
 
   try {
-    // Rezept laden
-    const recipeRes = await pool.query(
-      'SELECT * FROM recipes WHERE id = $1 AND user_id = $2',
-      [recipe_id, req.user.userId]
-    );
-    if (recipeRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Rezept nicht gefunden' });
-    }
-    const recipe = recipeRes.rows[0];
-    const sections = recipe.dough_sections || [];
-
-    if (sections.length === 0) {
-      return res.status(400).json({ error: 'Rezept hat keine Phasen' });
-    }
-
-    // Initialen State berechnen
-    const { states, timestamps } = computeInitialStates(sections);
-    const projectedEnd = calculateProjectedEnd(sections, states, timestamps);
-
-    // Session erstellen
-    const result = await pool.query(
-      `INSERT INTO bake_sessions
-       (recipe_id, user_id, planned_at, started_at, multiplier, step_states, step_timestamps, projected_end, starter_id)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8) RETURNING *`,
-      [
-        recipe_id,
-        req.user.userId,
-        planned_at,
-        multiplier || 1,
-        JSON.stringify(states),
-        JSON.stringify(timestamps),
-        projectedEnd,
-        starter_id || null,
-      ]
-    );
-
-    // planned_at auf Rezept setzen (für Nav-Badge etc.)
-    await pool.query(
-      'UPDATE recipes SET planned_at = $1 WHERE id = $2 AND user_id = $3',
-      [planned_at, recipe_id, req.user.userId]
-    );
-
-    const session = result.rows[0];
+    const { recipe, session } = await startSession(pool, req.user.userId, req.body);
+    const sections = recipe.dough_sections;
+    const states = session.step_states;
+    const timestamps = session.step_timestamps;
     const gates = getPendingGates(sections, states);
     const timeline = buildUITimeline(sections, states, timestamps, planned_at);
 
@@ -112,7 +71,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(response);
   } catch (err) {
     console.error('❌ bake-session create Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -120,9 +79,8 @@ router.post('/', async (req, res) => {
 router.get('/active', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT bs.*, r.title, r.image_url, r.dough_sections, r.category
+      `SELECT bs.*, ${sessionRecipeColumns}
        FROM bake_sessions bs
-       JOIN recipes r ON r.id = bs.recipe_id
        WHERE bs.user_id = $1 AND bs.finished_at IS NULL
        ORDER BY bs.planned_at ASC`,
       [req.user.userId]
@@ -136,14 +94,6 @@ router.get('/active', async (req, res) => {
       // Soft-Done Check (Timer abgelaufen?)
       const { states: updatedStates, softDoneSteps } = checkSoftDone(sections, states, timestamps);
 
-      // Wenn sich States geändert haben, DB updaten (fire-and-forget)
-      if (softDoneSteps.length > 0) {
-        pool.query(
-          'UPDATE bake_sessions SET step_states = $1 WHERE id = $2',
-          [JSON.stringify(updatedStates), row.id]
-        ).catch(e => console.error('soft_done update Fehler:', e.message));
-      }
-
       const effectiveStates = softDoneSteps.length > 0 ? updatedStates : states;
       const timeline = buildUITimeline(sections, effectiveStates, timestamps, row.planned_at);
       const gates = getPendingGates(sections, effectiveStates);
@@ -151,6 +101,7 @@ router.get('/active', async (req, res) => {
 
       return {
         id: row.id,
+        version: row.version,
         recipe_id: row.recipe_id,
         title: row.title,
         image_url: row.image_url,
@@ -171,23 +122,24 @@ router.get('/active', async (req, res) => {
     res.json(sessions);
   } catch (err) {
     console.error('❌ active sessions Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 // ── POST /api/bake-sessions/:id/transition — State-Wechsel ──
 router.post('/:id/transition', async (req, res) => {
   const { id } = req.params;
-  const { stepIndex, action, phase, minutes, temperature } = req.body;
+  const { stepIndex, action, phase, minutes, temperature, expectedVersion } = req.body;
 
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) return res.status(400).json({ error: 'Aktuellen Backplan bitte neu laden' });
   if (stepIndex === undefined || !action) {
     return res.status(400).json({ error: 'stepIndex und action erforderlich' });
   }
 
   try {
     const result = await pool.query(
-      `SELECT bs.*, r.dough_sections, r.title
-       FROM bake_sessions bs JOIN recipes r ON r.id = bs.recipe_id
+      `SELECT bs.*, ${sessionRecipeColumns}
+       FROM bake_sessions bs
        WHERE bs.id = $1 AND bs.user_id = $2 AND bs.finished_at IS NULL`,
       [id, req.user.userId]
     );
@@ -196,6 +148,7 @@ router.post('/:id/transition', async (req, res) => {
     }
 
     const session = result.rows[0];
+    if (session.version !== expectedVersion) return res.status(409).json({ error: 'Backplan wurde zwischenzeitlich geändert. Bitte aktuellen Stand prüfen.' });
     const sections = session.dough_sections || [];
     const currentStates = session.step_states || {};
     const currentTimestamps = session.step_timestamps || {};
@@ -216,19 +169,12 @@ router.post('/:id/transition', async (req, res) => {
     // Projected End neu berechnen
     const projectedEnd = calculateProjectedEnd(sections, states, timestamps);
 
-    // DB updaten
-    await pool.query(
-      `UPDATE bake_sessions SET step_states = $1, step_timestamps = $2, projected_end = $3 WHERE id = $4`,
-      [JSON.stringify(states), JSON.stringify(timestamps), projectedEnd, id]
-    );
-
-    // Temperatur loggen wenn vorhanden
-    if (action === 'log_temperature' && temperature !== undefined) {
-      await pool.query(
-        `UPDATE bake_sessions SET temperature_log = COALESCE(temperature_log, '[]'::jsonb) || $1::jsonb WHERE id = $2`,
-        [JSON.stringify([{ step_idx: stepIndex, temp_c: parseFloat(temperature), recorded_at: Date.now() }]), id]
-      );
-    }
+    const saved = await saveTransition(pool, session, req.user.userId, {
+      states, timestamps, projectedEnd,
+      temperatureLog: action === 'log_temperature' && temperature !== undefined
+        ? [{ step_idx: stepIndex, temp_c: parseFloat(temperature), recorded_at: Date.now() }] : [],
+    });
+    if (!saved.rowCount) return res.status(409).json({ error: 'Backplan wurde zwischenzeitlich geändert. Bitte aktuellen Stand prüfen.' });
 
     const timeline = buildUITimeline(sections, states, timestamps, session.planned_at);
     const gates = getPendingGates(sections, states);
@@ -253,6 +199,7 @@ router.post('/:id/transition', async (req, res) => {
     }
 
     res.json({
+      version: saved.rows[0].version,
       step_states: states,
       step_timestamps: timestamps,
       projected_end: projectedEnd.toISOString(),
@@ -262,43 +209,19 @@ router.post('/:id/transition', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ transition Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 // ── POST /api/bake-sessions/:id/finish — Backen abschließen ─
 router.post('/:id/finish', async (req, res) => {
-  const { id } = req.params;
-  const { notes } = req.body;
-
+  const { notes, expectedVersion } = req.body;
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) return res.status(400).json({ error: 'Aktuellen Backplan bitte neu laden' });
   try {
-    const result = await pool.query(
-      `SELECT bs.*, r.dough_sections FROM bake_sessions bs JOIN recipes r ON r.id = bs.recipe_id
-       WHERE bs.id = $1 AND bs.user_id = $2 AND bs.finished_at IS NULL`,
-      [id, req.user.userId]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Session nicht gefunden' });
-    }
-
-    const session = result.rows[0];
-
-    // Session abschließen
-    await pool.query(
-      `UPDATE bake_sessions SET finished_at = NOW(), notes = $1 WHERE id = $2`,
-      [notes || null, id]
-    );
-
-    // planned_at vom Rezept entfernen
-    await pool.query(
-      'UPDATE recipes SET planned_at = NULL WHERE id = $1 AND user_id = $2',
-      [session.recipe_id, req.user.userId]
-    );
-
+    await finishSession(pool, req.user.userId, req.params.id, expectedVersion, notes);
     res.json({ ok: true });
   } catch (err) {
-    console.error('❌ finish Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -309,9 +232,8 @@ router.get('/history', async (req, res) => {
     let query = `
       SELECT bs.id, bs.recipe_id, bs.planned_at, bs.started_at, bs.finished_at,
              bs.multiplier, bs.notes, bs.temperature_log, bs.step_timestamps,
-             r.title, r.image_url
+             ${sessionRecipeColumns}
       FROM bake_sessions bs
-      JOIN recipes r ON r.id = bs.recipe_id
       WHERE bs.user_id = $1 AND bs.finished_at IS NOT NULL`;
     const params = [req.user.userId];
 
@@ -342,7 +264,7 @@ router.get('/history', async (req, res) => {
     res.json(sessions);
   } catch (err) {
     console.error('❌ history Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -367,7 +289,7 @@ router.get('/recipe-stats/:recipeId', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ recipe-stats Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -385,7 +307,7 @@ router.delete('/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('❌ delete session Fehler:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

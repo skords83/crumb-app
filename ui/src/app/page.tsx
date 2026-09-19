@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -81,7 +82,7 @@ function HomePageContent() {
     if (activeCategory && activeCategory !== 'alle') params.set('category', activeCategory);
     if (activeSort && activeSort !== 'newest' && activeSort !== 'random') params.set('sort', activeSort);
     const url = `${process.env.NEXT_PUBLIC_API_URL}/recipes${params.toString() ? '?' + params.toString() : ''}`;
-    fetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` } })
+    apiFetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` } })
       .then(res => res.json())
       .then(data => {
         let list = Array.isArray(data) ? data : [];
@@ -95,7 +96,7 @@ function HomePageContent() {
 
   useEffect(() => {
     if (allRecipes.length > 0 || isUnfiltered) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` } })
+    apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` } })
       .then(res => res.json()).then(data => setAllRecipes(Array.isArray(data) ? data : [])).catch(() => {});
   }, [allRecipes.length, isUnfiltered]);
 
@@ -103,7 +104,7 @@ function HomePageContent() {
     setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
     setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }, body: JSON.stringify({ is_favorite: status }) });
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` }, body: JSON.stringify({ is_favorite: status }) });
       if (!res.ok) { setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r)); setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r)); }
     } catch { setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r)); setAllRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: !status } : r)); }
   };

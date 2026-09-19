@@ -38,6 +38,7 @@ export interface PhaseGate {
 
 export interface BakeSession {
   id: number;
+  version: number;
   recipe_id: number;
   title: string;
   image_url: string;
@@ -55,6 +56,7 @@ export interface BakeSession {
 }
 
 export interface BakeHistoryEntry {
+  dough_sections?: { name: string; ingredients?: { name: string; amount: string | number; unit?: string }[]; steps?: { instruction: string }[] }[];
   id: number;
   recipe_id: number;
   title: string;

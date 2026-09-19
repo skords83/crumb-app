@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, X, BookOpen, RefreshCw } from 'lucide-react';
@@ -222,7 +223,7 @@ function SearchPageContent() {
     if (activeFilters.length > 0) params.set('filter', activeFilters.join(','));
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/recipes?${params.toString()}`,
         { headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` } }
       );
@@ -259,7 +260,7 @@ function SearchPageContent() {
   const toggleFavorite = async (id: number, status: boolean) => {
     setRecipes(prev => prev.map(r => r.id === id ? { ...r, is_favorite: status } : r));
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
         body: JSON.stringify({ is_favorite: status })

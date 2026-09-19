@@ -1,5 +1,7 @@
 "use client";
 
+import { PREFERMENT_RE } from '@/lib/hydration';
+import { apiFetch } from '@/lib/api';
 import React, { useMemo, useRef, useState } from 'react';
 import { 
   Trash2, 
@@ -182,7 +184,7 @@ export default function RecipeForm({
                     const formData = new FormData();
                     formData.append('file', file);
                     try {
-                      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
+                      const response = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
                         body: formData,
@@ -347,6 +349,9 @@ export default function RecipeForm({
                               value={ing.amount || ""}
                               onChange={(e) => updateIngredient(sIdx, iIdx, 'amount', e.target.value)}
                             />
+                            <select aria-label="Einheit" value={ing.unit || 'g'} onChange={e => updateIngredient(sIdx, iIdx, 'unit', e.target.value)} className="w-16 bg-transparent text-sm">
+                              {Array.from(new Set(['g', 'kg', 'ml', 'l', 'TL', 'EL', 'Stück', ing.unit || 'g'])).map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                            </select>
                             <button type="button" onClick={() => {
                               setDoughSections((prev: any[]) => prev.map((s, i) =>
                                 i !== sIdx ? s : { ...s, ingredients: s.ingredients.filter((_: any, j: number) => j !== iIdx) }
@@ -355,6 +360,10 @@ export default function RecipeForm({
                               <Trash2 size={14} />
                             </button>
                           </div>
+                          {PREFERMENT_RE.test(ing.name || '') && <label className="block text-xs text-[#8B7355]">
+                            Hydration bei separat zugegebenem Starter/Vorteig (%)
+                            <input type="number" min="0" step="1" placeholder="100 (Annahme)" value={ing.hydration_percent ?? ''} onChange={e => updateIngredient(sIdx, iIdx, 'hydration_percent', e.target.value)} className="ml-2 w-28 rounded border px-2 py-1 bg-transparent" />
+                          </label>}
                           <div className="flex gap-2">
                             <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 text-blue-500 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-100/50 dark:border-blue-800/30">
                               <TempIcon size={11} />

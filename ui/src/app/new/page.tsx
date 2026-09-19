@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LinkIcon, Edit3, X, AlertCircle, Loader2, FileJson } from 'lucide-react';
@@ -144,7 +145,7 @@ export default function NewRecipePage() {
         const html = e.target?.result as string;
         if (!html) { setFileError('Fehler beim Lesen der Datei'); setIsImporting(false); return; }
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import/html`, {
+          const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/import/html`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
             body: JSON.stringify({ html, filename: selectedFile.name })
@@ -196,7 +197,7 @@ export default function NewRecipePage() {
     const normalizedUrl = importUrl.replace(/^https?:\/\//i, '').replace(/^/, 'https://');
     setIsImporting(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/import`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
         body: JSON.stringify({ url: normalizedUrl }),
@@ -216,7 +217,7 @@ export default function NewRecipePage() {
     if (!title.trim()) { alert("Bitte gib deinem Brot einen Namen!"); return; }
     setIsSaving(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
         body: JSON.stringify({

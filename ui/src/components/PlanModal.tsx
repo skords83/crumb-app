@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { X, Clock, Minus, Plus, ChevronDown } from "lucide-react";
 import { calculateBackplan, calcTotalDuration } from "@/lib/backplan-utils";
@@ -248,7 +249,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
       setPlanOffset(snapTo(nowMin(), s.snapMin, true)); setScenario("jetzt"); setIsSubmitting(false); setSubmitError("");
       setFreieZeitOpen(false);
       setSelectedStarterId(""); setStarterWarningMsg(null);
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/starters`, { headers: { Authorization: `Bearer ${localStorage.getItem("crumb_token")}` } })
+      apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/starters`, { headers: { Authorization: `Bearer ${localStorage.getItem("crumb_token")}` } })
         .then(res => (res.ok ? res.json() : []))
         .then(data => setStarters(Array.isArray(data) ? data : []))
         .catch(() => setStarters([]));
@@ -323,7 +324,7 @@ export default function PlanModal({ isOpen, onClose, onConfirm, recipe }: PlanMo
     setIsSubmitting(true);
     setSubmitError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/bake-sessions`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/bake-sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("crumb_token")}` },
         body: JSON.stringify({

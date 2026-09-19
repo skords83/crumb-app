@@ -22,12 +22,17 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       REGISTRATION_INVITE_CODE: ${REGISTRATION_INVITE_CODE:-}
-      BASE_URL: https://crumb.skords.de
-      FRONTEND_URL: https://crumb.skords.de
-      NTFY_URL: ${NTFY_URL}
-      NTFY_TOPIC: ${NTFY_TOPIC}
-      NTFY_TOKEN: ${NTFY_TOKEN}
-      NTFY_VORLAUF: ${NTFY_VORLAUF}
+      BASE_URL: ${BASE_URL:-https://crumb.skords.de}
+      FRONTEND_URL: ${FRONTEND_URL:-https://crumb.skords.de}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@crumb.local}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
     depends_on:
       - db

@@ -572,7 +572,7 @@ function TabNotifications() {
           {testSending ? (
             <><Loader2 size={15} className="animate-spin"/>Wird gesendet…</>
           ) : testResult==='ok' ? (
-            <><CheckCircle size={15}/>Test-Push gesendet</>
+            <><CheckCircle size={15}/>An Push-Dienst übergeben</>
           ) : testResult==='err' ? (
             <>Fehler{testError ? `: ${testError}` : ' beim Senden'}</>
           ) : (
@@ -630,7 +630,7 @@ function TabSecurity() {
     if (newPassword.length < 12) { setError('Das Passwort muss mindestens 12 Zeichen haben'); return; }
     setIsLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/change-password`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('crumb_token')}` },
         body: JSON.stringify({ currentPassword, newPassword }),
@@ -650,7 +650,7 @@ function TabSecurity() {
     <div className="mb-4">
       <label className="block text-xs font-semibold text-[#A68B6A] dark:text-white/40 uppercase tracking-wider mb-2">{label}</label>
       <div className="relative">
-        <input type={show?'text':'password'} value={value} onChange={onChange} className={inputCls} placeholder="••••••••" required={required} minLength={6}/>
+        <input type={show?'text':'password'} value={value} onChange={onChange} className={inputCls} placeholder="••••••••" required={required} minLength={label === "Aktuelles Passwort" ? 1 : 12}/>
         <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#C4A484] hover:text-[#8B7355] transition-colors" tabIndex={-1}>
           {show?<EyeOff size={17}/>:<Eye size={17}/>}
         </button>

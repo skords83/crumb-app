@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -8,7 +9,7 @@ import {
   calcTotalDuration,
   calcTotalDurationRange,
 } from "@/lib/backplan-utils";
-import { calcHydration, FLOUR_KEYWORDS } from "@/lib/hydration";
+import { hydrationDetails, FLOUR_KEYWORDS } from "@/lib/hydration";
 import PlanModal from "@/components/PlanModal";
 import { RecipeDetailSkeleton } from "@/components/LoadingSkeletons";
 import RecipeRhythmBar from "@/components/RecipeRhythmBar";
@@ -83,7 +84,7 @@ function DeleteConfirmModal({
           Rezept löschen?
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          „{recipeName}" wird unwiderruflich gelöscht.
+          „{recipeName}" wird aus der Bibliothek entfernt. Laufende Backvorgänge und die Backhistorie bleiben erhalten.
         </p>
         <div className="flex gap-3">
           <button
@@ -208,7 +209,7 @@ export default function RecipeDetailPage({
 
   useEffect(() => {
     if (!id) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+    apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("crumb_token")}`,
       },
@@ -230,6 +231,8 @@ export default function RecipeDetailPage({
         durationMin: 0,
         durationMax: 0,
         hydration: null,
+        hydrationNotes: [] as string[],
+        hydrationApproximate: false,
       };
     const steps = recipe.dough_sections.reduce(
       (s: number, sec: any) => s + (sec.steps?.length || 0),
@@ -239,15 +242,16 @@ export default function RecipeDetailPage({
     const { min: durationMin, max: durationMax } = calcTotalDurationRange(
       recipe.dough_sections,
     );
-    const hydration = calcHydration(recipe.dough_sections);
-    return { steps, duration, durationMin, durationMax, hydration };
+    const details = hydrationDetails(recipe.dough_sections);
+    const hydration = details.value;
+    return { steps, duration, durationMin, durationMax, hydration, hydrationNotes: details.warnings, hydrationApproximate: details.approximate };
   }, [recipe]);
 
   const toggleFavorite = async () => {
     const next = !isFavorite;
     setIsFavorite(next);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
+      await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -264,7 +268,7 @@ export default function RecipeDetailPage({
   const handleDelete = async () => {
     setShowDeleteConfirm(false);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/recipes/${id}`,
         {
           method: "DELETE",
@@ -330,6 +334,7 @@ export default function RecipeDetailPage({
   return (
     <div className="print-card-wrapper min-h-screen bg-[#F8F9FA] dark:bg-gray-900 py-8 px-4 text-[#2D2D2D] dark:text-gray-100 transition-colors duration-200">
       <div className="print-card max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-[2rem] shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors duration-200">
+        {recipe.archived_at && <p className="p-4 text-sm" role="status">Dieses Rezept wurde aus der Bibliothek entfernt. Laufende Backvorgänge und die Backhistorie bleiben erhalten.</p>}
         {/* HERO IMAGE */}
         <div className="print-hero relative h-96 w-full rounded-[1.5rem] overflow-hidden">
           <img
@@ -354,6 +359,7 @@ export default function RecipeDetailPage({
 
           <div className="no-print absolute top-4 right-4 z-10 flex gap-2">
             <button
+              disabled={!!recipe.archived_at}
               onClick={toggleFavorite}
               className="p-2.5 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-white/50 dark:border-gray-700/50 shadow-sm transition-all hover:scale-110"
             >
@@ -384,6 +390,7 @@ export default function RecipeDetailPage({
                   />
                   <div className="absolute right-0 top-full mt-2 z-20 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-w-[200px]">
                     <button
+                      disabled={!!recipe.archived_at}
                       onClick={() => {
                         router.push(`/recipes/${id}/edit`);
                         setShowMenu(false);
@@ -530,7 +537,7 @@ export default function RecipeDetailPage({
                 </p>
               </div>
             </div>
-            {stats.hydration !== null && (
+            {(stats.hydration !== null || stats.hydrationNotes.length > 0) && (
               <div className="flex flex-col items-center gap-2">
                 <div className="text-blue-500 dark:text-blue-400">
                   <Icons.Droplets size={22} />
@@ -539,8 +546,9 @@ export default function RecipeDetailPage({
                   <p className="text-[9px] text-gray-400 dark:text-gray-400 uppercase font-black tracking-widest">
                     Hydration
                   </p>
+                  {stats.hydrationNotes.length > 0 && <details className="text-xs max-w-xs my-1"><summary className="cursor-pointer">Annahmen zur Berechnung</summary><p>{stats.hydrationNotes.join(' ')}</p></details>}
                   <p className="font-black text-blue-500 dark:text-blue-400 text-sm">
-                    {stats.hydration}%
+                    {stats.hydration === null ? "Nicht berechenbar" : `${stats.hydrationApproximate ? "≈ " : ""}${stats.hydration}%`}
                   </p>
                 </div>
               </div>
@@ -786,6 +794,7 @@ export default function RecipeDetailPage({
       <div className="no-print fixed bottom-0 left-0 right-0 z-40 px-4 pb-20 md:pb-4 pt-3 bg-gradient-to-t from-white dark:from-gray-900 to-transparent pointer-events-none">
         <div className="max-w-4xl mx-auto pointer-events-auto">
           <button
+            disabled={!!recipe.archived_at}
             onClick={() => setShowPlanModal(true)}
             className="w-full flex items-center justify-center gap-3 bg-[#8B4513] text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-[#6F360F] transition-all active:scale-[0.98]"
           >

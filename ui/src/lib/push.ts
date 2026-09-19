@@ -1,3 +1,4 @@
+import { apiFetch } from './api';
 // src/lib/push.ts
 // ============================================================
 // Web Push Helper — Subscribe/Unsubscribe + State-Lookup
@@ -58,7 +59,7 @@ function urlBase64ToBuffer(base64: string): ArrayBuffer {
 
 async function fetchVapidKey(): Promise<string> {
   const token = localStorage.getItem('crumb_token');
-  const res = await fetch(`${API}/push/vapid-key`, {
+  const res = await apiFetch(`${API}/push/vapid-key`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('VAPID-Key konnte nicht geladen werden');
@@ -96,7 +97,7 @@ export async function subscribeToPush(): Promise<void> {
   }
 
   const token = localStorage.getItem('crumb_token');
-  const res = await fetch(`${API}/push/subscribe`, {
+  const res = await apiFetch(`${API}/push/subscribe`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -125,7 +126,7 @@ export async function unsubscribeFromPush(): Promise<void> {
 
   try {
     const token = localStorage.getItem('crumb_token');
-    await fetch(`${API}/push/unsubscribe`, {
+    await apiFetch(`${API}/push/unsubscribe`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -142,7 +143,7 @@ export async function unsubscribeFromPush(): Promise<void> {
 // ── Test-Push triggern (optional, fürs Debugging) ───────────
 export async function sendTestPush(): Promise<void> {
   const token = localStorage.getItem('crumb_token');
-  const res = await fetch(`${API}/push/test`, {
+  const res = await apiFetch(`${API}/push/test`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -1,6 +1,7 @@
 // src/components/Navigation.tsx
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -72,7 +73,7 @@ export default function Navigation() {
 
   useEffect(() => {
     if(isAuthPage)return;
-    const check=async()=>{try{const res=await fetch(`${process.env.NEXT_PUBLIC_API_URL}/bake-sessions/active`,{headers:{'Authorization':`Bearer ${localStorage.getItem('crumb_token')}`}});const data=await res.json();setHasActivePlan(Array.isArray(data)&&data.length>0);}catch{}};
+    const check=async()=>{try{const res=await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/bake-sessions/active`,{headers:{'Authorization':`Bearer ${localStorage.getItem('crumb_token')}`}});const data=await res.json();setHasActivePlan(Array.isArray(data)&&data.length>0);}catch{}};
     check(); const i=setInterval(check,30000); return()=>clearInterval(i);
   },[pathname,isAuthPage]);
 

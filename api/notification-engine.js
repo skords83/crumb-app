@@ -328,13 +328,15 @@ function evaluateSession(session, sections, settings = DEFAULT_SETTINGS) {
 // Iteriert über alle Subscriptions des Users und sendet die Notification.
 // Bei expired Subscriptions (404/410): automatisches Cleanup in der DB.
 async function sendWebPushToUser(poolRef, userId, candidate) {
-  if (!webPushEnabled || !poolRef || !userId) return;
+  const delivery = { configured: webPushEnabled, attempted: 0, sent: 0, failed: 0 };
+  if (!webPushEnabled || !poolRef || !userId) return delivery;
   try {
     const subs = await poolRef.query(
       "SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1",
       [userId],
     );
-    if (subs.rows.length === 0) return;
+    delivery.attempted = subs.rows.length;
+    if (subs.rows.length === 0) return delivery;
 
     const payload = JSON.stringify({
       title: candidate.title,
@@ -352,6 +354,7 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
       try {
         validatePushSubscription(subscription);
         await webpush.sendNotification(subscription, payload, { TTL: 3600, timeout: 10_000, agent: pushAgent });
+        delivery.sent++;
         poolRef
           .query(
             "UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = $1",
@@ -359,6 +362,7 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
           )
           .catch(() => {});
       } catch (err) {
+        delivery.failed++;
         if (err.statusCode === 404 || err.statusCode === 410) {
           await poolRef.query("DELETE FROM push_subscriptions WHERE id = $1", [
             sub.id,
@@ -376,7 +380,9 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
     }
   } catch (err) {
     console.error("❌ sendWebPushToUser Fehler:", err.message);
+    delivery.failed++;
   }
+  return delivery;
 }
 
 // ── sendNotification ─────────────────────────────────────────
@@ -384,7 +390,7 @@ async function sendWebPushToUser(poolRef, userId, candidate) {
 // Bypasst Settings/Quiet-Hours — wird vom Test-Endpoint und
 // von dispatch() (nach erfolgreichem Insert in sent_notifications) aufgerufen.
 async function sendNotification(poolRef, userId, candidate) {
-  await sendWebPushToUser(poolRef, userId, candidate);
+  return sendWebPushToUser(poolRef, userId, candidate);
 }
 
 // ── dispatch ─────────────────────────────────────────────────
@@ -403,7 +409,12 @@ async function dispatch(poolRef, userId, sessionId, candidate) {
     );
     if (result.rowCount === 0) return false;
 
-    await sendNotification(poolRef, userId, candidate);
+    const delivery = await sendNotification(poolRef, userId, candidate);
+    if (delivery.sent === 0) {
+      // No provider accepted the notification. Allow the next sweep to retry.
+      await poolRef.query('DELETE FROM sent_notifications WHERE id = $1', [result.rows[0].id]);
+      return false;
+    }
     return true;
   } catch (err) {
     console.error("❌ dispatch Fehler:", err.message, candidate.notificationId);
@@ -484,7 +495,7 @@ async function checkStarterFeedingDue(pool) {
       notificationId: dedupKey,
       type: 'starter-feeding-due',
       title: '🫙 Sauerteig füttern',
-      message: `${starter.name} wartet auf Fütterung (${Math.round(hoursSince)}h seit letzter Fütterung).`,
+      message: lastFeeding ? `${starter.name} wartet auf Fütterung (${Math.round(hoursSince)}h seit letzter Fütterung).` : `${starter.name}: Noch keine Fütterung erfasst.`,
       priority: 4,
       tags: 'sourdough',
     });
@@ -499,5 +510,6 @@ module.exports = {
   cleanupOldNotifications,
   extractTemp,
   initWebPush,
+  isWebPushEnabled: () => webPushEnabled,
   checkStarterFeedingDue,
 };

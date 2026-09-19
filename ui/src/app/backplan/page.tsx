@@ -10,7 +10,8 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { apiFetch } from '@/lib/api';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -78,6 +79,9 @@ function computeUrgency(
 }
 
 export default function BackplanPage() {
+  const [requestError, setRequestError] = useState("");
+  const mutationPending = useRef(false);
+  const requestSequence = useRef(0);
   const [sessions, setSessions] = useState<BakeSession[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,13 +93,18 @@ export default function BackplanPage() {
   );
 
   const loadSessions = useCallback(async () => {
+    if (mutationPending.current) return;
+    const sequence = ++requestSequence.current;
     try {
-      const res = await fetch(`${API}/bake-sessions/active`, {
+      const res = await apiFetch(`${API}/bake-sessions/active`, {
         headers: authHeaders(),
       });
+      if (!res.ok) throw new Error('Backpläne konnten nicht geladen werden.');
       const data = await res.json();
-      setSessions(Array.isArray(data) ? data : []);
-    } catch {}
+      if (sequence === requestSequence.current && !mutationPending.current) {
+        setSessions(Array.isArray(data) ? data : []);
+      }
+    } catch { setRequestError('Verbindung unterbrochen. Der letzte geladene Stand bleibt sichtbar.'); }
     setIsLoading(false);
   }, []);
 
@@ -117,20 +126,25 @@ export default function BackplanPage() {
     action: string,
     extra: Record<string, any> = {},
   ) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    requestSequence.current++;
+    setRequestError("");
     try {
-      const res = await fetch(`${API}/bake-sessions/${sid}/transition`, {
+      const res = await apiFetch(`${API}/bake-sessions/${sid}/transition`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ stepIndex: stepIdx, action, ...extra }),
+        body: JSON.stringify({ stepIndex: stepIdx, action, ...extra, expectedVersion: sessions.find(s => s.id === sid)?.version }),
       });
-      if (!res.ok) return;
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Änderung konnte nicht gespeichert werden.');
       setSessions((prev) =>
         prev.map((s) =>
           s.id !== sid
             ? s
             : {
                 ...s,
+                version: data.version,
                 step_states: data.step_states,
                 step_timestamps: data.step_timestamps,
                 projected_end: data.projected_end,
@@ -139,27 +153,38 @@ export default function BackplanPage() {
               },
         ),
       );
-    } catch {
-      loadSessions();
+    } catch (err) {
+      setRequestError(err instanceof Error ? err.message : 'Änderung fehlgeschlagen.');
+    } finally {
+      mutationPending.current = false;
+      void loadSessions();
     }
   };
 
   const finishBaking = async (sid: number) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
+    requestSequence.current++;
+    setRequestError("");
     try {
-      const res = await fetch(`${API}/bake-sessions/${sid}/finish`, {
+      const res = await apiFetch(`${API}/bake-sessions/${sid}/finish`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ notes: finishNotes || null }),
+        body: JSON.stringify({ notes: finishNotes || null, expectedVersion: sessions.find(s => s.id === sid)?.version }),
       });
       if (res.ok) {
         setSessions((prev) => prev.filter((s) => s.id !== sid));
         setActiveIdx(0);
         setFinishModalId(null);
         setFinishNotes("");
-        if (sessions.length <= 1) window.location.href = "/";
+        if (sessions.length <= 1) window.location.href = "/history";
       }
-    } catch {
-      alert("Fehler");
+      else { const data = await res.json(); throw new Error(data.error || 'Abschließen fehlgeschlagen'); }
+    } catch (err) {
+      setRequestError(err instanceof Error ? err.message : 'Abschließen fehlgeschlagen');
+    } finally {
+      mutationPending.current = false;
+      void loadSessions();
     }
   };
 
@@ -170,7 +195,7 @@ export default function BackplanPage() {
       return n;
     });
 
-  const session = sessions[activeIdx];
+  const session = sessions[Math.min(activeIdx, Math.max(0, sessions.length - 1))];
   const timeline = session?.timeline || [];
   const gates = session?.gates || [];
   const multiplier = session?.multiplier || 1;
@@ -322,6 +347,8 @@ export default function BackplanPage() {
           <div className="w-20 h-20 rounded-full bg-[#EDE5D6] dark:bg-white/10 flex items-center justify-center mx-auto mb-6">
             <Sun size={32} className="text-[#8B7355] dark:text-[#C4A484]" />
           </div>
+          {requestError && <p role="alert" className="mb-4 text-red-600">{requestError} <button onClick={() => { setRequestError(""); void loadSessions(); }}>Erneut laden</button></p>}
+          <Link href="/history" className="block mb-4 underline">Backhistorie</Link>
           <h2 className="text-2xl font-bold text-[#2C1A0E] dark:text-white/90 mb-2">
             Keine Backpläne aktiv
           </h2>
@@ -344,6 +371,10 @@ export default function BackplanPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F0E8] dark:bg-[#0F172A] pb-32 transition-colors duration-200">
+      <div className="max-w-5xl mx-auto px-4 pt-4">
+        <Link href="/history" className="underline">Backhistorie</Link>
+        {requestError && <p role="alert" className="mt-3 text-red-600">{requestError} <button onClick={() => { setRequestError(""); void loadSessions(); }} className="underline">Erneut laden</button></p>}
+      </div>
       {/* ── Finish Modal ── */}
       {finishModalId !== null &&
         (() => {
@@ -373,6 +404,7 @@ export default function BackplanPage() {
                   </div>
                 </div>
                 <div className="p-5">
+                  {requestError && <p role="alert" className="mb-3 text-sm text-red-600">{requestError}</p>}
                   <p className="text-[13px] text-[#A68B6A] dark:text-white/50 mb-3">
                     Notizen zum Backergebnis (optional):
                   </p>

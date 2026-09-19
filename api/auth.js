@@ -169,16 +169,15 @@ const requestPasswordReset = async (req, res) => {
     return res.status(400).json({ error: 'Email is required' });
   }
 
+  if (!process.env.SMTP_HOST || !process.env.SMTP_FROM) {
+    return res.status(503).json({ error: 'Passwortreset ist derzeit nicht eingerichtet. Bitte den Betreiber kontaktieren.' });
+  }
+
   try {
     const result = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     
     // Always return success to prevent email enumeration
     if (result.rows.length === 0) {
-      return res.json({ message: 'If an account exists, a reset link will be sent' });
-    }
-
-    if (!process.env.SMTP_HOST) {
-      console.error('Password reset requested, but SMTP is not configured');
       return res.json({ message: 'If an account exists, a reset link will be sent' });
     }
 
@@ -194,12 +193,12 @@ const requestPasswordReset = async (req, res) => {
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT || 587,
+      port: Number(process.env.SMTP_PORT || 587),
       secure: process.env.SMTP_SECURE === 'true',
-      auth: {
+      auth: process.env.SMTP_USER ? {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
-      }
+      } : undefined
     });
 
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&uid=${user.id}`;
