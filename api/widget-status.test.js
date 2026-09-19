@@ -16,6 +16,14 @@ test('expired timer takes priority over a future step', () => {
   assert.equal(result.state, 'soft_done');
 });
 
+test('expired active timer takes priority over future scheduled work', () => {
+  const result = selectNextStep([
+    { title: 'Brot A', timeline: [{ state: 'ready', instruction: 'Formen', scheduled_start: '2026-09-20T11:00:00Z' }] },
+    { title: 'Brot B', timeline: [{ state: 'active', instruction: 'Falten', end: '2026-09-20T10:00:00Z' }] },
+  ], Date.parse('2026-09-20T10:30:00Z'));
+  assert.equal(result.recipe, 'Brot B');
+});
+
 test('sorts scheduled steps across sessions', () => {
   const result = selectNextStep([
     { title: 'Brot A', timeline: [{ state: 'ready', instruction: 'Formen', scheduled_start: '2026-09-20T12:00:00Z' }] },
