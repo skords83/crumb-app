@@ -5,12 +5,13 @@ const express = require('express');
 const { sessionRecipeColumns } = require('./bake-persistence');
 const { checkSoftDone, buildUITimeline } = require('./bake-engine');
 
-function selectNextStep(sessions) {
+function selectNextStep(sessions, now = Date.now()) {
   const candidates = sessions.flatMap(session => (session.timeline || [])
     .filter(step => step.state === 'soft_done' || step.state === 'active' || step.state === 'ready')
     .map(step => ({ session, step })));
-  // A timer that has expired needs attention before any later scheduled work.
-  const overdue = candidates.filter(({ step }) => step.state === 'soft_done');
+  // Expired timers need attention even if the engine has not yet marked them soft_done.
+  const overdue = candidates.filter(({ step }) => step.state === 'soft_done' ||
+    (step.state === 'active' && step.end && Date.parse(step.end) <= now));
   const pending = overdue.length ? overdue : candidates;
   pending.sort((a, b) => {
     const aTime = Date.parse(a.step.end || a.step.scheduled_start || '') || Infinity;
