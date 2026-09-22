@@ -99,3 +99,24 @@ test('failed creation rolls back and rejects a starter owned by someone else', a
   assert.equal((await pool.query('SELECT * FROM bake_sessions')).rows.length, 0);
   assert.equal((await pool.query('SELECT planned_at FROM recipes')).rows[0].planned_at, null);
 });
+
+test('web and Android completion of the same version advance exactly once, stale retries and foreign owners cannot mutate', async t => {
+  const { pool } = await fixture(t);
+  await migrateBakeReliability(pool);
+  await pool.query('CREATE TABLE users (id INTEGER, android_bake_delivery BOOLEAN DEFAULT TRUE)');
+  await pool.query('INSERT INTO users VALUES (1, TRUE)');
+  const { session } = await startSession(pool, 1, input);
+  setPool(pool);
+  const request = { params: { id: String(session.id) }, user: { userId: 1 }, body: { stepIndex: 0, action: 'complete', expectedVersion: 0 } };
+  const web = response(), android = response();
+  await Promise.all([handler('/:id/transition', 'post')(request, web), handler('/:id/transition', 'post')(request, android)]);
+  assert.deepEqual([web.code, android.code].sort(), [200, 409]);
+  const stored = (await pool.query('SELECT * FROM bake_sessions WHERE id = $1', [session.id])).rows[0];
+  assert.equal(stored.version, 1); assert.equal(stored.step_states[0], 'done');
+  const retry = response(); await handler('/:id/transition', 'post')(request, retry);
+  assert.equal(retry.code, 409);
+  const foreign = response(); await handler('/:id/transition', 'post')({ ...request, user: { userId: 2 }, body: { ...request.body, expectedVersion: 1 } }, foreign);
+  assert.equal(foreign.code, 404);
+  const after = (await pool.query('SELECT * FROM bake_sessions WHERE id = $1', [session.id])).rows[0];
+  assert.deepEqual(after.step_timestamps, stored.step_timestamps); assert.equal(after.version, 1);
+});

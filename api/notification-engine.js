@@ -429,6 +429,8 @@ async function dispatch(poolRef, userId, sessionId, candidate) {
 // versendet werden.
 // → Anzahl der tatsächlich neu gesendeten Notifications
 async function evaluateAndDispatch(pool, session, sections) {
+  const delivery = await pool.query('SELECT android_bake_delivery FROM users WHERE id = $1', [session.user_id]);
+  if (delivery.rows[0]?.android_bake_delivery) return 0;
   const settings = await getSettings(pool, session.user_id);
   if (!settings.master_enabled) return 0;
   if (isInQuietHours(settings)) return 0;

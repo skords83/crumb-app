@@ -75,6 +75,25 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Native projection; existing web response remains unchanged.
+router.get('/companion', async (req, res) => {
+  res.set('Cache-Control', 'no-store, private');
+  try {
+    const result = await pool.query(`SELECT bs.*, ${sessionRecipeColumns} FROM bake_sessions bs
+      WHERE bs.user_id = $1 AND bs.finished_at IS NULL ORDER BY bs.planned_at ASC`, [req.user.userId]);
+    const delivery = await pool.query('SELECT android_bake_delivery FROM users WHERE id = $1', [req.user.userId]);
+    res.json({ server_time: new Date().toISOString(), delivery: delivery.rows[0]?.android_bake_delivery ? 'android' : 'web',
+      sessions: result.rows.map(require('./android-companion').companionSession) });
+  } catch (err) { res.status(500).json({ error: 'Backvorgänge konnten nicht geladen werden' }); }
+});
+router.put('/companion/delivery', async (req, res) => {
+  if (!['web', 'android'].includes(req.body?.delivery)) return res.status(400).json({ error: 'Ungültige Zustellung' });
+  try {
+    await pool.query('UPDATE users SET android_bake_delivery = $1 WHERE id = $2', [req.body.delivery === 'android', req.user.userId]);
+    res.json({ delivery: req.body.delivery });
+  } catch { res.status(500).json({ error: 'Zustellung konnte nicht geändert werden' }); }
+});
+
 // ── GET /api/bake-sessions/active — Aktive Sessions ─────────
 router.get('/active', async (req, res) => {
   try {
@@ -132,7 +151,7 @@ router.post('/:id/transition', async (req, res) => {
   const { stepIndex, action, phase, minutes, temperature, expectedVersion } = req.body;
 
   if (!Number.isInteger(expectedVersion) || expectedVersion < 0) return res.status(400).json({ error: 'Aktuellen Backplan bitte neu laden' });
-  if (stepIndex === undefined || !action) {
+  if (!Number.isInteger(stepIndex) || stepIndex < 0 || !['complete', 'start_baking', 'confirm_gate', 'extend_timer', 'log_temperature', 'undo'].includes(action)) {
     return res.status(400).json({ error: 'stepIndex und action erforderlich' });
   }
 
@@ -155,6 +174,10 @@ router.post('/:id/transition', async (req, res) => {
 
     // Erst soft_done Check
     const { states: preStates } = checkSoftDone(sections, currentStates, currentTimestamps);
+
+    if (action === 'confirm_gate' && !getPendingGates(sections, preStates).some(g => g.phase === phase && g.firstStepIdx === stepIndex)) {
+      return res.status(409).json({ error: 'Diese Phase kann noch nicht oder nicht mehr gestartet werden.' });
+    }
 
     // Transition durchführen
     const { states, timestamps, sideEffects, error } = performTransition(

@@ -227,6 +227,7 @@ await pool.query(migratePlannedAtType);
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );`);
       await migrateBakeReliability(pool);
+      await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS android_bake_delivery BOOLEAN NOT NULL DEFAULT FALSE');
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_active ON bake_sessions(user_id) WHERE finished_at IS NULL;`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_bake_sessions_recipe ON bake_sessions(recipe_id, finished_at DESC);`);
       // ── Sent Notifications: DB-basierte Dedup für Notification-Versand ──

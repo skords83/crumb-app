@@ -139,3 +139,12 @@ Kontowechsel gegebenenfalls Push zunächst im bisherigen Konto deaktivieren.
 Prüfungen: `cd api && npm test`, `cd ui && npm run build`, sowie `npm audit`
 in beiden Verzeichnissen. Sicherheitsupdates werden erst nach Neubau und
 Deployment der Container in der laufenden Anwendung wirksam.
+
+## Android-Backbegleiter
+
+Die native Kotlin-/Compose-App liegt unter [`android/`](android/README.md).
+Sie zeigt parallele Backvorgänge, lokale Countdowns und unterstützt Bestätigungen
+in der App sowie aus Benachrichtigungen. Build, Einrichtung und Einschränkungen:
+[Android-Anleitung](android/README.md), [Architektur](docs/android/architecture.md),
+[Prüfstand](docs/android/PROGRESS.md). Die Zustellung von Backmeldungen wird ausdrücklich
+zwischen Web und Android gewählt. Ein Deployment wurde damit nicht durchgeführt.
