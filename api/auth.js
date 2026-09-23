@@ -18,6 +18,8 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error('JWT_SECRET must be configured and contain at least 32 characters');
 }
 
+const mobileAuth = require('./mobile-auth').createMobileAuth(pool, JWT_SECRET);
+
 // Middleware to verify JWT token
 const authenticateToken = async (req, res, next) => {
   const match = /^Bearer ([^ ]+)$/.exec(req.headers.authorization || '');
@@ -33,6 +35,9 @@ const authenticateToken = async (req, res, next) => {
     const result = await pool.query('SELECT token_version FROM users WHERE id = $1', [verified.userId]);
     if (!result.rows[0] || result.rows[0].token_version !== verified.tokenVersion) {
       return res.status(401).json({ error: 'Anmeldung abgelaufen. Bitte erneut anmelden.' });
+    }
+    if (verified.mobileSessionId !== undefined && !(await mobileAuth.active(verified.userId, verified.mobileSessionId, verified.tokenVersion))) {
+      return res.status(401).json({ error: 'Gerätesitzung ungültig oder abgelaufen.' });
     }
     req.user = verified;
     next();
@@ -69,8 +74,10 @@ const login = async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    const session = req.body.client === 'android' ? await mobileAuth.issue(user) : { token };
+    res.set('Cache-Control', 'no-store, private');
     res.json({
-      token,
+      ...session,
       user: {
         id: user.id,
         username: user.username,
@@ -318,6 +325,8 @@ const changePassword = async (req, res) => {
 
 module.exports = {
   authenticateToken,
+  refreshMobileSession: mobileAuth.refresh,
+  logoutMobileSession: mobileAuth.logout,
   login,
   register,
   verify,

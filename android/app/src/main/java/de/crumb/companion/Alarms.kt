@@ -27,6 +27,11 @@ class AlarmScheduler(private val context: Context) {
     private val prefs = context.getSharedPreferences("alarms", Context.MODE_PRIVATE)
     fun channels() {
         val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel("timers", "Laufende Timer", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "Stille Countdowns bis zum nächsten Arbeitsschritt"
+            setSound(null, null)
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        })
         manager.createNotificationChannel(NotificationChannel("steps", "Arbeitsschritte", NotificationManager.IMPORTANCE_DEFAULT))
         manager.createNotificationChannel(NotificationChannel("critical", "Zeitkritisches Backen", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Backende und Wechsel im Ofen; Wiederholung nach frühestens 10 Minuten"
@@ -36,6 +41,29 @@ class AlarmScheduler(private val context: Context) {
         })
     }
     fun allowed(): Boolean = notices.areNotificationsEnabled() && (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    fun channelStatus(): List<Triple<String, String, Boolean>> {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        return listOf("steps" to "Arbeitsschritte", "critical" to "Zeitkritisches Backen", "timers" to "Laufende Timer").map { (id, label) ->
+            Triple(id, label, manager.getNotificationChannel(id)?.importance != NotificationManager.IMPORTANCE_NONE)
+        }
+    }
+    fun countdownsEnabled(): Boolean = context.getSharedPreferences("display", Context.MODE_PRIVATE).getBoolean("countdowns", true)
+    fun setCountdownsEnabled(enabled: Boolean) { context.getSharedPreferences("display", Context.MODE_PRIVATE).edit().putBoolean("countdowns", enabled).apply() }
+    private fun cancelTimer(key: String) { notices.cancel("timer:$key", 0) }
+    private fun showTimer(task: Task, now: Long) {
+        val key = task.step.alarmKey ?: return
+        val remaining = (task.step.due ?: return) - now
+        if (!countdownsEnabled() || remaining <= 0) { cancelTimer(key); return }
+        val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val notice = NotificationCompat.Builder(context, "timers")
+            .setSmallIcon(R.drawable.ic_crumb).setContentTitle("${task.session.title} · ${task.step.phase}")
+            .setContentText("Nach letztem Plan: ${task.step.instruction}")
+            .setContentIntent(open).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS).setOngoing(true).setSilent(true)
+            .setWhen(System.currentTimeMillis() + remaining).setUsesChronometer(true).setChronometerCountDown(true)
+            .setTimeoutAfter(remaining).build()
+        try { notices.notify("timer:$key", 0, notice) } catch (_: SecurityException) { }
+    }
     fun exact(): Boolean = Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()
     private fun intent(key: String): PendingIntent = PendingIntent.getBroadcast(context, 0,
         Intent(context, AlarmReceiver::class.java).setData(Uri.parse("crumb://alarm/" + Uri.encode(key))).putExtra("key", key),
@@ -44,17 +72,18 @@ class AlarmScheduler(private val context: Context) {
         val tasks = if (snapshot.delivery == "android") snapshot.tasks.filter { it.step.due != null } else emptyList()
         val keys = tasks.mapNotNull { it.step.alarmKey }.toSet()
         val old = prefs.getStringSet("keys", emptySet()).orEmpty().toSet()
-        (old - keys).forEach { key -> alarms.cancel(intent(key)); notices.cancel(key, 0); prefs.edit().remove("fired:$key").apply() }
+        (old - keys).forEach { key -> alarms.cancel(intent(key)); notices.cancel(key, 0); cancelTimer(key); prefs.edit().remove("fired:$key").apply() }
         prefs.edit().putStringSet("keys", keys).commit()
         if (!allowed()) {
             // Permissions are not a state transition: retain delivery/acknowledgement tombstones.
-            keys.forEach { key -> alarms.cancel(intent(key)); notices.cancel(key, 0) }
+            keys.forEach { key -> alarms.cancel(intent(key)); notices.cancel(key, 0); cancelTimer(key) }
             return
         }
         tasks.forEach { task ->
             val key = task.step.alarmKey ?: return@forEach
             val fired = prefs.getLong("fired:$key", 0)
-            if (fired >= Long.MAX_VALUE - 600_000) return@forEach
+            if (fired >= Long.MAX_VALUE - 600_000) { cancelTimer(key); return@forEach }
+            showTimer(task, now)
             if (fired != 0L && !task.step.critical) {
                 if (context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.tag == key }) show(task, stale = false, silent = true)
                 return@forEach
@@ -81,6 +110,7 @@ class AlarmScheduler(private val context: Context) {
         if (task.step.due!! > now + 1000) { reconcile(snapshot, now); return }
         val last = prefs.getLong("fired:$key", 0)
         if (last != 0L && (!task.step.critical || now - last < 599_000)) return
+        cancelTimer(key)
         show(task, repo.state.value.stale || repo.clock.age() > 120_000)
         prefs.edit().putLong("fired:$key", now).commit()
         if (task.step.critical) schedule(key, 600_000, true)
@@ -114,13 +144,13 @@ class AlarmScheduler(private val context: Context) {
     }
     fun acknowledge(step: Step) {
         step.alarmKey?.let { key ->
-            alarms.cancel(intent(key)); notices.cancel(key, 0)
+            alarms.cancel(intent(key)); notices.cancel(key, 0); cancelTimer(key)
             // Retain a tombstone until refreshed, so an old cache cannot rearm an accepted action.
             prefs.edit().putLong("fired:$key", Long.MAX_VALUE - 600_000).commit()
         }
     }
     fun clear() {
-        prefs.getStringSet("keys", emptySet()).orEmpty().forEach { alarms.cancel(intent(it)); notices.cancel(it, 0) }
+        prefs.getStringSet("keys", emptySet()).orEmpty().forEach { alarms.cancel(intent(it)); notices.cancel(it, 0); cancelTimer(it) }
         prefs.edit().clear().commit()
     }
 }

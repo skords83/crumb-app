@@ -33,10 +33,12 @@ class DeviceSmokeTest {
     }
     @Test fun androidKeystoreRoundTripDoesNotPersistPlaintextToken() {
         val store = SecureStore(context)
-        store.save("https://example.invalid/api", "synthetic-device-token")
+        store.saveSession("https://example.invalid/api", "synthetic-device-token", "synthetic-refresh-token", "2026-10-22T12:00:00Z")
         assertEquals("https://example.invalid/api" to "synthetic-device-token", SecureStore(context).read())
+        assertEquals("synthetic-refresh-token", SecureStore(context).refreshToken())
         val preferences = context.getSharedPreferences("credentials", Context.MODE_PRIVATE)
         assertFalse(preferences.all.values.any { it.toString().contains("synthetic-device-token") })
+        assertFalse(preferences.all.values.any { it.toString().contains("synthetic-refresh-token") })
         store.clear()
         assertNull(store.read())
     }

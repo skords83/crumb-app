@@ -10,7 +10,7 @@ const { getScraper } = require('./scrapers/index');
 const parseHtmlImport = require('./scrapers/smry');
 const { planWithNightWindow } = require('./scrapers/nightWindowPlanner');
 const { v4: uuidv4 } = require('uuid');
-const { authenticateToken, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
+const { authenticateToken, refreshMobileSession, logoutMobileSession, login, register, verify, requestPasswordReset, resetPassword, changePassword } = require('./auth');
 const { categorizeRecipe } = require('./categorize');
 const { router: bakeSessionsRouter, setPool: setBakeSessionsPool } = require('./bake-sessions');
 const { createWidgetRouter } = require('./widget-status');
@@ -206,6 +206,7 @@ const initDB = async () => {
     try {
       await pool.query(createUsersTable);
       await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0');
+      await require('./mobile-auth').migrateMobileSessions(pool);
       await pool.query(createRecipesTable);
       await pool.query(createIndex);
       await pool.query(migrateRecipesTable);
@@ -398,6 +399,8 @@ const calculateTimeline = (plannedAt, sections) => {
 // AUTH ROUTES
 // ============================================================
 app.post('/api/auth/login', authRateLimit, login);
+app.post('/api/auth/mobile/refresh', authRateLimit, refreshMobileSession);
+app.post('/api/auth/mobile/logout', authRateLimit, authenticateToken, logoutMobileSession);
 app.post('/api/auth/register', authRateLimit, register);
 app.get('/api/auth/verify', authenticateToken, verify);
 app.post('/api/auth/request-reset', passwordResetRateLimit, requestPasswordReset);

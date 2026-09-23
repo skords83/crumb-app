@@ -14,6 +14,9 @@ import org.json.JSONObject
 interface CredentialStore {
     fun read(): Pair<String, String>?
     fun save(url: String, token: String)
+    fun refreshToken(): String? = null
+    fun sessionExpiresAt(): String? = null
+    fun saveSession(url: String, token: String, refresh: String?, expires: String?) { save(url, token) }
     fun clear()
 }
 class SecureStore(context: Context) : CredentialStore {
@@ -26,17 +29,20 @@ class SecureStore(context: Context) : CredentialStore {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
-    override fun read(): Pair<String, String>? = runCatching {
+    private fun readData(): JSONObject? = runCatching {
         val encoded = prefs.getString("auth", null) ?: return null
         val bytes = Base64.decode(encoded, Base64.NO_WRAP)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
-        val data = JSONObject(String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8))
-        data.getString("url") to data.getString("token")
+        JSONObject(String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8))
     }.getOrNull()
-    override fun save(url: String, token: String) {
+    override fun read(): Pair<String, String>? = readData()?.let { it.getString("url") to it.getString("token") }
+    override fun refreshToken(): String? = readData()?.optionalString("refreshToken")
+    override fun sessionExpiresAt(): String? = readData()?.optionalString("sessionExpiresAt")
+    override fun save(url: String, token: String) { saveSession(url, token, null, null) }
+    override fun saveSession(url: String, token: String, refresh: String?, expires: String?) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
-        val encrypted = cipher.doFinal(JSONObject().put("url", url).put("token", token).toString().toByteArray(Charsets.UTF_8))
+        val encrypted = cipher.doFinal(JSONObject().put("url", url).put("token", token).put("refreshToken", refresh).put("sessionExpiresAt", expires).toString().toByteArray(Charsets.UTF_8))
         check(prefs.edit().putString("auth", Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)).commit())
     }
     override fun clear() { prefs.edit().clear().commit() }

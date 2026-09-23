@@ -90,6 +90,44 @@ class AlarmSchedulerTest {
         scheduler.reconcile(data, now)
         assertEquals(2, scheduled().size)
     }
+    @Test fun countdownNotificationsTrackParallelPlansAndDisappearOnCompletion() {
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        val data = snapshot()
+        scheduler.reconcile(data, now)
+        val timers = manager.activeNotifications.filter { it.tag.startsWith("timer:") }
+        assertEquals(3, timers.size)
+        assertTrue(timers.all { it.notification.extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER) })
+        assertTrue(timers.all { it.notification.extras.getBoolean(android.app.Notification.EXTRA_CHRONOMETER_COUNT_DOWN) })
+        assertTrue(timers.all { it.notification.actions.isNullOrEmpty() })
+        scheduler.acknowledge(data.tasks.first().step)
+        scheduler.reconcile(data, now)
+        assertEquals(2, manager.activeNotifications.size)
+        scheduler.reconcile(Snapshot(now, "android", emptyList()), now)
+        assertTrue(manager.activeNotifications.isEmpty())
+    }
+    @Test fun countdownSettingDoesNotDisableDueAlarms() {
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        scheduler.reconcile(snapshot(), now)
+        scheduler.setCountdownsEnabled(false)
+        scheduler.reconcile(snapshot(), now)
+        assertTrue(manager.activeNotifications.isEmpty())
+        assertEquals(3, scheduled().size)
+        scheduler.setCountdownsEnabled(true)
+        scheduler.reconcile(snapshot(), now)
+        assertEquals(3, manager.activeNotifications.size)
+        scheduler.reconcile(snapshot(delivery = "web"), now)
+        assertTrue(manager.activeNotifications.isEmpty())
+    }
+    @Test fun overdueTaskHasNoRunningCountdownAndBlockedChannelIsVisible() {
+        scheduler.reconcile(snapshot(due = now - 1000), now)
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        assertTrue(manager.activeNotifications.isEmpty())
+        assertTrue(scheduler.channelStatus().all { it.third })
+        val channel = manager.getNotificationChannel("critical")
+        channel.importance = android.app.NotificationManager.IMPORTANCE_NONE
+        manager.createNotificationChannel(channel)
+        assertFalse(scheduler.channelStatus().first { it.first == "critical" }.third)
+    }
     @Test fun parserPreservesActionsAndAbsoluteTimes() {
         val data = parseSnapshot("""{"server_time":"2026-09-22T12:00:00.000Z","delivery":"android","sessions":[{"id":7,"version":3,"title":"Testbrot","steps":[{"id":"7:0","globalIdx":0,"phase":"Teig","instruction":"Kneten","state":"active","start":null,"scheduled_start":"2026-09-22T12:00:00.000Z","end":null,"planned_end":"2026-09-22T12:05:00.000Z","due_at":"2026-09-22T12:00:00.000Z","critical":false,"action":"complete","alarm_key":"test"}]}]}""")
         assertEquals(3, data.tasks.single().session.version)

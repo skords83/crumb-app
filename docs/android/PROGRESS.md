@@ -121,3 +121,44 @@ Backvorgang und Android-Zurück aus der Detailansicht. Kein Commit/Push/Deployme
   kein erneuter Emulatorlauf). Actions-Setup und Upload sind lokal nicht ausführbar.
 - Nächster Schritt: nach freigegebenem Commit/Push ersten GitHub-Lauf und APK-Download
   prüfen. Keine zusätzlichen Secrets nötig. Kein Commit, Push oder Deployment erfolgt.
+
+## Fortsetzung 23.09.2026 – Alarmstatus, Countdowns und Gerätesitzungen
+- Umgesetzt: dauerhafte Anzeige des Alarm-/Benachrichtigungsstatus, erneut erreichbare
+  Einstellungen, Aktualisierung bei Rückkehr aus Android-Einstellungen. Detailoptionen
+  ausklappbar; Kanalstatus und Countdown-Schalter integriert (`MainActivity.kt`).
+- `Alarms.kt`: stille System-Countdowns je anstehender Aufgabe über eigenen Kanal;
+  keine sekündlichen API-Aufrufe und kein dauerhafter Vordergrunddienst. Entfernen bei
+  Fälligkeit, Abschluss, Terminwechsel, Rechteentzug oder Rückkehr zu Web-Push.
+- `api/mobile-auth.js`, `auth.js`, `index.js`: optionale Android-Gerätesitzung mit
+  SHA-256-gehashtem zufälligem Refresh-Token, maximal 30 Tagen, unveränderten Web-Tokens.
+  Zugriffstokens maximal 24h; Abmeldung/Passwortänderung widerrufen den Zugriff.
+  Idempotente Tabellenerstellung nur als Code vorbereitet, keine Produktionsmigration.
+- `SecureStore.kt`/`Repository.kt`: Refresh-Token gemeinsam mit Zugriffstoken per
+  Keystore verschlüsselt; genau ein Erneuerungsversuch nach 401, kein Replay nach
+  Netzwerkfehler/409. Bestätigter Web-Modus bleibt bei fehlschlagendem Widerruf bestehen.
+- `android/app/build.gradle.kts`, `.github/workflows/android.yml`: optionaler manuell
+  gestarteter Release-Build auf main; Signierung ausschließlich über Environment-Secrets,
+  kein unsignierter Fallback. Version 0.2.0. Produktiver Signierschlüssel noch nicht eingerichtet.
+- Erste Prüfung: Debug-/Test-APK, JVM-Tests und Lint erfolgreich; API inklusive neuer
+  PGlite- und Authentifizierungsprüfungen grün (10 Testdateien). Neue Dateien: `mobile-auth.test.js`, `DeviceSettingsTest.kt`.
+- Offen: Entscheidung/Einrichtung eines Push-Dienstes für Planänderungen (FCM angefragt),
+  echte Hardware/PIN/Ton/Vibration, produktive Signatur. Kein Commit/Push/Deployment.
+
+Prüfstand der Fortsetzung: **33 JVM-Tests**, **5 Android-15-Integrationstests** und
+Lint (0 Fehler, 31 Hinweise) erfolgreich. Neuer Gerätetest prüft drei echte System-
+Countdowns, Status/Einstellungszugang und Activity-Neuerstellung. Test-Rückgabetyp beim
+ersten Lauf korrigiert, finaler Lauf grün. API: zehn Testdateien erfolgreich; fünf
+zusätzliche Mobile-Auth-Szenarien separat grün. Web: neun Tests erfolgreich.
+Release ohne Schlüssel erwartungsgemäß abgewiesen; mit temporärem synthetischem
+Schlüssel Build, Release-Lint und APK-Signaturprüfung erfolgreich. Schlüssel gelöscht,
+Fixture-APK aus dem Distributionspfad nach /tmp verschoben. Workflow actionlint-geprüft.
+APK für lokale Tests: `android/app/build/outputs/apk/debug/app-debug.apk` (0.2.0).
+Neue Funktionen sind noch nicht committet, auf GitHub gebaut oder produktiv bereitgestellt.
+
+Auch die drei Recovery-Szenarien mit dem finalen Stand erneut erfolgreich:
+Prozessende + tiefer Doze, vollständiger Emulator-Neustart und Force-stop mit
+Offline-Wiederöffnung. Jeweils echte kritische Benachrichtigung nachgewiesen;
+`app/build/reports/device/recovery-results.txt` enthält drei PASS-Ergebnisse.
+Offline-Übersicht mit dauerhaft sichtbarem Alarmstatus visuell geprüft.
+Nächste Schritte: FCM-Entscheidung und Projektkonfiguration, dauerhaften Release-Schlüssel
+bereitstellen, neue APK/API nach Freigabe veröffentlichen und auf echter Hardware prüfen.

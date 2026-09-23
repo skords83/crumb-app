@@ -15,7 +15,7 @@ cd android
 APK: `app/build/outputs/apk/debug/app-debug.apk`. Installation auf einem ausdrücklich
 für Entwicklung vorgesehenen Gerät: `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
 Debugsignatur ist keine Release-Signatur; produktive Verteilung benötigt eine getrennte Signierkonfiguration.
-Keine Zugangsdaten, Serveradressen oder Signierschlüssel sind im Projekt hinterlegt.
+Keine produktiven Zugangsdaten, Serveradressen oder Signierschlüssel sind im Projekt hinterlegt.
 
 ## GitHub Actions
 
@@ -54,7 +54,8 @@ Appdaten gehen verloren). Für dauerhafte Updates braucht es eine stabile Releas
    Web-Ruhezeiten und Web-Vorlaufzeiten werden auf Android nicht übernommen.
 6. „Zurück zu Web-Push“ oder erfolgreiche Abmeldung stellt Web-Zustellung wieder her.
    Offline-Abmeldung wird abgelehnt, damit die Zustellwahl nicht unbemerkt hängenbleibt.
-   Bei abgelaufenem JWT erneut anmelden; die serverseitige Android-Wahl bleibt bestehen.
+   Ab 0.2.0 werden Zugriffstokens innerhalb der Gerätesitzung erneuert. Nach deren Ablauf
+   erneut anmelden; die serverseitige Android-Wahl bleibt bestehen.
 
 Server und Gerät berechnen keine konkurrierenden Timelines: Android sendet die
 ursprüngliche Session-Version an die bestehende Transition-API. Bei 409 neu prüfen
@@ -92,3 +93,47 @@ HTTPS-Zertifikate ausschließlich im Testprozess; die App vertraut ihnen nicht d
 
 Protokolle/Screenshot: `app/build/reports/device/`. Recovery-Fixtures sind bei normalen
 JUnit-/Instrumentierungsläufen deaktiviert. Kein physisches Gerät wurde getestet.
+
+## Alarmstatus und Sperrbildschirm (0.2.0)
+
+Bei Android-Zustellung bleibt „Genaue Backtimer: erlaubt/nicht erlaubt“ sichtbar.
+Unter **Einstellungen** lassen sich Alarmzugriff und die einzelnen Benachrichtigungskanäle
+jederzeit wieder öffnen. Beim Zurückkehren werden die Rechte erneut geprüft.
+„Laufende Timer anzeigen“ erzeugt pro anstehender Aufgabe eine stille Benachrichtigung
+mit Android-Systemcountdown, auch bei mehreren Backvorgängen. Es ist kein permanenter
+Vordergrunddienst nötig. Die Anzeige folgt dem letzten geladenen Plan und verschwindet
+bei Fälligkeit; verspätete normale Alarme bleiben möglich. Android bestimmt Darstellung,
+Gruppierung und Sperrbildschirm-Sichtbarkeit. Verborgene vertrauliche Inhalte bleiben privat.
+
+## Geräteanmeldung (0.2.0)
+
+Nach Anmeldung mit der neuen API erhält Android eine Gerätesitzung für maximal 30 Tage.
+Die App erneuert abgelaufene Zugriffstokens selbst; sie speichert kein Passwort.
+Beide Tokens liegen gemeinsam verschlüsselt im Android-Keystore-geschützten Speicher.
+Serverseitig wird nur der SHA-256-Hash des zufälligen Refresh-Tokens gespeichert.
+Eine Erneuerung verlängert die 30-Tage-Frist nicht. Nach deren Ablauf ist eine erneute
+Anmeldung nötig; das Ablaufdatum steht in der App. Bestehende 24h-Anmeldungen erhalten
+erst nach erneutem Login eine Gerätesitzung. Passwortänderung/-reset und Abmeldung
+widerrufen den Zugriff. Bei Netzwerkfehlern bleibt der lokale Plan als veraltet erhalten.
+Die neue Tabelle `mobile_sessions` wird beim nächsten freigegebenen API-Start angelegt.
+
+## Signierte Release-APK
+
+Der manuelle Android-Workflow bietet **release** als optionale Auswahl. Nur auf `main`
+wird nach erfolgreichen Debug-Prüfungen zusätzlich eine signierte APK gebaut.
+Dafür im GitHub-Environment **android-release** folgende Secrets einrichten:
+
+- `ANDROID_KEYSTORE_BASE64`: Base64-Inhalt eines dauerhaft gesicherten Release-Keystores.
+- `ANDROID_KEYSTORE_PASSWORD`: dessen Passwort.
+- `ANDROID_KEY_ALIAS`: Alias des Signierschlüssels.
+- `ANDROID_KEY_PASSWORD`: Passwort des Schlüssels.
+
+Keystore und Passwörter niemals committen oder als normale Actions-Artefakte hochladen.
+Den Schlüssel dauerhaft sicher sichern: spätere Updates müssen dieselbe Signatur tragen.
+Eine Environment-Regel sollte Release-Läufe auf `main` beschränken. Der Workflow verwendet
+`1000 + github.run_number` als steigenden Versionscode und prüft die APK mit `apksigner`.
+Ein Release ohne vollständige Signierkonfiguration schlägt fehl. Lokale Release-Builds
+verwenden die Umgebungsvariablen `CRUMB_KEYSTORE_PATH`, `CRUMB_KEYSTORE_PASSWORD`,
+`CRUMB_KEY_ALIAS`, `CRUMB_KEY_PASSWORD` und optional `CRUMB_VERSION_CODE`.
+Das erste Release ersetzt eine anders signierte Debug-App nur nach deren Deinstallation.
+Es wurde noch kein produktiver Schlüssel erzeugt oder bei GitHub hinterlegt.

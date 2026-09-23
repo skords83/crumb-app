@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 data class AppState(val loggedIn: Boolean = false, val snapshot: Snapshot? = null,
     val loading: Boolean = false, val pending: String? = null, val message: String? = null,
-    val stale: Boolean = true)
+    val stale: Boolean = true, val sessionExpiresAt: String? = null)
 class CrumbApp : Application() {
     val repository by lazy { Repository(this) }
     override fun onCreate() { super.onCreate(); AlarmScheduler(this).channels() }
@@ -28,7 +28,7 @@ class Repository(private val context: Context,
     private val cache = context.getSharedPreferences("snapshot", Context.MODE_PRIVATE)
     private val mutex = Mutex()
     val clock = ServerClock(SystemClock::elapsedRealtime)
-    private val mutable = MutableStateFlow(AppState(loggedIn = credentials.read() != null))
+    private val mutable = MutableStateFlow(AppState(loggedIn = credentials.read() != null, sessionExpiresAt = credentials.sessionExpiresAt()))
     val state = mutable.asStateFlow()
     init {
         runCatching {
@@ -45,27 +45,43 @@ class Repository(private val context: Context,
     private fun bootCount() = android.provider.Settings.Global.getInt(context.contentResolver, android.provider.Settings.Global.BOOT_COUNT, -2)
     val generation: String get() = cache.getString("generation", "").orEmpty()
     private fun auth(): Pair<String, String> = credentials.read() ?: throw ApiException(401, "Bitte anmelden.")
+    // Called only while holding the repository mutex. A 401 from auth middleware means
+    // the rejected action was not executed; network errors and conflicts are never replayed.
+    private fun request(path: String, body: JSONObject? = null, method: String = if (body == null) "GET" else "POST"): String {
+        val (url, token) = auth()
+        try { return api.request(url, path, token, body, method) }
+        catch (e: ApiException) {
+            if (e.status != 401) throw e
+            val refresh = credentials.refreshToken() ?: throw e
+            val renewed = JSONObject(api.request(url, "/auth/mobile/refresh", body = JSONObject().put("refreshToken", refresh)))
+            val next = renewed.getString("token")
+            credentials.saveSession(url, next, refresh, renewed.optionalString("sessionExpiresAt"))
+            mutable.value = mutable.value.copy(sessionExpiresAt = renewed.optionalString("sessionExpiresAt"))
+            return api.request(url, path, next, body, method)
+        }
+    }
     suspend fun login(url: String, email: String, password: String) = withContext(Dispatchers.IO) { mutex.withLock {
         mutable.value = mutable.value.copy(loading = true, message = null)
+        var authenticated = false
         try {
             val base = api.validateUrl(url)
-            val response = JSONObject(api.request(base, "/auth/login", body = JSONObject().put("email", email).put("password", password)))
+            val response = JSONObject(api.request(base, "/auth/login", body = JSONObject().put("email", email).put("password", password).put("client", "android")))
             AlarmScheduler(context).clear()
             cache.edit().clear().commit()
-            credentials.save(base, response.getString("token"))
+            credentials.saveSession(base, response.getString("token"), response.optionalString("refreshToken"), response.optionalString("sessionExpiresAt"))
             cache.edit().putString("generation", java.util.UUID.randomUUID().toString()).commit()
-            mutable.value = AppState(loggedIn = true, loading = true)
+            mutable.value = AppState(loggedIn = true, loading = true, sessionExpiresAt = response.optionalString("sessionExpiresAt"))
+            authenticated = true
             scheduleSync(context)
             refreshLocked()
         } catch (e: Exception) {
-            if (e is ApiException && e.status == 401) mutable.value = mutable.value.copy(message = "Anmeldung fehlgeschlagen. E-Mail und Passwort prüfen.")
+            if (!authenticated && e is ApiException && e.status == 401) mutable.value = mutable.value.copy(message = "Anmeldung fehlgeschlagen. E-Mail und Passwort prüfen.")
             else fail(e)
         }
         finally { mutable.value = mutable.value.copy(loading = false) }
     } }
     private fun refreshLocked() {
-        val (url, token) = auth()
-        val raw = api.request(url, "/bake-sessions/companion", token)
+        val raw = request("/bake-sessions/companion")
         val data = parseSnapshot(raw)
         clock.sync(data.serverTime)
         check(cache.edit().putString("json", raw).putLong("wall", System.currentTimeMillis()).putLong("elapsed", SystemClock.elapsedRealtime()).putInt("boot", bootCount()).commit())
@@ -89,8 +105,7 @@ class Repository(private val context: Context,
             val task = mutable.value.snapshot?.tasks?.find { it.session.id == sessionId && it.step.id == stepId }
                 ?: throw ApiException(409, "Diese Aufgabe ist nicht mehr aktuell. Bitte aktualisieren.")
             if (task.session.version != version || task.step.action != action) throw ApiException(409, "Backplan geändert. Bitte erneut prüfen.")
-            val (url, token) = auth()
-            api.request(url, "/bake-sessions/$sessionId/transition", token, JSONObject()
+            request("/bake-sessions/$sessionId/transition", JSONObject()
                 .put("expectedVersion", version).put("stepIndex", task.step.index).put("action", action).put("phase", task.step.phase))
             // Only a successful server response permits removing the completed reminder.
             AlarmScheduler(context).acknowledge(task.step)
@@ -104,21 +119,23 @@ class Repository(private val context: Context,
             false
         } finally { mutable.value = mutable.value.copy(pending = null) }
     } }
+    private fun persistDelivery(mode: String) {
+        // A confirmed delivery switch must survive a failed follow-up GET and process death.
+        cache.getString("json", null)?.let { raw ->
+            check(cache.edit().putString("json", JSONObject(raw).put("delivery", mode).toString()).commit())
+        }
+        mutable.value.snapshot?.let { previous ->
+            val changed = previous.copy(delivery = mode)
+            mutable.value = mutable.value.copy(snapshot = changed)
+            AlarmScheduler(context).reconcile(changed, clock.now())
+        }
+        if (mode == "web") AlarmScheduler(context).clear()
+    }
     suspend fun delivery(mode: String) = withContext(Dispatchers.IO) { mutex.withLock {
         mutable.value = mutable.value.copy(loading = true)
         try {
-            val (url, token) = auth()
-            api.request(url, "/bake-sessions/companion/delivery", token, JSONObject().put("delivery", mode), "PUT")
-            // A confirmed delivery switch must survive a failed follow-up GET and process death.
-            cache.getString("json", null)?.let { raw ->
-                check(cache.edit().putString("json", JSONObject(raw).put("delivery", mode).toString()).commit())
-            }
-            mutable.value.snapshot?.let { previous ->
-                val changed = previous.copy(delivery = mode)
-                mutable.value = mutable.value.copy(snapshot = changed)
-                AlarmScheduler(context).reconcile(changed, clock.now())
-            }
-            if (mode == "web") AlarmScheduler(context).clear()
+            request("/bake-sessions/companion/delivery", JSONObject().put("delivery", mode), "PUT")
+            persistDelivery(mode)
             refreshLocked()
             mutable.value = mutable.value.copy(message = if (mode == "android") "Backmeldungen für dieses Konto auf Android umgestellt." else "Backmeldungen wieder über Web-Push.")
         } catch (e: Exception) { fail(e) }
@@ -127,8 +144,9 @@ class Repository(private val context: Context,
     suspend fun logout() = withContext(Dispatchers.IO) { mutex.withLock {
         // Restore web delivery before removing credentials. If offline, retain login so user can retry.
         try {
-            val (url, token) = auth()
-            api.request(url, "/bake-sessions/companion/delivery", token, JSONObject().put("delivery", "web"), "PUT")
+            request("/bake-sessions/companion/delivery", JSONObject().put("delivery", "web"), "PUT")
+            persistDelivery("web")
+            if (credentials.refreshToken() != null) request("/auth/mobile/logout", JSONObject())
             clearLocal()
         } catch (e: Exception) { fail(e, "Abmeldung nicht abgeschlossen. ") }
     } }

@@ -11,6 +11,11 @@ on:
       - 'android/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Build a signed release APK (requires android-release secrets)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -75,3 +80,62 @@ jobs:
             android/app/build/test-results/
           if-no-files-found: warn
           retention-days: 14
+
+  release:
+    name: Signed release APK
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main' }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: android-release
+    defaults:
+      run:
+        working-directory: android
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Load release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD" || {
+            echo 'Configure all four Android signing secrets in the android-release environment.' >&2
+            exit 1
+          }
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/crumb-release.jks"
+      - name: Build signed release
+        env:
+          CRUMB_KEYSTORE_PATH: ${{ runner.temp }}/crumb-release.jks
+          CRUMB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CRUMB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CRUMB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          export CRUMB_VERSION_CODE=$((1000 + BUILD_NUMBER))
+          ./gradlew --no-daemon --max-workers=2 :app:assembleRelease :app:lintRelease
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: crumb-android-release-${{ github.sha }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Remove runner signing key
+        if: ${{ always() }}
+        run: rm -f -- "$RUNNER_TEMP/crumb-release.jks"

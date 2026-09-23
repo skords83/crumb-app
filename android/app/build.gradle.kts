@@ -3,10 +3,24 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+val releaseStore = providers.environmentVariable("CRUMB_KEYSTORE_PATH").orNull
+val releaseStorePassword = providers.environmentVariable("CRUMB_KEYSTORE_PASSWORD").orNull
+val releaseAlias = providers.environmentVariable("CRUMB_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("CRUMB_KEY_PASSWORD").orNull
+val releaseCode = providers.environmentVariable("CRUMB_VERSION_CODE").orNull?.toInt() ?: 2
 android {
     namespace = "de.crumb.companion"
     compileSdk = 35
-    defaultConfig { applicationId = "de.crumb.companion"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "0.1.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "de.crumb.companion"; minSdk = 26; targetSdk = 35; versionCode = releaseCode; versionName = "0.2.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    signingConfigs {
+        create("release") {
+            storeFile = releaseStore?.let { file(it) }
+            storePassword = releaseStorePassword
+            keyAlias = releaseAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+    buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("release") } }
     buildFeatures { compose = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -32,4 +46,14 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+}
+
+// Release builds must never silently produce an unsigned APK or use the debug key.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    doFirst {
+        require(!releaseStore.isNullOrBlank() && file(releaseStore).isFile &&
+            !releaseStorePassword.isNullOrBlank() && !releaseAlias.isNullOrBlank() && !releaseKeyPassword.isNullOrBlank()) {
+            "Release signing requires CRUMB_KEYSTORE_PATH, CRUMB_KEYSTORE_PASSWORD, CRUMB_KEY_ALIAS and CRUMB_KEY_PASSWORD."
+        }
+    }
 }

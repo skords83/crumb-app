@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -66,7 +67,23 @@ private fun CompanionScreen(activity: MainActivity, vm: CompanionViewModel = vie
     var now by remember { mutableLongStateOf(vm.repo.clock.now()) }
     var selected by rememberSaveable { mutableStateOf<Int?>(null) }
     var deliveryDialog by remember { mutableStateOf(false) }
+    var alarmSettingsOpen by rememberSaveable { mutableStateOf(false) }
     val scheduler = remember { AlarmScheduler(activity) }
+    var permissionRevision by remember { mutableIntStateOf(0) }
+    DisposableEffect(activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionRevision++
+                activity.lifecycleScope.launch { vm.repo.restoreCachedAlarms() }
+            }
+        }
+        activity.lifecycle.addObserver(observer)
+        onDispose { activity.lifecycle.removeObserver(observer) }
+    }
+    val notificationStatus = remember(permissionRevision) { scheduler.allowed() }
+    val exactStatus = remember(permissionRevision) { scheduler.exact() }
+    val channelStatus = remember(permissionRevision) { scheduler.channelStatus() }
+    var countdownsEnabled by remember { mutableStateOf(scheduler.countdownsEnabled()) }
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) deliveryDialog = true }
     LaunchedEffect(Unit) { while (true) { now = vm.repo.clock.now(); delay(1000) } }
     val snapshot = state.snapshot
@@ -94,6 +111,7 @@ private fun CompanionScreen(activity: MainActivity, vm: CompanionViewModel = vie
                     TextButton(onClick = vm::logout, enabled = !state.loading && state.pending == null) { Text("Abmelden") }
                 }
             }
+            state.sessionExpiresAt?.let { expiry -> item { Text("Geräteanmeldung gültig bis ${timeLabel(Instant.parse(expiry).toEpochMilli())}", style = MaterialTheme.typography.bodySmall) } }
             if (snapshot != null) {
                 item { Text(if (snapshot.sessions.size == 1) "1 aktiver Backvorgang" else "${snapshot.sessions.size} aktive Backvorgänge", style = MaterialTheme.typography.titleMedium) }
                 if (snapshot.delivery == "web") item {
@@ -103,16 +121,40 @@ private fun CompanionScreen(activity: MainActivity, vm: CompanionViewModel = vie
                         else deliveryDialog = true
                     }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Android-Benachrichtigungen einrichten") }
                 } else item {
-                    Text("Backmeldungen: Android")
-                    if (!scheduler.allowed()) {
-                        Text("Benachrichtigungen blockiert: Android kann keine Backmeldungen anzeigen.", color = MaterialTheme.colorScheme.error)
-                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)) }) { Text("Benachrichtigungen erlauben") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Backmeldungen: Android", modifier = Modifier.weight(1f))
+                        TextButton(onClick = { alarmSettingsOpen = !alarmSettingsOpen }) { Text(if (alarmSettingsOpen) "Schließen" else "Einstellungen") }
                     }
-                    if (!scheduler.exact()) {
-                        Text("Zeitkritische Alarme können verspätet eintreffen. Für genaue Backtimer Alarmzugriff erlauben.", color = Color(0xFFFFCC80))
-                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${activity.packageName}"))) }) { Text("Genaue Backtimer erlauben") }
+                    Text(if (notificationStatus) "Benachrichtigungen: erlaubt" else "Benachrichtigungen: blockiert")
+                    Text(if (exactStatus) "Genaue Backtimer: erlaubt" else "Genaue Backtimer: nicht erlaubt")
+                    if (!exactStatus) Text("Zeitkritische Alarme können verspätet eintreffen.", color = Color(0xFFFFCC80))
+                    if (channelStatus.any { it.first != "timers" && !it.third }) {
+                        Text("Mindestens ein Alarmkanal ist blockiert. Bitte in den Einstellungen prüfen.", color = MaterialTheme.colorScheme.error)
                     }
+                    if (Build.VERSION.SDK_INT >= 31 && (!exactStatus || alarmSettingsOpen)) {
+                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${activity.packageName}"))) }) {
+                            Text(if (exactStatus) "Backtimer-Einstellungen öffnen" else "Genaue Backtimer erlauben")
+                        }
+                    }
+                    if (alarmSettingsOpen) {
+                    TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)) }) { Text("Benachrichtigungseinstellungen öffnen") }
+                    channelStatus.forEach { (id, label, enabled) ->
+                        TextButton(onClick = { activity.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, id)) }) {
+                            Text("$label: ${if (enabled) "aktiv" else "blockiert"} · Einstellungen")
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Laufende Timer anzeigen", modifier = Modifier.weight(1f))
+                        Switch(checked = countdownsEnabled, onCheckedChange = {
+                            countdownsEnabled = it
+                            scheduler.setCountdownsEnabled(it)
+                            activity.lifecycleScope.launch { vm.repo.restoreCachedAlarms() }
+                        })
+                    }
+                    Text("Countdowns erscheinen als stille Benachrichtigungen. Die Sichtbarkeit auf dem Sperrbildschirm bestimmst du in Android.", style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = { vm.delivery("web") }, enabled = !state.loading) { Text("Zurück zu Web-Push") }
+                    }
                 }
                 if (snapshot.sessions.isEmpty()) item { Text("Noch kein Backvorgang aktiv. Starte deinen nächsten Backplan wie gewohnt in Crumb.") }
                 if (detail == null) {

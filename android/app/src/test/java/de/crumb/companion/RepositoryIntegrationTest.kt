@@ -36,7 +36,14 @@ class RepositoryIntegrationTest {
         var value: Pair<String, String>? = null
         override fun read() = value
         override fun save(url: String, token: String) { value = url to token }
-        override fun clear() { value = null }
+        var refresh: String? = null
+        var expires: String? = null
+        override fun refreshToken() = refresh
+        override fun sessionExpiresAt() = expires
+        override fun saveSession(url: String, token: String, refresh: String?, expires: String?) {
+            save(url, token); this.refresh = refresh; this.expires = expires
+        }
+        override fun clear() { value = null; refresh = null; expires = null }
     }
     @Before fun setup() {
         context = RuntimeEnvironment.getApplication()
@@ -196,6 +203,57 @@ class RepositoryIntegrationTest {
         assertEquals(1, commits)
         assertTrue(submittedVersions.isNotEmpty())
         assertTrue(submittedVersions.all { it == 0 })
+    }
+    @Test fun expiredAccessTokenRenewsWithoutPasswordAndRetriesOriginalVersion() = runBlocking {
+        login()
+        credentials.refresh = "synthetic-refresh"
+        server.enqueue(json("{}", 401))
+        server.enqueue(json("""{"token":"renewed-access","sessionExpiresAt":"2026-10-22T12:00:00Z"}"""))
+        server.enqueue(json("""{"version":1}"""))
+        server.enqueue(json(snapshot(1, done = true)))
+        assertTrue(repo.act(7, 0, "7:0", "complete"))
+        val sent = requests()
+        assertEquals("/api/auth/mobile/refresh", sent[3].path)
+        assertNull(sent[3].getHeader("Authorization"))
+        val body = JSONObject(sent[3].body.readUtf8())
+        assertEquals("synthetic-refresh", body.getString("refreshToken"))
+        assertFalse(body.has("password"))
+        assertEquals("Bearer renewed-access", sent[4].getHeader("Authorization"))
+        assertEquals(0, JSONObject(sent[4].body.readUtf8()).getInt("expectedVersion"))
+        assertEquals("renewed-access", credentials.read()!!.second)
+        assertEquals("synthetic-refresh", credentials.refreshToken())
+    }
+    @Test fun renewalNetworkFailureKeepsCredentialsAndLastPlanForRecovery() = runBlocking {
+        login(); credentials.refresh = "synthetic-refresh"
+        server.enqueue(json("{}", 401)); server.enqueue(json("{}", 503))
+        assertFalse(repo.refresh())
+        assertTrue(repo.state.value.loggedIn)
+        assertNotNull(repo.state.value.snapshot)
+        assertEquals("synthetic-refresh", credentials.refreshToken())
+        assertTrue(repo.state.value.stale)
+        assertEquals(4, server.requestCount)
+    }
+    @Test fun revokedRefreshSessionClearsLocalAlarmsAndNeverRetriesAction() = runBlocking {
+        login(); credentials.refresh = "synthetic-refresh"
+        server.enqueue(json("{}", 401)); server.enqueue(json("{}", 401))
+        assertFalse(repo.act(7, 0, "7:0", "complete"))
+        assertFalse(repo.state.value.loggedIn)
+        assertNull(credentials.refreshToken())
+        assertEquals(0, alarmCount())
+        assertEquals(1, requests().count { it.path == "/api/bake-sessions/7/transition" })
+    }
+    @Test fun failedSessionRevocationKeepsAcceptedWebDeliveryAfterRestart() = runBlocking {
+        login(); credentials.refresh = "synthetic-refresh"
+        server.enqueue(json("""{"delivery":"web"}""")); server.enqueue(json("{}", 503))
+        repo.logout()
+        assertTrue(repo.state.value.loggedIn)
+        assertEquals("web", repo.state.value.snapshot!!.delivery)
+        assertEquals(0, alarmCount())
+        assertEquals("web", Repository(context, api, credentials).state.value.snapshot!!.delivery)
+        server.enqueue(json("""{"delivery":"web"}""")); server.enqueue(json("""{"ok":true}"""))
+        repo.logout()
+        assertFalse(repo.state.value.loggedIn)
+        assertNull(credentials.refreshToken())
     }
     @Test fun redirectIsRejectedWithoutForwardingCredentials() {
         server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", "https://example.invalid/stolen"))
