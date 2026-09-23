@@ -1,0 +1,6 @@
+<resources>
+    <string name="timer_remaining">verbleibend</string>
+    <string name="timer_gauge_status">Ring: %1$d %% Rest · %2$s</string>
+    <string name="timer_gauge_unknown">Dauer offen · %1$s</string>
+    <string name="timer_plan">Nach letztem Plan: %1$s</string>
+</resources>

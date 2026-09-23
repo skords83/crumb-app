@@ -36,6 +36,7 @@ class DeviceSettingsTest {
         val serverTls = HandshakeCertificates.Builder().heldCertificate(certificate).build()
         val clientTls = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
         val previousTls = HttpsURLConnection.getDefaultSSLSocketFactory()
+        val expired = java.util.concurrent.atomic.AtomicBoolean(false)
         val server = MockWebServer().apply { useHttps(serverTls.sslSocketFactory(), false) }
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -44,9 +45,10 @@ class DeviceSettingsTest {
                     "/api/bake-sessions/companion/delivery" -> """{"delivery":"web"}"""
                     "/api/bake-sessions/companion" -> {
                         val sessions = (1..3).joinToString(",") { id ->
-                            """{"id":$id,"version":0,"title":"Testbrot $id","steps":[{"id":"$id:0","globalIdx":0,"phase":"Teigruhe","instruction":"Falten","state":"active","due_at":"2026-09-23T12:10:00Z","critical":false,"action":"complete","alarm_key":"countdown-$id"}]}"""
+                            """{"id":$id,"version":0,"title":"Testbrot $id","steps":[{"id":"$id:0","globalIdx":0,"phase":"Teigruhe","instruction":"Falten","state":"active","start":"2026-09-23T11:50:00Z","due_at":"2026-09-23T12:10:00Z","critical":false,"action":"complete","alarm_key":"countdown-$id"}]}"""
                         }
-                        """{"server_time":"2026-09-23T12:00:00Z","delivery":"android","sessions":[$sessions]}"""
+                        val serverTime = if (expired.get()) "2026-09-23T12:10:01Z" else "2026-09-23T12:00:00Z"
+                        """{"server_time":"$serverTime","delivery":"android","sessions":[$sessions]}"""
                     }
                     else -> return MockResponse().setResponseCode(404)
                 }
@@ -65,8 +67,7 @@ class DeviceSettingsTest {
                 Thread.sleep(100)
             }
             val timers = manager.activeNotifications.filter { it.tag?.startsWith("timer:") == true }
-            assertTrue(timers.all { it.notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) })
-            assertTrue(timers.all { it.notification.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN) })
+            assertTrue(timers.all { it.notification.contentView != null && it.notification.bigContentView != null })
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val exact = AlarmScheduler(context).exact()
                 val status = if (exact) "Genaue Backtimer: erlaubt" else "Genaue Backtimer: nicht erlaubt"
@@ -78,6 +79,20 @@ class DeviceSettingsTest {
                 compose.onNodeWithText(status).performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText("Laufende Timer anzeigen").performScrollTo().assertIsDisplayed()
             }
+            // Advance the synthetic server clock past the deadline. The local ring tick
+            // must not confirm work; due reminders replace timers and expose the action.
+            expired.set(true)
+            assertTrue(repo.refresh())
+            (1..3).forEach { AlarmScheduler(context).fire("countdown-$it") }
+            val dueDeadline = android.os.SystemClock.elapsedRealtime() + 10_000
+            while (manager.activeNotifications.count { it.tag?.startsWith("countdown-") == true } != 3) {
+                check(android.os.SystemClock.elapsedRealtime() < dueDeadline)
+                Thread.sleep(100)
+            }
+            assertFalse(manager.activeNotifications.any { it.tag?.startsWith("timer:") == true })
+            val dueNotices = manager.activeNotifications.filter { it.tag?.startsWith("countdown-") == true }
+            assertTrue(dueNotices.all { it.notification.actions.size == 1 })
+            assertTrue(repo.state.value.snapshot!!.tasks.all { it.step.state == "active" })
         } finally {
             repo.logout()
             AlarmScheduler(context).clear()

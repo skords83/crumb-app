@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="48dp"
+    android:orientation="horizontal" android:gravity="center_vertical" android:baselineAligned="false">
+    <ImageView android:id="@+id/timer_gauge" android:layout_width="40dp"
+        android:layout_height="40dp" android:layout_marginEnd="10dp"
+        android:importantForAccessibility="no" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+        android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/timer_title" style="@style/TextAppearance.Compat.Notification.Title"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:maxLines="1" android:ellipsize="end" android:textSize="14sp" />
+        <TextView android:id="@+id/timer_phase" style="@style/TextAppearance.Compat.Notification.Line2"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:maxLines="1" android:ellipsize="end" android:textSize="12sp" />
+    </LinearLayout>
+    <Chronometer android:id="@+id/timer_clock" style="@style/TextAppearance.Compat.Notification.Title"
+        android:layout_width="96dp" android:layout_height="match_parent"
+        android:layout_marginStart="8dp" android:gravity="center_vertical"
+        android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum"
+        android:textSize="28sp" android:maxLines="1"
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="18sp"
+        android:autoSizeMaxTextSize="28sp" android:autoSizeStepGranularity="1sp" />
+</LinearLayout>

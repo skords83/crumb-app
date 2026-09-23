@@ -14,3 +14,5 @@ mkdir -p "$android_root/app/build/reports/device"
 "${adb[@]}" install -r "$android_root/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 "${adb[@]}" shell am instrument -w -r -e notClass de.crumb.companion.RecoveryFixtureTest de.crumb.companion.test/androidx.test.runner.AndroidJUnitRunner | tee "$android_root/app/build/reports/device/instrumentation.txt"
 grep -Eq 'OK \([0-9]+ tests?\)' "$android_root/app/build/reports/device/instrumentation.txt"
+# The layout test renders synthetic compact/expanded notifications for visual review.
+"${adb[@]}" pull /sdcard/Android/data/de.crumb.companion/files/timer-layouts "$android_root/app/build/reports/device/" >/dev/null

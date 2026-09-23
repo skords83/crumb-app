@@ -77,7 +77,7 @@ class RepositoryIntegrationTest {
         assertTrue(repo.state.value.loggedIn)
         assertNotNull(repo.state.value.snapshot)
     }
-    private fun alarmCount() = shadowOf(context.getSystemService(AlarmManager::class.java)).scheduledAlarms.size
+    private fun alarmCount() = shadowOf(context.getSystemService(AlarmManager::class.java)).scheduledAlarms.count { shadowOf(it.operation).savedIntent.action != TIMER_REFRESH_ACTION }
     private fun requests() = (0 until server.requestCount).map { server.takeRequest(1, TimeUnit.SECONDS)!! }
 
     @Test fun loginUsesHttpsAndSubsequentRequestsCarryOnlyBearerToken() = runBlocking {

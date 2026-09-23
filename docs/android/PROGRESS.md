@@ -162,3 +162,49 @@ Offline-Wiederöffnung. Jeweils echte kritische Benachrichtigung nachgewiesen;
 Offline-Übersicht mit dauerhaft sichtbarem Alarmstatus visuell geprüft.
 Nächste Schritte: FCM-Entscheidung und Projektkonfiguration, dauerhaften Release-Schlüssel
 bereitstellen, neue APK/API nach Freigabe veröffentlichen und auf echter Hardware prüfen.
+
+## Fortsetzung – größere Sperrbildschirm-Timer (0.2.1)
+- Nutzerfeedback vom 23.09.: Einstellungen und Systemcountdown funktionieren auf dem
+  Smartphone; bisherige Restzeit in der Kopfzeile zu klein. Eigene kompakte und
+  aufgeklappte RemoteViews in `notification_timer_compact.xml` / `notification_timer_expanded.xml`.
+- `TimerNotification.kt`: großer nativer Chronometer, aufgeklappt innerhalb eines
+  Restzeit-Rings; Rezept, Phase, Arbeitsanweisung und Zeitstand des Rings. Android-
+  Textfarben, native Schriftanpassung für Stundenanzeigen. Fehlende/ungültige
+  Startintervalle ergeben einen neutralen Ring statt erfundener Prozentwerte.
+- `Alarms.kt`: ein gemeinsamer ungenauer, nicht aufweckender Anzeige-Takt für alle
+  Timer, ohne zusätzliche API-Abfragen; Android darf ihn verzögern. Eigentliche
+  Fälligkeitsalarme und Bestätigungslogik bleiben separat. Version auf 0.2.1 erhöht.
+- Neue Prüfungen: `TimerNotificationTest.kt`, `DeviceTimerLayoutTest.kt`; bestehende
+  Android-Tests um Ablaufübergang und tatsächliche eigene Notification-Layouts ergänzt.
+  Erste Layoutprüfung deckte einen unpassenden Messaufbau auf; auf tatsächliche
+  Parent-Messung korrigiert. Zentrierter Chronometer nun ohne horizontales Scrollen.
+- Erfolgreich: Debug-/Test-APK, 36 JVM-Tests, sechs Android-15-Integrationstests,
+  Lint ohne Fehler (32 Hinweise). 16 Layoutvarianten gerendert; Minuten-/Stundenanzeige
+  und helle/dunkle Ansichten mit Schriftfaktor 1.0/1.3 geprüft. Finale Bilder visuell
+  kontrolliert. Nativer AutoSize-Text beseitigt abgeschnittene/unsichtbare Ziffern.
+- Android-Test bestätigt den Übergang von drei Timern zu drei fälligen Meldungen
+  mit Aktion, ohne automatische Schrittbestätigung. PNGs unter
+  `android/app/build/reports/device/timer-layouts/`.
+- Grenze: Android/OEM bestimmt geschlossene Höhe und Aufklappzustand. Der große Ring
+  ist in der erweiterten Meldung; eine dauerhaft große Sperrbildschirm-Karte ist nicht
+  erzwingbar. Kein Commit/Push/Deployment für 0.2.1 durchgeführt.
+
+Abschluss 0.2.1: alle drei Alarm-Recovery-Szenarien erneut erfolgreich (Prozessende/
+Doze, Neustart, Force-stop/Offline-Wiederöffnung). Kritische Zustellung trotz neuem
+Anzeige-Takt nachgewiesen. Emulator danach beendet; keine produktiven Dienste geändert.
+Nächster Schritt: neue APK nach Freigabe bauen/veröffentlichen und die herstellerspezifische
+Sperrbildschirmdarstellung auf dem Smartphone prüfen. Backend unverändert.
+
+## Veröffentlichung – dauerhafte Signatur (0.2.1)
+- Auf Nutzerfreigabe dauerhaften RSA-4096-Release-Schlüssel erzeugt; private lokale
+  Sicherung außerhalb des Repositorys, ausschließlich für den Benutzer lesbar.
+  Zusätzliches verschlüsseltes externes Backup durch den Besitzer steht aus.
+- Vier Signing-Secrets im GitHub-Environment `android-release` hinterlegt.
+  Environment auf Branch `main` beschränkt; keine vorhandenen Secrets ersetzt.
+- Version 0.2.1 einschließlich größerer Timeranzeige für signierten Release vorbereitet.
+  Vorliegende Prüfungen: 36 JVM-Tests, sechs Android-Integrationstests, drei
+  Recovery-Szenarien erfolgreich. Diff-Prüfung und Workflow-actionlint erneut grün.
+- Nächster Schritt: GitHub-Release-Build ausführen, heruntergeladene APK gegen das
+  dauerhaft gesicherte Zertifikat prüfen und Download bereitstellen.
+- Offen bleiben Smartphone-Prüfung von Alarmton/Vibration und OEM-Darstellung sowie
+  die Entscheidung über Push-Übertragung serverseitiger Planänderungen.

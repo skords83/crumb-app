@@ -1,7 +1,7 @@
 # Prüfungen Android V1
 
 Stand 23.09.2026. Ausschließlich synthetische Daten, kein produktiver Serverzugriff.
-**33 JVM-Tests**, **5 Instrumentierungstests auf AOSP Android 15/API 35**, App-/Test-APK
+**36 JVM-Tests**, **6 Instrumentierungstests auf AOSP Android 15/API 35**, App-/Test-APK
 und Lint (0 Fehler) erfolgreich. API: 10 Testdateien; Web: 2 Testdateien erfolgreich.
 Instrumentierung verwendet echte Android-Komponenten und einen temporären lokalen
 HTTPS-Server. Sie ersetzt keine Tests gegen einen bereitgestellten Crumb-Server.
@@ -86,3 +86,22 @@ getestete Fall stellt Alarme erst beim anschließenden Öffnen wieder her.
 - Finale Recovery-Wiederholung am 23.09.2026: alle drei Szenarien erneut erfolgreich
   (Prozessende/Doze, Neustart, Force-stop/Offline-Wiederöffnung). Screenshot der
   Offline-Übersicht visuell geprüft; Alarmstatus und Einstellungszugang sichtbar.
+
+## Größere Timerdarstellung 0.2.1
+- Drei zusätzliche JVM-Tests: Restanteil aus Serverintervall, fehlende/ungültige Dauer,
+  native RemoteViews/monotone Countdown-Basis und ein gemeinsamer nicht aufweckender
+  Anzeige-Alarm neben drei unabhängigen Aufgabenalarmen. Insgesamt 36 JVM-Tests grün.
+- Sechs Instrumentierungstests auf AOSP 35 grün. `DeviceTimerLayoutTest` rendert 16
+  Varianten (hell/dunkel, Schriftfaktor 1.0/1.3, Minuten/Stunden, kompakt/aufgeklappt),
+  prüft Textgrenzen und schreibt PNGs. Visuelle Kontrolle der finalen Bilder erfolgreich.
+  Native Autosize-Schrift; Textfarben passen sich dem Systemthema an.
+- `DeviceSettingsTest`: drei laufende Timer, synthetischer Server-Zeitsprung über die
+  Fälligkeit, anschließend drei Aufgabenmeldungen mit Direktaktion und keine alten
+  Timer. Schritte bleiben unbestätigt. Keine Änderung echter Benutzerdaten.
+- `test-emulator.sh` kopiert die Layoutbilder unter `app/build/reports/device/timer-layouts/`.
+  Das sind unter Android gerenderte Inhaltslayouts, keine Garantie für dieselbe Höhe
+  oder Darstellung im Sperrbildschirm jedes Herstellers. Große Ansicht erfordert
+  gegebenenfalls Aufklappen. Physische Wahrnehmung von Ton/Vibration bleibt Gerätetest.
+- Recovery mit 0.2.1 erneut vollständig grün: Prozessende/Doze, Reboot und Force-stop
+  mit Offline-Wiederöffnung. Zusätzlicher Anzeige-Takt beeinträchtigte in diesen
+  Emulator-Szenarien die kritischen Fälligkeitsalarme nicht.

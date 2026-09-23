@@ -26,7 +26,7 @@ class AlarmSchedulerTest {
     private fun snapshot(delivery: String = "android", version: Int = 0, due: Long = now + 60_000): Snapshot = Snapshot(now, delivery, (1..3).map { id ->
         Session(id, version, "Testbrot $id", listOf(Step("$id:0", 0, "Backen", "Aus dem Ofen nehmen", "active", now, due, due, id == 1, "complete", "$id:0:$due")))
     })
-    private fun scheduled() = shadowOf(context.getSystemService(AlarmManager::class.java)).scheduledAlarms
+    private fun scheduled() = shadowOf(context.getSystemService(AlarmManager::class.java)).scheduledAlarms.filter { shadowOf(it.operation).savedIntent.action != TIMER_REFRESH_ACTION }
     @Test fun threeParallelBakesRemainScheduledAndRepeatedSyncDoesNotDuplicate() {
         scheduler.reconcile(snapshot(), now)
         assertEquals(3, scheduled().size)
@@ -96,8 +96,7 @@ class AlarmSchedulerTest {
         scheduler.reconcile(data, now)
         val timers = manager.activeNotifications.filter { it.tag.startsWith("timer:") }
         assertEquals(3, timers.size)
-        assertTrue(timers.all { it.notification.extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER) })
-        assertTrue(timers.all { it.notification.extras.getBoolean(android.app.Notification.EXTRA_CHRONOMETER_COUNT_DOWN) })
+        assertTrue(timers.all { it.notification.contentView != null && it.notification.bigContentView != null })
         assertTrue(timers.all { it.notification.actions.isNullOrEmpty() })
         scheduler.acknowledge(data.tasks.first().step)
         scheduler.reconcile(data, now)

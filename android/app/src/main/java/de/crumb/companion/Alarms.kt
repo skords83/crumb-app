@@ -54,15 +54,31 @@ class AlarmScheduler(private val context: Context) {
         val key = task.step.alarmKey ?: return
         val remaining = (task.step.due ?: return) - now
         if (!countdownsEnabled() || remaining <= 0) { cancelTimer(key); return }
-        val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val notice = NotificationCompat.Builder(context, "timers")
-            .setSmallIcon(R.drawable.ic_crumb).setContentTitle("${task.session.title} · ${task.step.phase}")
-            .setContentText("Nach letztem Plan: ${task.step.instruction}")
-            .setContentIntent(open).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS).setOngoing(true).setSilent(true)
-            .setWhen(System.currentTimeMillis() + remaining).setUsesChronometer(true).setChronometerCountDown(true)
-            .setTimeoutAfter(remaining).build()
+        val notice = timerNotification(context, task, now)
         try { notices.notify("timer:$key", 0, notice) } catch (_: SecurityException) { }
+    }
+    private fun timerRefreshIntent(): PendingIntent = PendingIntent.getBroadcast(context, 0,
+        Intent(context, AlarmReceiver::class.java).setAction(TIMER_REFRESH_ACTION), PendingIntent.FLAG_IMMUTABLE)
+    private fun scheduleTimerRefresh(tasks: List<Task>, now: Long) {
+        val nextDue = tasks.filter { task -> task.step.alarmKey?.let { prefs.getLong("fired:$it", 0) < Long.MAX_VALUE - 600_000 } == true }
+            .mapNotNull { it.step.due }.filter { it > now }.minOrNull()
+        if (!allowed() || !countdownsEnabled() || nextDue == null) alarms.cancel(timerRefreshIntent())
+        else {
+            // Cosmetic only: one inexact, non-wakeup tick shared by all timers. It may
+            // be deferred in Doze. Actual due alarms use their independent schedule.
+            alarms.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + minOf(60_000, nextDue - now), timerRefreshIntent())
+        }
+    }
+    fun refreshTimerDisplays() {
+        val repo = context.repository
+        val snapshot = repo.state.value.snapshot
+        val tasks = if (snapshot?.delivery == "android") snapshot.tasks else emptyList()
+        val now = repo.clock.now()
+        if (allowed()) tasks.forEach { task ->
+            val key = task.step.alarmKey ?: return@forEach
+            if (prefs.getLong("fired:$key", 0) < Long.MAX_VALUE - 600_000) showTimer(task, now)
+        }
+        scheduleTimerRefresh(tasks, now)
     }
     fun exact(): Boolean = Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()
     private fun intent(key: String): PendingIntent = PendingIntent.getBroadcast(context, 0,
@@ -77,6 +93,7 @@ class AlarmScheduler(private val context: Context) {
         if (!allowed()) {
             // Permissions are not a state transition: retain delivery/acknowledgement tombstones.
             keys.forEach { key -> alarms.cancel(intent(key)); notices.cancel(key, 0); cancelTimer(key) }
+            alarms.cancel(timerRefreshIntent())
             return
         }
         tasks.forEach { task ->
@@ -93,6 +110,7 @@ class AlarmScheduler(private val context: Context) {
             // Keep the action's expectedVersion current after a successful sync.
             if (fired != 0L) show(task, stale = false, silent = true)
         }
+        scheduleTimerRefresh(tasks, now)
     }
     private fun schedule(key: String, delay: Long, critical: Boolean) {
         val trigger = SystemClock.elapsedRealtime() + delay.coerceAtLeast(1000)
@@ -152,10 +170,16 @@ class AlarmScheduler(private val context: Context) {
     fun clear() {
         prefs.getStringSet("keys", emptySet()).orEmpty().forEach { alarms.cancel(intent(it)); notices.cancel(it, 0); cancelTimer(it) }
         prefs.edit().clear().commit()
+        alarms.cancel(timerRefreshIntent())
     }
 }
+internal const val TIMER_REFRESH_ACTION = "de.crumb.companion.REFRESH_TIMER_DISPLAY"
 class AlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) { intent.getStringExtra("key")?.let { AlarmScheduler(context).fire(it) } }
+    override fun onReceive(context: Context, intent: Intent) {
+        val scheduler = AlarmScheduler(context)
+        if (intent.action == TIMER_REFRESH_ACTION) scheduler.refreshTimerDisplays()
+        else intent.getStringExtra("key")?.let { scheduler.fire(it) }
+    }
 }
 class ActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

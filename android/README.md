@@ -136,4 +136,29 @@ Ein Release ohne vollständige Signierkonfiguration schlägt fehl. Lokale Releas
 verwenden die Umgebungsvariablen `CRUMB_KEYSTORE_PATH`, `CRUMB_KEYSTORE_PASSWORD`,
 `CRUMB_KEY_ALIAS`, `CRUMB_KEY_PASSWORD` und optional `CRUMB_VERSION_CODE`.
 Das erste Release ersetzt eine anders signierte Debug-App nur nach deren Deinstallation.
-Es wurde noch kein produktiver Schlüssel erzeugt oder bei GitHub hinterlegt.
+Der dauerhafte Release-Schlüssel wurde am 23.09.2026 eingerichtet. Die vier Secrets
+sind im Environment `android-release` hinterlegt; dessen Branch-Regel erlaubt nur
+`main`. Die private lokale Sicherung liegt außerhalb des Repositorys unter
+`~/.local/share/crumb-android-signing/` (Ordner 0700, Dateien 0600). Sie enthält
+Keystore und Zugangsdaten und muss zusätzlich verschlüsselt gesichert werden.
+GitHub-Secrets lassen sich nicht als Backup wieder auslesen. Den Schlüssel bei
+neuen Releases weiterverwenden, niemals automatisch ersetzen.
+
+## Größere Timeranzeige (0.2.1)
+
+Die laufende Meldung zeigt die Restzeit in großen Ziffern. Über den Aufklapppfeil
+erscheinen ein großer Restzeit-Ring, die Phase und der Arbeitsschritt. Der Ring zeigt
+verbleibende Zeit relativ zum vom Server gelieferten Start-/Fälligkeitsintervall.
+Ist kein belastbares Intervall vorhanden, bleibt der Ring neutral („Dauer offen“).
+
+Die Ziffern laufen nativ über eine monotone Zeitbasis weiter. Der Ring wird bei jedem
+Abgleich sowie durch einen gemeinsamen lokalen Anzeige-Takt erneuert: ungefähr nach
+jeweils einer Minute angefordert, ungenau und ohne das Gerät aus dem Schlaf zu wecken.
+Android darf diese Aktualisierung verzögern; der angezeigte Ring-Zeitstand macht das
+sichtbar. Der Takt lädt keine Serverdaten. Fällige Alarme sind unabhängig davon geplant.
+Die kompakte Höhe und der Aufklappzustand bleiben unter Kontrolle von Android/OEM.
+
+Bei Fälligkeit verschwindet die laufende Timeranzeige. Die separate Aufgabenmeldung
+bietet die Bestätigung; ein abgelaufener Timer bestätigt den Schritt nicht automatisch.
+Normale Hinweise können durch Android verzögert werden; kritische Schritte verwenden
+bei erteiltem Zugriff den exakten Alarm und wiederholen frühestens nach zehn Minuten.

@@ -21,7 +21,7 @@ class RecoveryFixtureTest {
         val delay = arguments.getString("delayMillis")?.toLong() ?: 90_000L
         require(delay in 15_000L..300_000L)
         val now = System.currentTimeMillis()
-        val raw = """{"server_time":"${Instant.ofEpochMilli(now)}","delivery":"android","sessions":[{"id":9001,"version":0,"title":"Recovery-Testbrot","steps":[{"id":"9001:0","globalIdx":0,"phase":"Backen","instruction":"Testalarm prüfen","state":"active","due_at":"${Instant.ofEpochMilli(now + delay)}","critical":true,"action":"complete","alarm_key":"recovery-fixture"}]}]}"""
+        val raw = """{"server_time":"${Instant.ofEpochMilli(now)}","delivery":"android","sessions":[{"id":9001,"version":0,"title":"Recovery-Testbrot","steps":[{"id":"9001:0","globalIdx":0,"phase":"Backen","instruction":"Testalarm prüfen","state":"active","start":"${Instant.ofEpochMilli(now - delay)}","due_at":"${Instant.ofEpochMilli(now + delay)}","critical":true,"action":"complete","alarm_key":"recovery-fixture"}]}]}"""
         AlarmScheduler(context).clear()
         SecureStore(context).save("https://example.invalid/api", "synthetic-recovery-token")
         context.getSharedPreferences("snapshot", Context.MODE_PRIVATE).edit().clear()

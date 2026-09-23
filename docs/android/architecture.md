@@ -54,3 +54,14 @@ Die Sandbox kann KVM ausblenden; Verfügbarkeit daher zusätzlich auf dem Host p
 
 Weitere Quellen: [System-Chronometer](https://developer.android.com/reference/androidx/core/app/NotificationCompat.Builder#setChronometerCountDown(boolean)),
 [App-Signierung](https://developer.android.com/studio/publish/app-signing).
+
+## Größere Timeranzeige 0.2.1
+DecoratedCustomViewStyle mit kompakten/erweiterten RemoteViews, nativer Chronometer
+und Canvas-Ring aus dem bestehenden Serverintervall. Systemautogröße passt Ziffern
+in die begrenzte Fläche ein. Ein kosmetischer ELAPSED_REALTIME-Alarm ohne Wakeup oder
+Exact-Alarm-Rechte aktualisiert die Ringe aller Aufgaben gemeinsam. Keine zweite
+Back-Engine, keine zusätzlichen HTTP-Abfragen und kein Foreground-Service. Ring-
+Zeitstand sichtbar; Doze darf Anzeigeaktualisierung verzögern. Eigentliche Termine
+bleiben bei der bestehenden AlarmManager-Planung. Entfernen bei Ablauf, Abschluss,
+Terminwechsel, Zustellwechsel und ausgeschalteter Anzeige weiterhin berücksichtigt.
+Quelle: [Android: eigene Benachrichtigungslayouts und Größenlimits](https://developer.android.com/develop/ui/views/notifications/custom-notification).
