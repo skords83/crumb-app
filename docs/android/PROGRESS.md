@@ -242,3 +242,11 @@ Produktionsdienste für diesen Android-Release geändert.
 Veröffentlichung auf Nutzerfreigabe: Version 0.2.2 vorbereitet; signierter GitHub-
 Release-Build führt JVM-Tests und Lint erneut aus. Bestehenden Release-Schlüssel
 weiterverwenden, damit das Update über 0.2.1 installierbar bleibt.
+
+Version 0.2.2 veröffentlicht: Commit `65764d5`,
+[GitHub-Build erfolgreich](https://github.com/skords83/crumb-app/actions/runs/35916800231).
+[Signierte APK](https://github.com/skords83/crumb-app/actions/runs/35916800231/artifacts/10776265080)
+(14 Tage verfügbar). Heruntergeladen und mit apksigner geprüft: Version 0.2.2,
+Versionscode 1006, identisches Release-Zertifikat wie 0.2.1. Direkte Updateinstallation
+über die signierte 0.2.1 möglich. GitHub-Prüfungen erfolgreich; echte Smartphone-
+Prüfung der stabilen Schrift bleibt offen.
