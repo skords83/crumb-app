@@ -208,3 +208,18 @@ Sperrbildschirmdarstellung auf dem Smartphone prüfen. Backend unverändert.
   dauerhaft gesicherte Zertifikat prüfen und Download bereitstellen.
 - Offen bleiben Smartphone-Prüfung von Alarmton/Vibration und OEM-Darstellung sowie
   die Entscheidung über Push-Übertragung serverseitiger Planänderungen.
+
+Release abgeschlossen: Commit `d6452378a9bd040f0785082d28f6c0d91ec2a620` auf main.
+[GitHub-Lauf 35907865587](https://github.com/skords83/crumb-app/actions/runs/35907865587)
+erfolgreich: Debug-/Test-APK, JVM-Tests, Debug-Lint und signierte Release-APK mit
+Release-Lint. Keine erneuten Gerätetests in GitHub; lokale Ergebnisse siehe oben.
+[Release-APK-Artefakt](https://github.com/skords83/crumb-app/actions/runs/35907865587/artifacts/10772297023)
+(14 Tage Aufbewahrung), Version 0.2.1 / Code 1004. Heruntergeladene APK mit
+`apksigner verify --verbose --print-certs` erfolgreich geprüft; Zertifikat stimmt
+mit der privaten lokalen Sicherung überein. Öffentlicher Zertifikat-SHA-256:
+`70d26b843ab383db5ce1036fedc0e5865101493cc19d4e2599973fb9d378273b`.
+APK-SHA-256: `ac6f0cd52dd6fa7143e844a78cc91bf59618cc76c5c6bf795d762d00b9a60d74`.
+Nächster Schritt: bisherige Debug-App einmal deinstallieren, Release-APK installieren,
+neu anmelden und Berechtigungen sowie Ablaufalarm auf dem Smartphone prüfen.
+Private Schlüsselsicherung zusätzlich verschlüsselt extern sichern. Keine API- oder
+Produktionsdienste für diesen Android-Release geändert.
