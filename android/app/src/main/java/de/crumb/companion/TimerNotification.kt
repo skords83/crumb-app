@@ -9,6 +9,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
+import android.util.TypedValue
 import android.os.SystemClock
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
@@ -54,7 +56,17 @@ internal fun timerNotification(context: Context, task: Task, now: Long,
         setImageViewBitmap(R.id.timer_gauge, gauge)
         setChronometer(R.id.timer_clock, elapsedNow + remaining, null, true)
         setChronometerCountDown(R.id.timer_clock, true)
-        // Native text autosizing keeps multi-hour times inside the available ring.
+        // Reserve at least HH:MM:SS even when the current value is shorter. Never
+        // autosize a ticking Chronometer: OEM layouts may resize it on every tick.
+        val interval = maxOf(remaining, task.step.start?.let { task.step.due!! - it } ?: 0L)
+        val hoursDigits = maxOf(2, (interval / 3_600_000).toString().length)
+        val sample = "8".repeat(hoursDigits) + ":88:88"
+        val metrics = context.resources.displayMetrics
+        val preferredPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, if (expanded) 32f else 28f, metrics)
+        val paint = Paint().apply { typeface = Typeface.MONOSPACE; textSize = preferredPx }
+        val availablePx = (if (expanded) 116f else 92f) * metrics.density
+        val fixedPx = preferredPx * minOf(1f, availablePx / paint.measureText(sample))
+        setTextViewTextSize(R.id.timer_clock, TypedValue.COMPLEX_UNIT_PX, fixedPx)
         if (expanded) {
             setTextViewText(R.id.timer_instruction, context.getString(R.string.timer_plan, task.step.instruction))
             setTextViewText(R.id.timer_gauge_status, status)

@@ -223,3 +223,22 @@ Nächster Schritt: bisherige Debug-App einmal deinstallieren, Release-APK instal
 neu anmelden und Berechtigungen sowie Ablaufalarm auf dem Smartphone prüfen.
 Private Schlüsselsicherung zusätzlich verschlüsselt extern sichern. Keine API- oder
 Produktionsdienste für diesen Android-Release geändert.
+
+## Korrektur – springende Timer-Schrift
+- Smartphone-Rückmeldung: Chronometer-Schrift springt. Beide RemoteViews nutzten
+  dynamisches Android-Autosizing, das beim Ticken erneut die Größe bestimmen konnte.
+- In `TimerNotification.kt` und beiden Timer-Layouts durch feste Monospace-Größe
+  ersetzt: mindestens HH:MM:SS reserviert, längere Intervalle berücksichtigt, Größe
+  passend zu verfügbarer Breite und Systemschrift berechnet. Kein Autosizing pro Tick.
+- `DeviceTimerLayoutTest.kt` prüft konstante Größe und vollständige Textbreite bei
+  11:54:57, 10:00:00, 9:59:59, 1:00:00, 59:59 und weiteren Minutenübergängen,
+  jeweils kompakt/erweitert, hell/dunkel und Schriftfaktor 1.0/1.3.
+- Erfolgreich: Debug-/Test-APK, 36 JVM-Tests, Lint und sechs Android-15-Gerätetests.
+  Erweiterte Stundenansicht visuell geprüft. Keine erneuten Recovery-Tests notwendig;
+  Alarmplanung unverändert. Smartphone-/OEM-Prüfung nach Veröffentlichung offen.
+- Noch nicht committet oder veröffentlicht. Nächster Schritt: Korrektur als signiertes
+  Update bereitstellen und auf dem betroffenen Smartphone prüfen.
+
+Veröffentlichung auf Nutzerfreigabe: Version 0.2.2 vorbereitet; signierter GitHub-
+Release-Build führt JVM-Tests und Lint erneut aus. Bestehenden Release-Schlüssel
+weiterverwenden, damit das Update über 0.2.1 installierbar bleibt.

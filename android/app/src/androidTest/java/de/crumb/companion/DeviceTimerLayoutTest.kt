@@ -45,6 +45,17 @@ class DeviceTimerLayoutTest {
                         View.MeasureSpec.makeMeasureSpec((252 * density).toInt(), View.MeasureSpec.AT_MOST))
                     holder.layout(0, 0, holder.measuredWidth, holder.measuredHeight)
                     val clock = view.findViewById<Chronometer>(R.id.timer_clock)
+                    val fixedSize = clock.textSize
+                    assertEquals("Ticking clocks must not autosize", 0, clock.autoSizeTextType)
+                    for (seconds in listOf(42_897L, 36_000L, 35_999L, 3_600L, 3_599L, 600L, 599L, 60L, 59L)) {
+                        clock.base = SystemClock.elapsedRealtime() + seconds * 1000
+                        holder.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec((252 * density).toInt(), View.MeasureSpec.AT_MOST))
+                        holder.layout(0, 0, holder.measuredWidth, holder.measuredHeight)
+                        assertEquals("Font size must stay fixed across digit and hour boundaries", fixedSize, clock.textSize, 0f)
+                        assertTrue("Every countdown value must fit", clock.paint.measureText(clock.text.toString()) <= clock.width)
+                    }
+                    clock.base = SystemClock.elapsedRealtime() + remaining
                     val diagnostic = "night=$night scale=$fontScale hours=$hours expanded=$expanded text=${clock.text} size=${clock.textSize} color=${clock.currentTextColor} width=${clock.width} height=${clock.height} visibility=${clock.visibility}"
                     File(folder, "diagnostics.txt").appendText(diagnostic + "\n")
                     assertTrue(diagnostic, clock.text.isNotBlank())

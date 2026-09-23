@@ -94,7 +94,9 @@ getestete Fall stellt Alarme erst beim anschließenden Öffnen wieder her.
 - Sechs Instrumentierungstests auf AOSP 35 grün. `DeviceTimerLayoutTest` rendert 16
   Varianten (hell/dunkel, Schriftfaktor 1.0/1.3, Minuten/Stunden, kompakt/aufgeklappt),
   prüft Textgrenzen und schreibt PNGs. Visuelle Kontrolle der finalen Bilder erfolgreich.
-  Native Autosize-Schrift; Textfarben passen sich dem Systemthema an.
+  Feste Monospace-Schriftgröße mit Platz für mindestens HH:MM:SS; keine automatische
+  Verkleinerung beim Ticken. Test prüft konstante Größe und Platz bei Stunden-/
+  Minutenübergängen. Textfarben passen sich dem Systemthema an.
 - `DeviceSettingsTest`: drei laufende Timer, synthetischer Server-Zeitsprung über die
   Fälligkeit, anschließend drei Aufgabenmeldungen mit Direktaktion und keine alten
   Timer. Schritte bleiben unbestätigt. Keine Änderung echter Benutzerdaten.

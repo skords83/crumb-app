@@ -17,8 +17,6 @@
     <Chronometer android:id="@+id/timer_clock" style="@style/TextAppearance.Compat.Notification.Title"
         android:layout_width="96dp" android:layout_height="match_parent"
         android:layout_marginStart="8dp" android:gravity="center_vertical"
-        android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum"
-        android:textSize="28sp" android:maxLines="1"
-        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="18sp"
-        android:autoSizeMaxTextSize="28sp" android:autoSizeStepGranularity="1sp" />
+        android:fontFamily="monospace" android:fontFeatureSettings="tnum"
+        android:textSize="28sp" android:maxLines="1" />
 </LinearLayout>
